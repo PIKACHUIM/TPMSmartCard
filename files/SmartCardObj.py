@@ -26,6 +26,6 @@ class SmartCardCer:
                  ):
         self.sc_name = sc_name  # 智能卡证书名称(Certutil+OpenSC二者通用)
         self.sc_devs = sc_devs  # 智能卡证书设备(Certutil)/容器ID(OpenSC)
-        self.sc_exec = sc_exec  # 智能卡证书执行(Certutil)/认证ID(OpenSC)
+        self.sc_exec = sc_exec  # 智能卡证书执行(Certutil)/Length(OpenSC)
         self.sc_keys = sc_keys  # 智能卡密钥哈希(Certutil)/用途ID(OpenSC)
         self.sc_cert = sc_cert  # 智能卡证书文件(Certutil)/智能卡描述信息

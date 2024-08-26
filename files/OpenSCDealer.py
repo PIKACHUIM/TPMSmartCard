@@ -1,6 +1,7 @@
 import subprocess
 
 from files.SmartCardObj import SmartCardDev
+from files.SmartCardObj import SmartCardCer
 
 
 class OpenSCDealer:
@@ -15,6 +16,13 @@ class OpenSCDealer:
         return (process.stderr + process.stdout).replace("\t", "").split("\n")
 
     def readCert(self, results):
+        cr_name = results[0].split("[")[1].replace("]", "")
+        results = [i.split(": ") for i in results[1:11] if len(i)]
+        results = {i[0].replace(" ", ""): i[1] for i in results}
+        self.certs[cr_name] = SmartCardCer(
+            cr_name, results['MD:guid'], results['ModLength'],
+            results['Usage'], None
+        )
         print(results)
 
     def readCard(self, results, card_name):
@@ -43,10 +51,8 @@ class OpenSCDealer:
                 if results[nums].find("PIN [UserPIN]") >= 0:
                     self.readCard(results[nums + 1:nums + 10],
                                   card_all[card_uuid])
-
-        #
-        # print(results)
-        # for command in [, "--list-keys"]:
-        #     results = OpenSCDealer.openText(command)
-        #         if results[nums].find("Private RSA Key") >= 0:
-        #             self.openCert(results[nums:nums + 11])
+            results = OpenSCDealer.openText("--list-keys %s" % (
+                    "--reader %d" % int(card_uuid)))
+            for nums in range(0, len(results)):
+                if results[nums].find("Private RSA Key") >= 0:
+                    self.readCert(results[nums:nums + 11])
