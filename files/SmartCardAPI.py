@@ -3,10 +3,9 @@ import subprocess
 import time
 import traceback
 
-from Certificates import CertDataInfo
-from SmartCardObj import SmartCardDev
-from SmartCardObj import SmartCardCer
-from pywinauto.application import Application
+from files.Certificates import CertDataInfo
+from files.SmartCardObj import SmartCardDev
+from files.SmartCardObj import SmartCardCer
 from winpty import PtyProcess
 
 
@@ -21,17 +20,23 @@ class SmartCardAPI:
     @staticmethod
     # 解析当前智能卡的信息 ==========================================================
     def dealCard(in_line):
-        in_line = in_line[1:] if in_line[0].startswith("===") else in_line
-        in_line = [i.split(":")[1:] if i.find(":") >= 0 else i for i in in_line]
-        in_line = [":".join(i) if type(i) is list else i + " " for i in in_line]
-        in_line = [i[1:] if i[0] == " " else i for i in in_line]  # 删除前面空格
-        sc_data = SmartCardDev(
-            in_line[0], in_line[1], in_line[2],
-            CertDataInfo(
-                in_line[3], in_line[4], in_line[7],
-                in_line[5], in_line[6], in_line[9],
-                in_line[8].replace(" ", "")))
-        return sc_data
+        try:
+            in_line = in_line[1:] if in_line[0].startswith("===") else in_line
+            in_line = [i.split(":")[1:] if i.find(":") >= 0 else i for i in in_line]
+            in_line = [":".join(i) if type(i) is list else i + " " for i in in_line]
+            in_line = [i[1:] if i[0] == " " else i for i in in_line]  # 删除前面空格
+            if len(in_line) < 10:
+                return None
+            sc_data = SmartCardDev(
+                in_line[0], in_line[1], in_line[2],
+                CertDataInfo(
+                    in_line[3], in_line[4], in_line[7],
+                    in_line[5], in_line[6], in_line[9],
+                    in_line[8].replace(" ", "")))
+            return sc_data
+        except Exception as e:
+            print("Deal card error:", e)
+            traceback.print_exc()
 
     @staticmethod
     # 解析当前注册证书信息 ==========================================================
@@ -55,14 +60,20 @@ class SmartCardAPI:
     # 获取所有智能卡和证书 ==========================================================
     def showList(self):
         command = "certutil -scinfo -silent"
-        results = subprocess.run(command, shell=True, text=True, capture_output=True)
-        results = results.stdout.split("\n")
+        process = subprocess.Popen(command, stdout=subprocess.PIPE,
+                                   shell=True, text=True)
+        results = ""
+        if process.stdout.readable():
+            results, _ = process.communicate()
+            results = results.split("\n")
         for num in range(0, len(results)):
             txt_line = results[num]
             # 智能卡设备信息 ========================================================
             if txt_line == "=======================================================":
                 try:
                     temp_card = SmartCardAPI.dealCard(results[num + 1:num + 11])
+                    if temp_card is None:
+                        continue
                 except (ValueError, Exception) as err:
                     print("Read Card Error:", err)
                     traceback.print_exc()
@@ -84,6 +95,12 @@ class SmartCardAPI:
                     if temp_cert.sc_name.find("Microsoft Virtual Smart Card") >= 0:
                         self.certs[temp_cert.sc_cert.cr_uuid] = temp_cert
         return results
+
+    def openList(self):
+        command = ".\\tools\\opensc\\pkcs15-tool.exe -D"
+        process = subprocess.run(command, shell=True, text=True, capture_output=True)
+        results = process.stdout.replace("\t", "").split("\n")
+        print(results)
 
     # 制作一张新的虚拟智能卡 ==========================================================
     def makeCard(self,
@@ -140,7 +157,8 @@ class SmartCardAPI:
 
 if __name__ == "__main__":
     api = SmartCardAPI()
-    api.showList()
+    # api.showList()
+    api.openList()
     # api.makeCard(
     #     in_pin="12345678",
     #     in_adk="010203040506070801020304050607080102030405060708"

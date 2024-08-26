@@ -11,7 +11,7 @@ class SmartCardAPP:
         self.root.geometry("1020x530")
         self.root.title("皮卡虚拟智能卡")
         # info colored frame style
-        self.card_main_tag = ttk.LabelFrame(bootstyle="info", width=380, height=500, text="Card")
+        self.card_main_tag = ttk.LabelFrame(bootstyle="info", width=380, height=360, text="Card")
         self.card_main_tag.place(x=20, y=10)
 
         self.cert_main_tag = ttk.LabelFrame(bootstyle="info", width=590, height=500, text="Card")
@@ -51,21 +51,20 @@ class SmartCardAPP:
         self.card_del.place(x=308, y=230, )
 
         # 卡片信息 ======
-        self.card_info_tag = ttk.LabelFrame(bootstyle="info", width=355, height=200, text="Card Info")
+        self.card_info_tag = ttk.LabelFrame(bootstyle="info", width=355, height=100, text="Card Info")
         self.card_info_tag.place(x=33, y=260)
 
-        self.card_name_tag = ttk.Label(bootstyle="info",text="Card Name: ")
+        self.card_name_tag = ttk.Label(bootstyle="info", text="Card Name: ")
         self.card_name_tag.place(x=43, y=275)
 
         self.card_uuid_tag = ttk.Label(bootstyle="info", text="Card UUID: ")
-        self.card_uuid_tag.place(x=250, y=275)
+        self.card_uuid_tag.place(x=43, y=295)
 
-        self.card_open_tag = ttk.Label(bootstyle="info", text="Card Name: ")
-        self.card_open_tag.place(x=43, y=295)
+        self.card_open_tag = ttk.Label(bootstyle="info", text="Card Devs: ")
+        self.card_open_tag.place(x=43, y=315)
 
-        self.card_stop_tag = ttk.Label(bootstyle="info", text="Card UUID: ")
-        self.card_stop_tag.place(x=250, y=295)
-
+        self.card_stop_tag = ttk.Label(bootstyle="info", text="Card Hash: ")
+        self.card_stop_tag.place(x=43, y=335)
 
         self.root.mainloop()
 
