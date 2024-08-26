@@ -31,7 +31,7 @@ class CertDataInfo:
         self.cr_stop = cr_stop
         self.cr_hash = cr_hash
         self.is_a_ca = is_a_ca
-
+        self.cr_lens = 0  # 密钥长度
 
 SUB = CertSubjects
 CER = CertDataInfo
