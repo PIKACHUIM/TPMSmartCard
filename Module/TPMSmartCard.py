@@ -1,4 +1,8 @@
 import os
+import subprocess
+from sys import stdout
+
+import chardet
 import time
 from winpty import PtyProcess
 
@@ -44,13 +48,24 @@ class TPMSmartCard:
         print(result)
         return result
 
-    def dropCards(self, in_uid):
-        os.system("tpmvscmgr.exe destroy /instance ROOT\\SMARTCARDREADER\\%04d" % int(in_uid))
+    @staticmethod
+    def dropCards(in_name):
+        proc = PtyProcess.spawn('cmd.exe')
+        proc.write("@echo off && cls\r")
+        time.sleep(1)
+        proc.read()
+        proc.write("tpmvscmgr.exe destroy /instance %s\r\r" % in_name)
+        proc.write("\rexit\r")
+        time.sleep(1)
+        result = proc.read().split("\r\n")
+        print(result)
+        return "\n".join(result[2:8])
 
     def importCer(self,
                   in_path,
-                  in_pins):
-        os.system('certutil -csp "Microsoft Base Smart Card Crypto Provider" -importpfx')
+                  in_pins=""):
+        os.system('certutil -csp "Microsoft Base Smart Card Crypto Provider" '
+                  '-importpfx %s' % in_path)
 
     def deleteCer(self):
         pass

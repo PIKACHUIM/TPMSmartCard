@@ -1,0 +1,44 @@
+{
+  "card_main": [
+    [
+      28,
+      230
+    ],
+    {
+      "name": "add",
+      "text": "➕ Add",
+      "type": "success",
+      "w": 65
+    },
+    {
+      "name": "pin",
+      "text": "↩ Change PIN",
+      "type": "info",
+      "w": 110
+    },
+    {
+      "name": "puk",
+      "text": "🔄 Reset PIN",
+      "type": "warning",
+      "w": 103
+    },
+    {
+      "name": "del",
+      "text": "❌ Delete",
+      "type": "danger",
+      "w": 80
+    }
+  ],
+  "cert_main":[
+    [
+      428,
+      230
+    ],
+    {
+      "name": "add",
+      "text": "➕ Import Certificate",
+      "type": "success",
+      "w": 145
+    }
+  ]
+}

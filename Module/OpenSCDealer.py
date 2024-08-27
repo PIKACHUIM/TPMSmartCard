@@ -1,7 +1,7 @@
 import subprocess
 
-from files.SmartCardObj import SmartCardDev
-from files.SmartCardObj import SmartCardCer
+from Module.SmartCardObj import SmartCardDev
+from Module.SmartCardObj import SmartCardCer
 
 
 class OpenSCDealer:
@@ -29,13 +29,25 @@ class OpenSCDealer:
         results = [i.split(": ") for i in results[1:10] if len(i)]
         results = {i[0].replace(" ", ""): i[1] for i in results}
         if card_name not in self.cards:
-            self.cards[card_name] = SmartCardDev(
-                card_name, results['Flags'], results['Length'],
-                None, results['ID'],
-            )
+            if card_name.find('Microsoft Virtual Smart Card') >= 0:
+                card_uuid = int(card_name.split(" ")[-1])
+                serials = OpenSCDealer.openText(" %s --serial" % (
+                        "--reader %d" % int(card_uuid)), "opensc-tool")[0]
+                serials = serials.replace(" ", "")[:32]
+                self.cards[card_name] = SmartCardDev(
+                    "%04d" % card_uuid,
+                    card_name,
+                    results['Flags'],
+                    results['Length'],
+                    None,
+                    # results['ID'],
+                    serials.lower(),
+                )
             print(results)
 
     def readList(self):
+        self.cards = {}
+        self.certs = {}
         # 获取所有的卡片 ==========================================
         card_all = OpenSCDealer.openText(  # 获取系统上智能卡列表
             "--list-readers", "opensc-tool")[2:]
