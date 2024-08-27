@@ -1,10 +1,13 @@
 import json
 import multiprocessing
+import os
 import random
+import subprocess
+import sys
 import threading
 import time
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 from tkinter import ttk as ttk_old
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
@@ -81,9 +84,9 @@ class SmartCardAPP:
         for card_now in self.data.cards:
             if "card_main" in self.tables:
                 self.tables["card_main"][0].insert("", tk.END, values=(
-                                 self.data.cards[card_now].card_id,
-                                 card_now,
-                                 self.data.cards[card_now].sc_uuid[:16]))
+                    self.data.cards[card_now].card_id,
+                    card_now,
+                    self.data.cards[card_now].sc_uuid[:16]))
         for cert_now in self.data.certs:
             if "cert_main" in self.tables:
                 self.tables["cert_main"][0].insert("", tk.END, values=(
@@ -149,6 +152,7 @@ class SmartCardAPP:
             bt_map = {
                 "add": self.card_create,
                 "del": self.card_delete,
+                "cer": self.cert_import,
             }
             for now in bt_all:
                 bta = ttk.Button(self.root, text=now['text'],
@@ -366,6 +370,57 @@ class SmartCardAPP:
             submit_b.place(x=180, y=150)
             submit_b.config(state=tk.DISABLED)
 
+    def cert_import(self):
+        make = ttk.Toplevel(self.root)
+        make.geometry("620x160")
+        make.geometry(f"+{self.size[0]}+{self.size[1]}")
+        make.title("导入证书")
+
+        def search():
+            file_path = filedialog.askopenfilename(
+                filetypes=[("PFX Files", "*.pfx;*.p12")]
+            )
+            if file_path:
+                print(f"选定的文件路径：{file_path}")
+                path_txt.delete(0, tk.END)
+                path_txt.insert(0, file_path)
+                make.attributes('-topmost', True)
+
+        def submit():
+            if not os.path.exists(path_txt.get()):
+                messagebox.showwarning("错误", "文件不存在")
+            else:
+                result = TPMSmartCard.importCer(path_txt.get(),
+                                                pass_txt.get())
+                messagebox.showinfo("导入证书结果", result)
+
+        # 在新窗口中添加输入部件
+        path_tag = ttk.Label(make, text="证书路径: ", bootstyle="info")
+        path_tag.grid(column=0, row=0, pady=10, padx=15)
+        path_txt = ttk.Entry(make, bootstyle="info", width=60)
+        path_txt.grid(column=1, row=0, pady=10, padx=5)
+        path_tip = ttk.Button(make, text="打开文件", bootstyle="info",
+                              command=search)
+        path_tip.grid(column=2, row=0, pady=10, padx=5)
+
+        pass_tag = ttk.Label(make, text="证书密码: ", bootstyle="info")
+        pass_tag.grid(column=0, row=1, pady=10, padx=15)
+        pass_txt = ttk.Entry(make, bootstyle="info", width=60, text="")
+        pass_txt.grid(column=1, row=1, pady=10, padx=5)
+        pass_tip = ttk.Label(make, text="(0~63个字符)", bootstyle="info")
+        pass_tip.grid(column=2, row=1, pady=10, padx=5)
+
+        cancel_button = ttk.Button(make, text="取 消", command=make.destroy, bootstyle="danger")
+        cancel_button.grid(column=0, row=2, pady=5, padx=15)
+        submit_button = ttk.Button(make, text="导入 PFX", command=submit, bootstyle="success")
+        submit_button.grid(column=2, row=2, pady=5, padx=0)
+
+        deals_process = ttk.Progressbar(make, length=432)
+        deals_process.grid(column=1, row=2, pady=10, padx=5, sticky=tk.W)
+        deals_process['value'] = 0
+
 
 if __name__ == "__main__":
+    # os.system('cd /d "%~dp0"')
+    print(os.getcwd())
     app = SmartCardAPP()

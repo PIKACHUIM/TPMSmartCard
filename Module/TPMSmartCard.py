@@ -4,6 +4,8 @@ from sys import stdout
 
 import chardet
 import time
+
+from Tools.scripts.fixnotice import process
 from winpty import PtyProcess
 
 
@@ -63,9 +65,13 @@ class TPMSmartCard:
 
     def importCer(self,
                   in_path,
-                  in_pins=""):
-        os.system('certutil -csp "Microsoft Base Smart Card Crypto Provider" '
-                  '-importpfx %s' % in_path)
+                  in_pass=""):
+        process = subprocess.run('certutil -csp "Microsoft Base Smart Card Crypto Provider" '
+                                 '-importpfx %s -p %s' % (in_path, in_pass),
+                                 shell=True, text=True, capture_output=True)
+        result = process.stdout
+        print(result)
+        return result
 
     def deleteCer(self):
         pass
