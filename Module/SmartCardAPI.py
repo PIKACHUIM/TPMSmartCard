@@ -8,9 +8,9 @@ class SmartCardAPI:
         self.cards = {}
         self.certs = {}
         if use_opensc:
-            from files.OpenSCDealer import OpenSCDealer as Deal
+            from Module.OpenSCDealer import OpenSCDealer as Deal
         else:
-            from files.CertutilDeal import CertutilDeal as Deal
+            from Module.CertutilDeal import CertutilDeal as Deal
         self.deals = Deal()
 
     def saveLogs(self):

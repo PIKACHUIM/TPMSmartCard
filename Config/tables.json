@@ -1,0 +1,49 @@
+{
+  "示例": {
+    "pack": ["X偏移量","Y偏移量","滚动条高度"],
+    "data": {
+      "表格列名称": [
+        "列宽度",
+        "列显示文本"
+      ]
+    }
+  },
+  "card_main": {
+    "pack": [28, 30, 158],
+    "data": {
+      "ITEM": [
+        30,
+        "ID"
+      ],
+      "NAME": [
+        175,
+        "Card Name"
+      ],
+      "UUID": [
+        135,
+        "Serial Number"
+      ]
+    }
+  },
+  "cert_main": {
+    "pack": [428, 30, 158],
+    "data": {
+      "ITEM": [
+        60,
+        "GUID"
+      ],
+      "NAME": [
+        240,
+        "Cert Name"
+      ],
+      "LENS": [
+        50,
+        "Key"
+      ],
+      "USED": [
+        200,
+        "Key Usage"
+      ]
+    }
+  }
+}

@@ -1,19 +1,24 @@
-from files.Certificates import CER, SUB
+from Module.Certificates import CER, SUB
 
 
 class SmartCardDev:
     def __init__(self,
+                 card_id: str,  # 智能卡编号
                  sc_name: str,  # 智能卡名称
                  sc_sha1: str,  # 智能卡SHA1
                  sc_sha2: str,  # 智能卡SHA2
                  sc_cert: (CER, None),  # 卡
-                 sc_uuid: str = None,  # UID
+                 sc_uuid: str = "00",  # UID
+                 sc_type: str = None,  # KEY
                  ):
         self.sc_name = sc_name  # 智能卡名称/智能卡名称
         self.sc_sha1 = sc_sha1  # 智能卡SHA1/智能卡Flag
         self.sc_sha2 = sc_sha2  # 智能卡SHA2/智能卡Lens
         self.sc_cert = sc_cert  # 智能卡证书(Certutil用)
         self.sc_uuid = sc_uuid  # 智能卡UUID(OpenSC专属)
+        self.card_id = card_id
+        self.sc_type = sc_type  # 支持的算法(OpenSC专属)
+        self.sc_path = "ROOT\\SMARTCARDREADER\\%04d" % int(self.card_id)
 
 
 class SmartCardCer:

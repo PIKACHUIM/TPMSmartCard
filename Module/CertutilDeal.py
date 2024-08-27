@@ -1,9 +1,9 @@
 import subprocess
 import traceback
 
-from files.Certificates import CertDataInfo
-from files.SmartCardAPI import SmartCardAPI
-from files.SmartCardObj import SmartCardDev, SmartCardCer
+from Module.Certificates import CertDataInfo
+from Module.SmartCardAPI import SmartCardAPI
+from Module.SmartCardObj import SmartCardDev, SmartCardCer
 
 
 class CertutilDeal:
@@ -25,7 +25,7 @@ class CertutilDeal:
             sc_data = SmartCardDev(
                 in_line[0], in_line[1], in_line[2],
                 CertDataInfo(
-                    in_line[3], in_line[4], in_line[7],
+                    "0", in_line[3], in_line[4], in_line[7],
                     in_line[5], in_line[6], in_line[9],
                     in_line[8].replace(" ", "")))
             return sc_data
