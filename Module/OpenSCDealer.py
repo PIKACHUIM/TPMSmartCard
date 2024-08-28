@@ -11,16 +11,22 @@ class OpenSCDealer:
 
     @staticmethod
     def openText(in_comm, in_tool="pkcs15-tool"):
-        command = ".\\tools\\opensc\\%s.exe %s" % (in_tool, in_comm)
+        command = ".\\OpenSC\\%s.exe %s" % (in_tool, in_comm)
         process = subprocess.run(command, shell=True, text=True, capture_output=True)
-        return (process.stderr + process.stdout).replace("\t", "").split("\n")
+        results = (process.stderr + process.stdout).replace("\t", "").split("\n")
+        print(results)
+        return results
 
     def readCert(self, results):
         cr_name = results[0].split("[")[1].replace("]", "")
+        key_alg = results[0].split(" ")[1]
         results = [i.split(": ") for i in results[1:11] if len(i)]
         results = {i[0].replace(" ", ""): i[1] for i in results}
+        if 'ModLength' not in results:
+            return None
         self.certs[cr_name] = SmartCardCer(
-            cr_name, results['MD:guid'], results['ModLength'],
+            cr_name, results['MD:guid'],
+            key_alg + " " + results['ModLength'] if 'ModLength' in results else "No Key",
             results['Usage'], None
         )
         print(results)
@@ -32,7 +38,7 @@ class OpenSCDealer:
             if card_name.find('Microsoft Virtual Smart Card') >= 0:
                 card_uuid = int(card_name.split(" ")[-1])
                 serials = OpenSCDealer.openText(" %s --serial" % (
-                        "--reader %d" % int(card_uuid)), "opensc-tool")[0]
+                        "--reader %d" % int(card_uuid)), "OpenSC-tool")[0]
                 serials = serials.replace(" ", "")[:32]
                 self.cards[card_name] = SmartCardDev(
                     "%04d" % card_uuid,
@@ -50,7 +56,7 @@ class OpenSCDealer:
         self.certs = {}
         # 获取所有的卡片 ==========================================
         card_all = OpenSCDealer.openText(  # 获取系统上智能卡列表
-            "--list-readers", "opensc-tool")[2:]
+            "--list-readers", "OpenSC-tool")[2:]
         # 预处理卡片信息 ==========================================
         card_all = [i.split("   ") for i in card_all if len(i) > 0]
         card_all = [[j for j in i if len(j) > 0] for i in card_all]
@@ -66,5 +72,5 @@ class OpenSCDealer:
             results = OpenSCDealer.openText("--list-keys %s" % (
                     "--reader %d" % int(card_uuid)))
             for nums in range(0, len(results)):
-                if results[nums].find("Private RSA Key") >= 0:
+                if results[nums].find("Private") >= 0:
                     self.readCert(results[nums:nums + 11])

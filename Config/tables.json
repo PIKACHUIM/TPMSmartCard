@@ -37,11 +37,11 @@
         "Cert Name"
       ],
       "LENS": [
-        45,
+        65,
         "Key"
       ],
       "USED": [
-        200,
+        180,
         "Key Usage"
       ]
     }

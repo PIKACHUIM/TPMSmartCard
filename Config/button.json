@@ -39,6 +39,24 @@
       "text": "➕ Import Certificate",
       "type": "success",
       "w": 145
+    },
+    {
+      "name": "sys",
+      "text": "\uD83D\uDD12 Show in System",
+      "type": "info",
+      "w": 140
+    },
+    {
+      "name": "out",
+      "text": "\uD83D\uDCBE Save to File",
+      "type": "info",
+      "w": 130
+    },
+    {
+      "name": "non",
+      "text": "❌  Delete Certificate",
+      "type": "danger",
+      "w": 143
     }
   ]
 }
