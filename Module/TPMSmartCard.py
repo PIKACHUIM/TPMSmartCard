@@ -63,24 +63,32 @@ class TPMSmartCard:
         print(result)
         return "\n".join(result[2:8])
 
-    def importCer(self,
-                  in_path,
+    @staticmethod
+    def initCerts(in_path,
                   in_pass=""):
-        process = subprocess.run('certutil -csp "Microsoft Base Smart Card Crypto Provider" '
-                                 '-importpfx %s -p %s' % (in_path, in_pass),
-                                 shell=True, text=True, capture_output=True)
+        command = ('certutil -csp "Microsoft Base Smart Card Crypto Provider" '
+                   ' -p "%s" -importpfx "%s"' % (in_pass, in_path))
+        print(command)
+        process = subprocess.run(command, shell=True, text=True, capture_output=True)
         result = process.stdout
         print(result)
         return result
 
-    def deleteCer(self):
-        pass
-
-    def systemCer(self):
-        pass
+    @staticmethod
+    def dropCerts(in_name):
+        command = ('certutil -delkey '
+                   '-csp "Microsoft Base Smart Card Crypto Provider" "%s"' % in_name)
+        process = subprocess.run(command, shell=True, text=True, capture_output=True)
+        result = process.stdout
+        print(result)
+        # command = ('certutil -delkey '
+        #            '-csp "Microsoft Base Smart Card Crypto Provider" "%s"' % in_name)
+        # process = subprocess.run(command, shell=True, text=True, capture_output=True)
+        # "Get-ChildItem -Path Cert:\ -Recurse | Where-Object {$_.SerialNumber -eq '%s' } | Remove-Item" % ""
+        return result
 
     def changePIN(self):
         pass
 
-    def resetPIN(self):
+    def resetsPIN(self):
         pass

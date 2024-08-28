@@ -28,7 +28,8 @@ class SmartCardAPP:
         self.data = SmartCardAPI()
         self.tpms = TPMSmartCard()
         self.pick = {
-            "card": ""
+            "card": "",
+            "cert": ""
         }
 
         self.frames = {
@@ -43,7 +44,8 @@ class SmartCardAPP:
         }
         if self.tables["card_main"][0] is not None:
             self.tables["card_main"][0].bind('<<TreeviewSelect>>', self.card_select)
-
+        if self.tables["cert_main"][0] is not None:
+            self.tables["cert_main"][0].bind('<<TreeviewSelect>>', self.cert_select)
         self.button = {
             "card_main": self.view_button("card_main"),
             "cert_main": self.view_button("cert_main"),
@@ -54,6 +56,9 @@ class SmartCardAPP:
         }
         self.button["card_main"]["pin"].config(state=tk.DISABLED)
         self.button["card_main"]["puk"].config(state=tk.DISABLED)
+        self.button["cert_main"]["non"].config(state=tk.DISABLED)
+        self.button["cert_main"]["sys"].config(state=tk.DISABLED)
+        self.button["cert_main"]["out"].config(state=tk.DISABLED)
         self.load_status()
         self.root.mainloop()
 
@@ -81,6 +86,7 @@ class SmartCardAPP:
     def load_status(self):
         self.data.readInfo()
         self.tables["card_main"][0].delete(*self.tables["card_main"][0].get_children())
+        self.tables["cert_main"][0].delete(*self.tables["cert_main"][0].get_children())
         for card_now in self.data.cards:
             if "card_main" in self.tables:
                 self.tables["card_main"][0].insert("", tk.END, values=(
@@ -150,15 +156,19 @@ class SmartCardAPP:
             bt_bty = bt_cfg[1]
             bt_all = tb_conf[in_name][1:]
             bt_map = {
-                "add": self.card_create,
-                "del": self.card_delete,
-                "cer": self.cert_import,
+                "add": (self.card_create, None),
+                "del": (self.data_delete, "card"),
+                "cer": (self.cert_import, None),
+                'non': (self.data_delete, "cert"),
             }
             for now in bt_all:
-                bta = ttk.Button(self.root, text=now['text'],
-                                 bootstyle=now['type'],
-                                 command=bt_map[now['name']] \
-                                     if now['name'] in bt_map else None)
+                bt_fun = bt_map[now['name']] if now['name'] in bt_map else (None, None)
+                if bt_fun[1] is None:
+                    bta = ttk.Button(self.root, text=now['text'], bootstyle=now['type'],
+                                     command=bt_fun[0])
+                else:
+                    bta = ttk.Button(self.root, text=now['text'], bootstyle=now['type'],
+                                     command=lambda: bt_fun[0](bt_fun[1]))
                 bta.place(x=bt_btx, y=bt_bty, width=now['w'])
                 bt_btx = bt_btx + now['w'] + 2
                 bt_dict[now['name']] = bta
@@ -197,6 +207,20 @@ class SmartCardAPP:
                 for fill_name in card_map:
                     if fill_name in self.labels["card_info"]:
                         self.labels["card_info"][fill_name][1].config(text=card_map[fill_name])
+            print(selected_name)
+
+    def cert_select(self, event):
+        treeview = event.widget
+        selected_item = treeview.selection()
+        if len(selected_item) > 0:
+            selected_name = treeview.set(selected_item[0], '#2')
+            selected_uuid = treeview.set(selected_item[0], '#1')
+            self.pick["cert"] = selected_name + " " + selected_uuid
+            self.button["cert_main"]["non"].config(state=tk.NORMAL)
+            # self.button["cert_main"]["sys"].config(state=tk.NORMAL)
+            # self.button["cert_main"]["out"].config(state=tk.NORMAL)
+            if selected_name in self.data.certs:
+                pass
             print(selected_name)
 
     def card_create(self):
@@ -330,19 +354,27 @@ class SmartCardAPP:
         for item in self.labels["card_info"]:
             self.labels["card_info"][item][1].config(text="")
 
-    def card_delete(self):
-        make = ttk.Toplevel(self.root)
-        if self.pick["card"] in self.data.cards:
+    def data_delete(self, in_name="card"):
+        data = self.data.cards if in_name == "card" else self.data.certs
+        if self.pick[in_name] in data:
+            make = ttk.Toplevel(self.root)
             make.geometry("240x200")
             make.geometry(f"+{self.size[0]}+{self.size[1]}")
-            make.title("删除TPM虚拟智能卡")
+            make.title("删除%s" % in_name)
 
             def submit():
-                result = TPMSmartCard.dropCards(self.data.cards[self.pick["card"]].sc_path)
+                if in_name == "card":
+                    result = TPMSmartCard.dropCards(self.data.cards[self.pick[in_name]].sc_path)
+                elif in_name == "cert":
+                    result = TPMSmartCard.dropCerts(self.pick["cert"])
                 self.deselectAll()
                 self.load_status()
                 make.destroy()
-                messagebox.showinfo("删除TPM卡片结果", result)
+                if len(result) > 0:
+                    if in_name == "cert":
+                        result += ("\n注意：证书删除后，系统不会立即刷新证书状态"
+                                   "\n您需要重启系统来刷新状态(密钥已经立即删除)")
+                    messagebox.showinfo("删除结果", result)
 
             def checks():
                 if kill_var.get():
@@ -351,7 +383,10 @@ class SmartCardAPP:
                     submit_b.config(state=tk.DISABLED)
 
             kill_tag = ttk.Label(make,
-                                 text="您确认要删除智能卡: \n\n%s ?" % self.pick["card"])
+                                 text="您确认要删除%s: \n\n%s ?" % (
+                                     in_name,
+                                     self.pick[in_name],
+                                 ))
             kill_tag.place(x=20, y=10)
 
             kill_tip = ttk.Label(make, bootstyle="danger",
@@ -359,7 +394,7 @@ class SmartCardAPP:
                                       "危险：此操作不可逆！且无法恢复数据")
             kill_tip.place(x=20, y=80)
             kill_var = tk.BooleanVar()
-            kill_yes = ttk.Checkbutton(make, text=" 我已确认待删除的卡片并知晓后果",
+            kill_yes = ttk.Checkbutton(make, text=" 我已确认待删除的%s并知晓后果" % in_name,
                                        bootstyle="dark", command=checks, variable=kill_var)
             kill_yes.state(['!alternate'])
             kill_yes.place(x=20, y=120)
@@ -390,8 +425,11 @@ class SmartCardAPP:
             if not os.path.exists(path_txt.get()):
                 messagebox.showwarning("错误", "文件不存在")
             else:
-                result = TPMSmartCard.importCer(path_txt.get(),
+                make.attributes('-topmost', False)
+                result = TPMSmartCard.initCerts(path_txt.get(),
                                                 pass_txt.get())
+                self.load_status()
+                make.destroy()
                 messagebox.showinfo("导入证书结果", result)
 
         # 在新窗口中添加输入部件
