@@ -1,11 +1,5 @@
-import os
 import subprocess
-from sys import stdout
-
-import chardet
 import time
-
-from Tools.scripts.fixnotice import process
 from winpty import PtyProcess
 
 
