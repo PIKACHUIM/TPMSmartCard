@@ -2,11 +2,13 @@ import json
 import os
 import random
 import pyglet
+import pyperclip
 import threading
 import time
 from ttkbootstrap import *
 import ttkbootstrap as ttk
 # import tkinter as tk
+from functools import partial
 from tkinter import messagebox, filedialog, font
 from Module.SmartCardAPI import SmartCardAPI
 from Module.TPMSmartCard import TPMSmartCard
@@ -60,7 +62,7 @@ class SmartCardAPP:
             "card_main": self.view_button("card_main"),
             "cert_main": self.view_button("cert_main"),
         }
-        self.button["card_main"]["del"].config(state=tk.DISABLED)
+
         self.labels = {
             "card_info": self.view_labels("card_info"),
             "cert_info": self.view_labels("cert_info"),
@@ -70,9 +72,12 @@ class SmartCardAPP:
 
         self.button["card_main"]["pin"].config(state=tk.DISABLED)
         self.button["card_main"]["puk"].config(state=tk.DISABLED)
-        self.button["cert_main"]["non"].config(state=tk.DISABLED)
+        self.button["card_main"]["del"].config(state=tk.DISABLED)
+
         self.button["cert_main"]["sys"].config(state=tk.DISABLED)
         self.button["cert_main"]["out"].config(state=tk.DISABLED)
+        self.button["cert_main"]["non"].config(state=tk.DISABLED)
+
         self.load_status()
         self.root.mainloop()
 
@@ -111,6 +116,9 @@ class SmartCardAPP:
 
     def load_status(self):
         self.data.readInfo()
+        self.button["card_main"]["del"].config(state=tk.DISABLED)
+        self.button["cert_main"]["non"].config(state=tk.DISABLED)
+
         self.tables["card_main"][0].delete(*self.tables["card_main"][0].get_children())
         self.tables["cert_main"][0].delete(*self.tables["cert_main"][0].get_children())
         for card_now in self.data.cards:
@@ -184,11 +192,14 @@ class SmartCardAPP:
             bt_map = {
                 "add": (self.card_create, None),
                 "del": (self.data_delete, "card"),
+                "puk": (self.card_change, "puk"),
+                "pin": (self.card_change, "pin"),
                 "cer": (self.cert_import, None),
                 "sys": (self.cert_system, None),
                 "out": (self.cert_out_to, None),
                 "non": (self.data_delete, "cert"),
             }
+            # bt_fun = {}
             for now in bt_all:
                 bt_fun = bt_map[now['name']] if now['name'] in bt_map else (None, None)
                 if bt_fun[1] is None:
@@ -196,7 +207,7 @@ class SmartCardAPP:
                                      command=bt_fun[0])
                 else:
                     bta = ttk.Button(self.root, text=now['text'], bootstyle=now['type'],
-                                     command=lambda: bt_fun[0](bt_fun[1]))
+                                     command=partial(bt_fun[0], bt_fun[1]))
                 bta.place(x=bt_btx, y=bt_bty, width=now['w'])
                 bt_btx = bt_btx + now['w'] + 2
                 bt_dict[now['name']] = bta
@@ -233,6 +244,8 @@ class SmartCardAPP:
             selected_name = treeview.set(selected_item[0], '#2')
             self.pick["card"] = selected_name
             self.button["card_main"]["del"].config(state=tk.NORMAL)
+            self.button["card_main"]["pin"].config(state=tk.NORMAL)
+            self.button["card_main"]["puk"].config(state=tk.NORMAL)
             if selected_name in self.data.cards:
                 card_now = self.data.cards[selected_name]
                 card_map = {
@@ -332,14 +345,81 @@ class SmartCardAPP:
                                 label_now[fill_name][1].config(text=cert_map[fill_name])
             print(selected_name)
 
+    def card_change(self, in_type="pin"):
+        if not self.pick["card"] or self.pick["card"] not in self.data.cards:
+            return None
+
+        def submit():
+            card_uid = self.pick["card"].split(" ")[-1]
+            pass_key = pass_txt.get()
+            pass_new = next_txt.get()
+            same_new = same_txt.get()
+            if pass_key == "" or len(pass_key) < 4:
+                make.attributes('-topmost', False)
+                messagebox.showwarning("错误", "原密码至少为4位")
+                make.attributes('-topmost', True)
+            elif pass_new == "" or len(pass_new) < 4:
+                make.attributes('-topmost', False)
+                messagebox.showwarning("错误", "新密码至少为4位")
+                make.attributes('-topmost', True)
+            elif pass_new != same_new:
+                make.attributes('-topmost', False)
+                messagebox.showwarning("错误", "两次输入的不匹配")
+                make.attributes('-topmost', True)
+            else:
+                result = TPMSmartCard.changePIN(pass_key, pass_new, card_uid,
+                                                type="--change-pin" \
+                                                    if in_type == "pin" else "--unblock-pin")
+                messagebox.showinfo("修改/重置密码结果", result)
+                make.destroy()
+
+        make = ttk.Toplevel(self.root)
+        make.geometry("600x200")
+        make.geometry(f"+{self.size[0]}+{self.size[1]}")
+        make.title("%sPIN密码" % "修改" if in_type == "pin" else "重置PIN密码")
+        pass_tag = ttk.Label(make, text="旧的 PIN: " if in_type == "pin" else "卡片 PUK: ",
+                             bootstyle="info")
+        pass_tag.grid(column=0, row=1, pady=10, padx=15)
+        pass_txt = ttk.Entry(make, bootstyle="info", width=60, text="")
+        pass_txt.grid(column=1, row=1, pady=10, padx=5)
+        pass_tip = ttk.Label(make, text="❌✅", bootstyle="info")
+        pass_tip.grid(column=2, row=1, pady=10, padx=5)
+
+        next_pin = ttk.Label(make, text="新的 PIN: ", bootstyle="info")
+        next_pin.grid(column=0, row=2, pady=10, padx=15)
+        next_txt = ttk.Entry(make, bootstyle="info", width=60)
+        next_txt.grid(column=1, row=2, pady=10, padx=5)
+        next_tip = ttk.Label(make, text="❌✅", bootstyle="info")
+        next_tip.grid(column=2, row=2, pady=10, padx=5)
+
+        same_pin = ttk.Label(make, text="确认 PIN: ", bootstyle="info")
+        same_pin.grid(column=0, row=3, pady=10, padx=15)
+        same_txt = ttk.Entry(make, bootstyle="info", width=60)
+        same_txt.grid(column=1, row=3, pady=10, padx=5)
+        same_tip = ttk.Label(make, text="❌✅", bootstyle="info")
+        same_tip.grid(column=2, row=3, pady=10, padx=5)
+
+        cancel_button = ttk.Button(make, text="取消", command=make.destroy, bootstyle="danger")
+        cancel_button.grid(column=0, row=4, pady=5, padx=15)
+        submit_button = ttk.Button(make, text="确认", command=submit, bootstyle="info")
+        submit_button.grid(column=2, row=4, pady=5, padx=0)
+
     def card_create(self):
 
         def disable():
             if puks_var.get():
                 puks_txt.delete(0, tk.END)
                 puks_txt.config(state=tk.DISABLED)
+                make.attributes('-topmost', False)
+                messagebox.showinfo("禁用PUK",
+                                    ("注意：您禁用了PUK码，PIN码将是您唯一访问凭据，请妥善保管\n"
+                                     "无法使用Admin Key恢复PIN，如果丢失PIN码将无法访问智能卡!\n"))
+                make.attributes('-topmost', True)
             else:
                 puks_txt.config(state=tk.NORMAL)
+                puks_txt.delete(0, tk.END)
+                for i in range(0, 16):
+                    puks_txt.insert(0, str(random.randint(0, 9)))
 
         def randoms():
             if adks_var.get():
@@ -353,6 +433,7 @@ class SmartCardAPP:
         make = ttk.Toplevel(self.root)
         make.geometry("640x240")
         make.geometry(f"+{self.size[0]}+{self.size[1]}")
+        make.attributes('-topmost', True)
         make.title("创建新的TPM虚拟智能卡")
 
         # 在新窗口中添加输入部件
@@ -377,11 +458,11 @@ class SmartCardAPP:
         puks_txt = ttk.Entry(make, bootstyle="info", width=60)
         puks_txt.grid(column=1, row=2, pady=10, padx=5)
         puks_var = tk.BooleanVar()
-        puks_txt.config(state=tk.DISABLED)
-        puks_var.set(True)
-        puks_tip = ttk.Checkbutton(make, text="禁用此项", bootstyle="info-round-toggle",
+        puks_tip = ttk.Checkbutton(make, text="禁用 PUK", bootstyle="info-round-toggle",
                                    variable=puks_var, command=disable)
         puks_tip.grid(column=2, row=2, pady=10, padx=5)
+        for i in range(0, 16):
+            puks_txt.insert(0, str(random.randint(0, 9)))
 
         adks_tag = ttk.Label(make, text="管理密码: ", bootstyle="info")
         adks_tag.grid(column=0, row=3, pady=10, padx=15)
@@ -390,7 +471,11 @@ class SmartCardAPP:
         adks_var = tk.BooleanVar()
         adks_tip = ttk.Checkbutton(make, text="随机生成", bootstyle="info-round-toggle",
                                    variable=adks_var, command=randoms)
+        for i in range(0, 48):
+            adks_txt.insert(0, str(random.randint(0, 9)))
+        adks_txt.config(state=tk.DISABLED)
         adks_tip.grid(column=2, row=3, pady=10, padx=5)
+        adks_var.set(True)
 
         for i in range(0, 48):
             adks_txt.insert(0, str(random.randint(0, 9)))
@@ -427,9 +512,20 @@ class SmartCardAPP:
                     deals_process['value'] = 100
                     self.load_status()
                     deals_destroy = True
+                    pin = pins_txt.get()
+                    puk = puks_txt.get()
+                    adk = adks_txt.get()
+                    out = "用户 PIN: %s\n用户 PUK: %s\n管理密码: %s" % (
+                        pin, puk, adk
+                    )
+                    # cid = result.find("ROOT")
+                    # if cid >= 0:
+                    #     out = result[cid:cid + 25] + "\n" + out
                     if deals_destroy:
                         make.destroy()
-                        messagebox.showinfo("创建TPM卡片结果", result)
+                        messagebox.showinfo("创建结果", result)
+                        pyperclip.copy(out)
+                        messagebox.showinfo("卡片信息", out + "\n卡片信息已经复制到剪贴板，请妥善保存")
 
                 def update():
                     global deals_destroy
