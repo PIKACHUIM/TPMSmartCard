@@ -26,6 +26,10 @@ Compared to directly storing certificates within the Windows system, the advanta
 
 - Cost effectiveness: Compared to traditional physical smart cards, TPM virtual smart cards can save hardware and management costs.
 
+![20240901-185515](Images\20240901-185515.png)
+
+
+
 ### 功能 / Function
 
 - 虚拟智能卡管理：创建、删除、虚拟智能卡，修改重置密码

@@ -38,25 +38,25 @@
       "name": "cer",
       "text": "➕ Import Certificate",
       "type": "success",
-      "w": 145
+      "w": 155
     },
     {
       "name": "sys",
       "text": "\uD83D\uDD12 Show in System",
       "type": "info",
-      "w": 140
+      "w": 155
     },
     {
       "name": "out",
       "text": "\uD83D\uDCBE Save to File",
       "type": "info",
-      "w": 130
+      "w": 155
     },
     {
       "name": "non",
       "text": "❌  Delete Certificate",
       "type": "danger",
-      "w": 143
+      "w": 155
     }
   ]
 }

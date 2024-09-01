@@ -17,7 +17,7 @@ class OpenSCDealer:
         print(results)
         return results
 
-    def readCert(self, results):
+    def readCert(self, results, details):
         cr_name = results[0].split("[")[1].replace("]", "")
         key_alg = results[0].split(" ")[1]
         results = [i.split(": ") for i in results[1:11] if len(i)]
@@ -27,7 +27,8 @@ class OpenSCDealer:
         self.certs[cr_name] = SmartCardCer(
             cr_name, results['MD:guid'],
             key_alg + " " + results['ModLength'] if 'ModLength' in results else "No Key",
-            results['Usage'], None
+            results['Usage'],
+            None if details.find("not found") >= 0 else details
         )
         print(results)
 
@@ -51,6 +52,9 @@ class OpenSCDealer:
                 )
             print(results)
 
+    def readFile(self, in_data):
+        pass
+
     def readList(self):
         self.cards = {}
         self.certs = {}
@@ -73,4 +77,8 @@ class OpenSCDealer:
                     "--reader %d" % int(card_uuid)))
             for nums in range(0, len(results)):
                 if results[nums].find("Private") >= 0:
-                    self.readCert(results[nums:nums + 11])
+                    details = OpenSCDealer.openText(
+                        "--read-certificate %d %s" % (
+                            int(nums),
+                            "--reader %d" % int(card_uuid)))
+                    self.readCert(results[nums:nums + 11], "\n".join(details))
