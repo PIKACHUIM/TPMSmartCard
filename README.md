@@ -30,6 +30,8 @@ Compared to directly storing certificates within the Windows system, the advanta
 
 
 
+<b color="red">注意：在使用本工具前，您需要提前安装[OpenSC](https://github.com/OpenSC/OpenSC/releases) / Notice: Before using this tool, you need to install [OpenSC](https://github.com/OpenSC/OpenSC/releases) </b>
+
 ### 功能 / Function
 
 - 虚拟智能卡管理：创建、删除、虚拟智能卡，修改重置密码
