@@ -75,10 +75,10 @@ class OpenSCDealer:
                                   card_all[card_uuid])
             results = OpenSCDealer.openText("--list-keys %s" % (
                     "--reader %d" % int(card_uuid)))
+            count = -1
             for nums in range(0, len(results)):
                 if results[nums].find("Private") >= 0:
+                    count+=1
                     details = OpenSCDealer.openText(
-                        "--read-certificate %d %s" % (
-                            int(nums),
-                            "--reader %d" % int(card_uuid)))
+                        "--read-certificate %d %s" % (int(count), "--reader %d" % int(card_uuid)))
                     self.readCert(results[nums:nums + 11], "\n".join(details))
