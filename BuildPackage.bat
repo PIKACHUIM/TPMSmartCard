@@ -4,5 +4,6 @@ rmdir /s /q build
 cd /d "%~dp0"
 G:\Venvs\TPMSmartCard\Scripts\python.exe BuildPackage.py  build
 xcopy Config "build\exe.win-amd64-3.11\Config\"
+xcopy Config\myfont "build\exe.win-amd64-3.11\Config\\myfont\"
 xcopy Tooler "build\exe.win-amd64-3.11\Tooler\"
 xcopy OpenSC "build\exe.win-amd64-3.11\OpenSC\"
