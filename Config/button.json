@@ -1,4 +1,52 @@
 {
+  "main_main": [
+    [
+      20,
+      440
+    ],
+    {
+      "name": "inf",
+      "text": "b_inf",
+      "type": "success",
+      "w": 125
+    },
+    {
+      "name": "osc",
+      "text": "b_osc",
+      "type": "secondary",
+      "w": 125
+    },
+    {
+      "name": "git",
+      "text": "b_git",
+      "type": "dark",
+      "w": 125
+    }
+  ],
+  "main_line": [
+    [
+      20,
+      480
+    ],
+    {
+      "name": "ing",
+      "text": "b_ing",
+      "type": "info",
+      "w": 125
+    },
+    {
+      "name": "tpm",
+      "text": "b_tpm",
+      "type": "warning",
+      "w": 125
+    },
+    {
+      "name": "set",
+      "text": "b_set",
+      "type": "primary",
+      "w": 125
+    }
+  ],
   "card_main": [
     [
       28,
@@ -6,55 +54,55 @@
     ],
     {
       "name": "add",
-      "text": "➕ Add",
+      "text": "b_add",
       "type": "success",
       "w": 65
     },
     {
       "name": "pin",
-      "text": "↩ Change PIN",
+      "text": "b_pin",
       "type": "info",
       "w": 110
     },
     {
       "name": "puk",
-      "text": "🔄 Reset PIN",
+      "text": "b_puk",
       "type": "warning",
       "w": 103
     },
     {
       "name": "del",
-      "text": "❌ Delete",
+      "text": "b_del",
       "type": "danger",
       "w": 80
     }
   ],
-  "cert_main":[
+  "cert_main": [
     [
       428,
       230
     ],
     {
       "name": "cer",
-      "text": "➕ Import Certificate",
+      "text": "b_cer",
       "type": "success",
       "w": 155
     },
     {
       "name": "sys",
-      "text": "\uD83D\uDD12 Show in System",
+      "text": "b_sys",
       "type": "info",
       "w": 155
     },
     {
       "name": "out",
-      "text": "\uD83D\uDCBE Save to File",
+      "text": "b_out",
       "type": "info",
       "w": 155
     },
     {
       "name": "non",
-      "text": "❌  Delete Certificate",
+      "text": "b_non",
       "type": "danger",
       "w": 155
     }

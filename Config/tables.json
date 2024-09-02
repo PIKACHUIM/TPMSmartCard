@@ -13,15 +13,15 @@
     "data": {
       "ITEM": [
         30,
-        "ID"
+        "card_list"
       ],
       "NAME": [
         175,
-        "Card Name"
+        "card_name"
       ],
       "UUID": [
         135,
-        "Serial Number"
+        "card_uuid"
       ]
     }
   },
@@ -30,19 +30,19 @@
     "data": {
       "ITEM": [
         55,
-        "GUID"
+        "cert_guid"
       ],
       "NAME": [
         300,
-        "Cert Name"
+        "cert_name"
       ],
       "LENS": [
         65,
-        "Key"
+        "pub_length"
       ],
       "USED": [
         180,
-        "Key Usage"
+        "key_usages"
       ]
     }
   }
