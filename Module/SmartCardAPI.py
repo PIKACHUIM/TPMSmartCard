@@ -1,8 +1,3 @@
-import os
-import time
-from winpty import PtyProcess
-
-
 class SmartCardAPI:
     def __init__(self, use_opensc=True):
         self.cards = {}
