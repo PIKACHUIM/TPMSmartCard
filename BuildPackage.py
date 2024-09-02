@@ -8,7 +8,7 @@ files = []
 # TARGET
 target = Executable(
     script="SmartCardAPP.py",
-    # base="Win32GUI",
+    base="Win32GUI",
     icon="Config/iconer/icon02.ico",
     uac_admin=True
 )

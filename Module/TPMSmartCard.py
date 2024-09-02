@@ -1,11 +1,5 @@
-import os
 import subprocess
-from sys import stdout
-
-import chardet
 import time
-
-from Tools.scripts.fixnotice import process
 from winpty import PtyProcess
 
 
@@ -87,8 +81,22 @@ class TPMSmartCard:
         # "Get-ChildItem -Path Cert:\ -Recurse | Where-Object {$_.SerialNumber -eq '%s' } | Remove-Item" % ""
         return result
 
-    def changePIN(self):
-        pass
-
-    def resetsPIN(self):
-        pass
+    @staticmethod
+    def changePIN(old, new, uid, type="--change-pin"):
+        command = ".\\OpenSC\\pkcs15-tool.exe --reader %s %s\r" % (uid, type)
+        proc = PtyProcess.spawn(command)
+        # proc.write("@echo off && cls\r")
+        # proc.read()
+        # proc.write(command)
+        time.sleep(1)
+        proc.write(old + "\r")
+        proc.write(new + "\r")
+        proc.write(new + "\r")
+        # proc.write("\rexit\r")
+        time.sleep(1)
+        result = proc.read()
+        result = result.split(": ")[-1]
+        if len(result) == 0:
+            result = "OK"
+        print(result)
+        return result
