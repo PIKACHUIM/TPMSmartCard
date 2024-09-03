@@ -18,6 +18,7 @@ class CertDataInfo:
     def __init__(self,
                  _certs_=None
                  ):
+        self.CertSHA160 = None
         self.CRLsDPoint = None
         self.AuthAccess = None
         self.SubsHashID = None
@@ -86,7 +87,8 @@ class CertDataInfo:
         self.Algorithms = self._certs_['signature_algorithm'] if 'signature_algorithm' in self._certs_ else "Unknown"
         self.IssuedDate = self._certs_['start_time'] if 'start_time' in self._certs_ else "Unknown"
         self.ExpireDate = self._certs_['end_time'] if 'end_time' in self._certs_ else "Unknown"
-
+        self.CertSHA160 = self._certs_['cert_sha1'] if 'cert_sha1' in self._certs_ else "Unknown"
+        
         self.pub_length = str(self._certs_['pubkey_len']) if 'pubkey_len' in self._certs_ else "Unknown"
         self.pub_origin = str(self._certs_['pubkey']) if 'pubkey' in self._certs_ else "Unknown"
         self.pub_key_al = str(self._certs_['pubkey_type']) if 'pubkey_type' in self._certs_ else "Unknown"
