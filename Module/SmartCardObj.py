@@ -66,6 +66,7 @@ class SmartCardCer:
             "extension_text": [
                 cert_content.get_extension(i) for i in range(cert_content.get_extension_count())
             ],
+            "cert_sha1": cert_content.digest("sha1").decode("utf-8"),
         }
         # print(cert_info_ls)
         self.sc_cert = CER(cert_info_ls)

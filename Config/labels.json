@@ -44,15 +44,14 @@
         "cert_name": 225
       },
       {
-        "cert_sha1": 150,
+        "cert_sign": 150,
         "cert_open": 102,
         "cert_stop": 102
       },
       {
         "is_ca_cert": 43,
         "is_expired": 42,
-        "pub_length": 60,
-        "cert_sign": 150
+        "cert_sha1": 225
       },
       {
         "key_usages": 220
