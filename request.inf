@@ -1,0 +1,19 @@
+[Version]
+Signature="$Windows NT$"
+
+[NewRequest]
+Subject = "CN=your.common.name,OU=Your Organizational Unit,O=Your Organization,L=Your City,ST=Your State,C=Your Country"
+KeySpec = "AT_KEYEXCHANGE"
+KeyUsage = "CERT_KEY_ENCIPHERMENT_KEY_USAGE | CERT_DIGITAL_SIGNATURE_KEY_USAGE"
+FriendlyName= "TEST CERT111"
+KeyContainer = "TEST11"
+SMIME = FALSE
+
+
+ProviderName = "Microsoft Base Smart Card Crypto Provider"
+HashAlgorithm = sha1
+RequestType = PKCS10
+KeyLength = 1024
+Exportable = FALSE
+MachineKeySet = TRUE
+ProviderType = 0
