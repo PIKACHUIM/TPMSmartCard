@@ -124,7 +124,7 @@ class SmartCardAPP:
 
     def read_config(self):
         for conf_name in ["tables", "frames", "button",
-                          "labels", "global"]:
+                          "labels", "global", "cncode"]:
             with open("Config/%s.json" % conf_name, "r",
                       encoding="utf8") as conf_file:
                 conf_data = conf_file.read()
@@ -153,7 +153,8 @@ class SmartCardAPP:
             if "cert_main" in self.tables:
                 self.tables["cert_main"][0].insert("", tk.END, values=(
                     cert_now.split(' ')[-1],
-                    " ".join(cert_now.split(' ')[:-1]),
+                    " ".join(cert_now.split(' ')[:-1] if len(cert_now.split(' ')) > 1 \
+                                 else self.la("msg_no_cert")),
                     self.data.certs[cert_now].sc_exec,
                     self.data.certs[cert_now].sc_keys
                 ))
@@ -217,6 +218,8 @@ class SmartCardAPP:
                 "puk": (self.card_change, "puk"),
                 "pin": (self.card_change, "pin"),
                 "cer": (self.cert_import, None),
+                "csr": (self.reqs_create, None),
+                "pem": (self.reqs_create, None),
                 "sys": (self.cert_system, None),
                 "out": (self.cert_out_to, None),
                 "non": (self.data_delete, "cert"),
@@ -625,7 +628,7 @@ class SmartCardAPP:
         pins_var.trace('w', change)
         pins_tag = ttk.Label(make, text=self.la("msg_card") + " PIN: ", bootstyle="info")
         pins_tag.grid(column=0, row=1, pady=10, padx=15)
-        pins_txt = ttk.Entry(make, bootstyle="info", width=60,  textvariable=pins_var,show="*")
+        pins_txt = ttk.Entry(make, bootstyle="info", width=60, textvariable=pins_var, show="*")
         # for i in range(0, 8):
         #     pins_txt.insert(0, str(random.randint(0, 9)))
         pins_txt.grid(column=1, row=1, pady=10, padx=5)
@@ -663,13 +666,11 @@ class SmartCardAPP:
         deals_process['value'] = 0
         make.mainloop()
 
-
     def deselectAll(self):
         for item in self.tables["card_main"][0].selection():
             self.tables["card_main"][0].selection_remove(item)
         for item in self.labels["card_info"]:
             self.labels["card_info"][item][1].config(text="")
-
 
     def data_delete(self, in_name="card"):
         data = self.data.cards if in_name == "card" else self.data.certs
@@ -717,7 +718,6 @@ class SmartCardAPP:
             submit_b = ttk.Button(make, text=self.la("msg_remove"), command=submit, bootstyle="danger")
             submit_b.place(x=180, y=150)
             submit_b.config(state=tk.DISABLED)
-
 
     def cert_import(self):
         make = ttk.Toplevel(self.root)
@@ -785,6 +785,112 @@ class SmartCardAPP:
         deals_process = ttk.Progressbar(make, length=432)
         deals_process.grid(column=1, row=2, pady=10, padx=5, sticky=tk.W)
         deals_process['value'] = 0
+
+        make.mainloop()
+
+    def reqs_create(self):
+        def submit():
+            pass
+
+        def cancel():
+            make.destroy()
+
+        make = ttk.Toplevel(self.root)
+        make.geometry("800x440")
+        make.geometry(f"+{self.size[0]}+{self.size[1]}")
+        make.attributes('-topmost', True)
+        make.title(self.la("msg_create") + self.la("msg_cert"))
+        cn_tag = ttk.Label(make, text=self.la("user_name") + ": ", bootstyle="info")
+        cn_tag.grid(column=0, row=0, pady=10, padx=15)
+        cn_txt = ttk.Entry(make, bootstyle="info", width=81)
+        cn_txt.grid(column=1, row=0, pady=10, padx=5, columnspan=6)
+        cn_tip = ttk.Label(make, text="(1~255%s)" % self.la("msg_char"), bootstyle="info")
+        cn_tip.grid(column=7, row=0, pady=10, padx=5)
+
+        st_tag = ttk.Label(make, text=self.la("user_area") + ": ", bootstyle="info")
+        st_tag.grid(column=0, row=1, pady=10, padx=15, sticky=W)
+        st_txt = ttk.Entry(make, bootstyle="info", width=25)
+        st_txt.grid(column=1, row=1, pady=10, padx=5, sticky=W, columnspan=2)
+
+        ll_tag = ttk.Label(make, text=self.la("user_city") + ": ", bootstyle="info")
+        ll_tag.grid(column=3, row=1, pady=10, padx=15, sticky=W)
+        ll_txt = ttk.Entry(make, bootstyle="info", width=25)
+        ll_txt.grid(column=4, row=1, pady=10, padx=5, sticky=W, columnspan=2)
+
+        cc_tag = ttk.Label(make, text=self.la("user_code") + ": ", bootstyle="info")
+        cc_tag.grid(column=6, row=1, pady=10, padx=15)
+        cc_txt = ttk.Combobox(make, bootstyle="info", width=8, values=list(self.conf['cncode'].keys()))
+        cc_txt.grid(column=7, row=1, pady=10, padx=5, sticky=W, columnspan=2)
+        cc_txt.set("N/A")
+
+        on_tag = ttk.Label(make, text=self.la("user_on_t") + ": ", bootstyle="info")
+        on_tag.grid(column=0, row=2, pady=10, padx=15, sticky=W)
+        on_txt = ttk.Entry(make, bootstyle="info", width=35)
+        on_txt.grid(column=1, row=2, pady=10, padx=5, sticky=W, columnspan=3)
+
+        ou_tag = ttk.Label(make, text=self.la("msg_ou_full") + ": ", bootstyle="info")
+        ou_tag.grid(column=4, row=2, pady=10, padx=15, sticky=W)
+        ou_txt = ttk.Entry(make, bootstyle="info", width=36)
+        ou_txt.grid(column=5, row=2, pady=10, padx=5, sticky=W, columnspan=3)
+
+        kl_tag = ttk.Label(make, text=self.la("pub_length") + ": ", bootstyle="info")
+        kl_tag.grid(column=0, row=3, pady=10, padx=15)
+        kl_txt = ttk.Combobox(make, bootstyle="info", width=7, values=["RSA1024", "RSA2048"])
+        kl_txt.grid(column=1, row=3, pady=10, padx=5, sticky=W)
+        kl_txt.set("RSA2048")
+
+        kl_sha = ttk.Combobox(make, bootstyle="info", width=7, values=["SHA1", "SHA256"])
+        kl_sha.grid(column=2, row=3, pady=10, padx=5, sticky=W)
+        kl_sha.set("SHA256")
+
+        ks_tag = ttk.Label(make, text=self.la("msg_ks_full") + ": ", bootstyle="info")
+        ks_tag.grid(column=3, row=3, pady=10, padx=15)
+        k_sign = ttk.Radiobutton(make, bootstyle="info", width=8, text=self.la('msg_sign'), )
+        k_sign.grid(column=4, row=3, pady=10, padx=5, sticky=W)
+        k_data = ttk.Radiobutton(make, bootstyle="info", width=8, text=self.la('msg_data'), )
+        k_data.grid(column=5, row=3, pady=10, padx=5, sticky=W)
+
+        ml_tag = ttk.Label(make, text=self.la("msg_ml_lite") + ": ", bootstyle="info")
+        ml_tag.grid(column=6, row=3, pady=10, padx=15)
+        m_sign = ttk.Checkbutton(make, bootstyle="info-round-toggle", text=self.la('msg_ml_full'), )
+        m_sign.grid(column=7, row=3, pady=10, padx=5, sticky=W)
+
+        ku_tag = ttk.Label(make, text=self.la("key_usages") + ": ", bootstyle="info")
+        ku_tag.grid(column=0, row=4, pady=10, padx=15)
+        ku_num = 1
+        ku_dat = {}
+        for ku_inf in ["DigitalSignature", "nonRepudiation", "Encipherment", "CertCRLsSign",
+                       "KeyAgreement", "EncipherOnly", "DecipherOnly"]:
+            ku_dat[ku_inf] = ttk.Checkbutton(make, bootstyle="info", width=10, text=self.la(ku_inf))
+            ku_dat[ku_inf].grid(column=ku_num, row=4)
+            ku_num += 1
+
+        dn_tag = ttk.Label(make, text=self.la("msg_domain") + ": ", bootstyle="info")
+        dn_tag.grid(column=0, row=5, pady=10, padx=15)
+        dn_txt = ttk.Entry(make, bootstyle="info", width=81)
+        dn_txt.grid(column=1, row=5, pady=10, padx=5, columnspan=6)
+        dn_tip = ttk.Label(make, text="%s" % self.la("msg_splits"), bootstyle="info")
+        dn_tip.grid(column=7, row=5, pady=10, padx=5)
+
+        um_tag = ttk.Label(make, text=self.la("msg_emails") + ": ", bootstyle="info")
+        um_tag.grid(column=0, row=6, pady=10, padx=15)
+        um_txt = ttk.Entry(make, bootstyle="info", width=81)
+        um_txt.grid(column=1, row=6, pady=10, padx=5, columnspan=6)
+        um_tip = ttk.Label(make, text="%s" % self.la("msg_splits"), bootstyle="info")
+        um_tip.grid(column=7, row=6, pady=10, padx=5)
+
+        dt_tag = ttk.Label(make, text=self.la("DESCRIPTION") + ": ", bootstyle="info")
+        dt_tag.grid(column=0, row=7, pady=10, padx=15)
+        dt_txt = ttk.Entry(make, bootstyle="info", width=81)
+        dt_txt.grid(column=1, row=7, pady=10, padx=5, columnspan=6)
+        dt_tip = ttk.Label(make, text="(0~255%s)" % self.la("msg_char"), bootstyle="info")
+        dt_tip.grid(column=7, row=7, pady=10, padx=5)
+
+        cancel_button = ttk.Button(make, text=self.la("msg_cancel"), command=make.destroy, bootstyle="danger")
+        cancel_button.grid(column=0, row=8, pady=5, padx=15)
+        submit_button = ttk.Button(make, text=self.la("msg_create_csr"), command=submit, bootstyle="success")
+        submit_button.grid(column=7, row=8, pady=5, padx=0)
+        submit_button.config(state=tk.DISABLED)
 
         make.mainloop()
 

@@ -86,25 +86,37 @@
       "name": "cer",
       "text": "b_cer",
       "type": "success",
-      "w": 155
+      "w": 105
+    },
+    {
+      "name": "csr",
+      "text": "b_csr",
+      "type": "primary",
+      "w": 105
+    },
+    {
+      "name": "pem",
+      "text": "b_pem",
+      "type": "success",
+      "w": 105
     },
     {
       "name": "sys",
       "text": "b_sys",
       "type": "info",
-      "w": 155
+      "w": 100
     },
     {
       "name": "out",
       "text": "b_out",
       "type": "info",
-      "w": 155
+      "w": 100
     },
     {
       "name": "non",
       "text": "b_non",
       "type": "danger",
-      "w": 155
+      "w": 100
     }
   ]
 }
