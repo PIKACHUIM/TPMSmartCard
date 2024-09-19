@@ -1,7 +1,12 @@
+import hashlib
 import os
 import json
+import re
 import time
 import random
+import tkinter
+from random import randint
+
 import pyglet
 import locale
 import platform
@@ -149,12 +154,15 @@ class SmartCardAPP:
                     self.data.cards[card_now].card_id,
                     card_now,
                     self.data.cards[card_now].sc_uuid[:16]))
+
         for cert_now in self.data.certs:
             if "cert_main" in self.tables:
+                cert_name = self.la("msg_no_cert")
+                if len(cert_now.split(' ')) > 1:
+                    cert_name = " ".join(cert_now.split(' ')[:-1])
                 self.tables["cert_main"][0].insert("", tk.END, values=(
                     cert_now.split(' ')[-1],
-                    " ".join(cert_now.split(' ')[:-1] if len(cert_now.split(' ')) > 1 \
-                                 else self.la("msg_no_cert")),
+                    cert_name,
                     self.data.certs[cert_now].sc_exec,
                     self.data.certs[cert_now].sc_keys
                 ))
@@ -217,9 +225,9 @@ class SmartCardAPP:
                 "del": (self.data_delete, "card"),
                 "puk": (self.card_change, "puk"),
                 "pin": (self.card_change, "pin"),
-                "cer": (self.cert_import, None),
+                "cer": (self.cert_import, "pfx"),
                 "csr": (self.reqs_create, None),
-                "pem": (self.reqs_create, None),
+                "pem": (self.cert_import, "cer"),
                 "sys": (self.cert_system, None),
                 "out": (self.cert_out_to, None),
                 "non": (self.data_delete, "cert"),
@@ -331,6 +339,7 @@ class SmartCardAPP:
         if len(selected_item) > 0:
             selected_name = treeview.set(selected_item[0], '#2')
             selected_uuid = treeview.set(selected_item[0], '#1')
+            selected_name = selected_name.replace(self.la("msg_no_cert"), "")
             if selected_name != "":
                 self.pick["cert"] = selected_name + " " + selected_uuid
             else:
@@ -719,14 +728,16 @@ class SmartCardAPP:
             submit_b.place(x=180, y=150)
             submit_b.config(state=tk.DISABLED)
 
-    def cert_import(self):
+    def cert_import(self, flag="pfx"):
         make = ttk.Toplevel(self.root)
-        make.geometry("700x160")
+        make.geometry("700x160" if flag == "pfx" else "700x120")
         make.geometry(f"+{self.size[0]}+{self.size[1]}")
         make.title(self.la("msg_import") + self.la("msg_cert"))
 
         def change(*args):
-            if len(path_txt.get()) == 0 or len(pass_txt.get()) == 0:
+            if flag == "pfx" and len(pass_txt.get()) == 0:
+                submit_button.config(state=tk.DISABLED)
+            if len(path_txt.get()) == 0:
                 submit_button.config(state=tk.DISABLED)
             elif not os.path.exists(path_txt.get()):
                 submit_button.config(state=tk.DISABLED)
@@ -735,7 +746,10 @@ class SmartCardAPP:
 
         def search():
             file_path = filedialog.askopenfilename(
-                filetypes=[("PFX Files", "*.pfx;*.p12")]
+                filetypes=[
+                    ("PFX Files", "*.pfx;*.p12") if flag == "pfx" \
+                        else ("Cert Files", "*.cer;*.crt;*.pem;*.der;*.p7b")
+                ]
             )
             if file_path:
                 print(f"File Path：{file_path}")
@@ -749,8 +763,11 @@ class SmartCardAPP:
                                        self.la("msg_file_not_exist"))
             else:
                 make.attributes('-topmost', False)
-                result = TPMSmartCard.initCerts(path_txt.get(),
-                                                pass_txt.get())
+                if flag == "pfx":
+                    result = TPMSmartCard.initCerts(path_txt.get(),
+                                                    pass_txt.get())
+                else:
+                    result = TPMSmartCard.loadCerts(path_txt.get())
                 self.load_status()
                 make.destroy()
                 messagebox.showinfo(self.la("msg_import") + self.la("msg_cert") + self.la("msg_result"),
@@ -766,21 +783,22 @@ class SmartCardAPP:
         path_txt.grid(column=1, row=0, pady=10, padx=5)
         path_tip = ttk.Button(make, text=self.la("msg_open") + self.la("msg_file"), bootstyle="info", command=search)
         path_tip.grid(column=2, row=0, pady=10, padx=5)
-
-        pass_var = tk.StringVar()
-        pass_var.trace('w', change)
-        pass_tag = ttk.Label(make, text=self.la("msg_cert") + self.la("msg_pass") + ": ", bootstyle="info")
-        pass_tag.grid(column=0, row=1, pady=10, padx=15)
-        pass_txt = ttk.Entry(make, bootstyle="info", width=60, show="*", textvariable=pass_var)
-        pass_txt.grid(column=1, row=1, pady=10, padx=5)
-        pass_tip = ttk.Label(make, text="(0~63%s)" % self.la("msg_char"), bootstyle="info")
-        pass_tip.grid(column=2, row=1, pady=10, padx=5)
+        if flag == "pfx":
+            pass_var = tk.StringVar()
+            pass_var.trace('w', change)
+            pass_tag = ttk.Label(make, text=self.la("msg_cert") + self.la("msg_pass") + ": ", bootstyle="info")
+            pass_tag.grid(column=0, row=1, pady=10, padx=15)
+            pass_txt = ttk.Entry(make, bootstyle="info", width=60, show="*", textvariable=pass_var)
+            pass_txt.grid(column=1, row=1, pady=10, padx=5)
+            pass_tip = ttk.Label(make, text="(0~63%s)" % self.la("msg_char"), bootstyle="info")
+            pass_tip.grid(column=2, row=1, pady=10, padx=5)
 
         cancel_button = ttk.Button(make, text=self.la("msg_cancel"), command=make.destroy, bootstyle="danger")
         cancel_button.grid(column=0, row=2, pady=5, padx=15)
-        submit_button = ttk.Button(make, text=self.la("msg_import") + " PFX", command=submit, bootstyle="success")
+        submit_button = ttk.Button(make, text=self.la("msg_import") + flag.upper(), command=submit, bootstyle="success")
         submit_button.grid(column=2, row=2, pady=5, padx=0)
-        submit_button.config(state=tk.DISABLED)
+        if flag == "pfx":
+            submit_button.config(state=tk.DISABLED)
 
         deals_process = ttk.Progressbar(make, length=432)
         deals_process.grid(column=1, row=2, pady=10, padx=5, sticky=tk.W)
@@ -789,10 +807,138 @@ class SmartCardAPP:
         make.mainloop()
 
     def reqs_create(self):
-        def submit():
-            pass
+        def change(*args):
+            # 主体名称判断 =============================
+            all_keys = list(locals().keys()) + list(globals().keys())
+            if "cn_txt" in all_keys:
+                if len(cn_txt.get()) == 0:
+                    cn_txt.config(bootstyle="danger")
+                    if "submit_button" in all_keys:
+                        submit_button.config(state=tk.DISABLED)
+                else:
+                    cn_txt.config(bootstyle="info")
+                    if "submit_button" in all_keys:
+                        submit_button.config(state=tk.NORMAL)
+            # 邮件开关判断 =============================
+            if "um_var" in all_keys:
+                if um_var.get():
+                    um_txt.config(state=tk.NORMAL)
+                    um_txt.config(bootstyle="info")
+                    dt_tip.config(text="0-999%s" % self.la("msg_char"))
+                else:
+                    um_txt.delete(0, tk.END)
+                    um_txt.config(state=tk.DISABLED)
+                    um_txt.config(bootstyle="default")
+                    dt_tip.config(text=self.la("msg_ml_text"))
+            # 密钥限制开关 ===============================
+            if v_data.get():
+                v_sign.set(1)
+                k_sign.config(state=tk.DISABLED)
+            else:
+                k_sign.config(state=tk.NORMAL)
 
-        def cancel():
+        def checks(in_text, keyType):
+            re_text = {
+                "EMail": {
+                    "EMail": r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$",
+                },
+                "DNS": {
+                    "IPAddress": r"^((25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)$",
+                    "IPAddress6": r"^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::1$|^(::[^:]+)*::1$",
+                    "DNS": r"^[a-zA-Z0-9]([a-zA-Z0-9.-]{1,253}[a-zA-Z0-9])?$",
+                }
+
+            }
+            for keyName in re_text[keyType]:
+                if re.match(re_text[keyType][keyName], in_text):
+                    return keyName.replace("IPAddress6", "IPAddress")
+            return None
+
+        def submit():
+            cn = cn_var.get().replace(",", " ")
+            st = st_txt.get().replace(",", " ")
+            ll = ll_txt.get().replace(",", " ")
+            cc = cc_txt.get().replace(",", " ")
+            ou = ou_txt.get().replace(",", " ")
+            on = on_txt.get().replace(",", " ")
+            dt = dt_txt.get().replace(",", " ")
+            cc = self.conf['cncode'][cc] if cc in self.conf['cncode'] else ""
+            domain = dn_txt.get().replace(",", ";").split(";")
+            emails = um_txt.get().replace(",", ";").split(";")
+            domain = [i for i in domain if len(i) > 0]
+            emails = [i for i in emails if len(i) > 0]
+            ken_len = kl_txt.get()[3:]
+            ken_sha = kl_sha.get().lower()
+            full_text = ('[Version]\n'
+                         'Signature="$Windows NT$"\n'
+                         '[NewRequest]\n'
+                         'RequestType = PKCS10\n'
+                         'ProviderName = "Microsoft Base Smart Card Crypto Provider"\n'
+                         'ProviderType = 0\n'
+                         'Exportable = FALSE\n'
+                         'MachineKeySet = TRUE\n')
+            full_text += 'Subject = "%s%s%s%s%s%s%s%s"\n' % (
+                "CN=%s," % cn if len(cn) > 0 else "Unknown,",
+                "C=%s," % cc if len(cc) > 0 else "",
+                "ST=%s," % st if len(st) > 0 else "",
+                "L=%s," % ll if len(ll) > 0 else "",
+                "O=%s," % on if len(on) > 0 else "",
+                "OU=%s," % ou if len(ou) > 0 else "",
+                "Description=%s," % dt if len(dt) > 0 else "",
+                "2.5.4.15=Private"
+            )
+            full_text += 'KeySpec = %s%s%s\n' % (
+                "AT_SIGNATURE" if v_sign.get() and not v_data.get() else "",
+                "AT_KEYEXCHANGE" if v_data.get() else "",
+                "AT_NONE" if not v_sign.get() and not v_data.get() else ""
+            )
+            ku_all = sum([
+                ku_key[i] for i in ku_dat if ku_out[i].get()]
+            )
+            full_text += 'KeyUsage = "0x%04x"\n' % ku_all
+            full_text += 'FriendlyName= "%s"\n' % cn
+            full_text += 'KeyContainer= "C-%05d"\n' % randint(0, 99999)
+            # full_text += 'SMIME= %s\n' % "TRUE" if um_var.get() else "FALSE"
+            full_text += 'HashAlgorithm= %s\n' % ken_sha
+            full_text += 'KeyLength= %s\n' % ken_len
+            if len(domain) > 0 or len(emails) > 0:
+                if um_var.get():
+                    full_text += '[EnhancedKeyUsageExtension]\nOID=1.2.840.113549.1.9.15\n'
+                full_text += '[Extensions]\n'
+                allData = {"EMail": emails, "DNS": domain}
+                for keyType in allData:
+                    extData = allData[keyType]
+                    for keyData in extData:
+                        if len(keyData) > 0:
+                            keyName = checks(keyData, keyType)
+                            if keyName is not None:
+                                full_text += '_continue_ = %s=%s&\n' % (
+                                    keyName, keyData
+                                )
+                            else:
+                                make.attributes('-topmost', False)
+                                messagebox.showwarning(self.la("msg_error_ut"),
+                                                       self.la("msg_error_it") + "\n%s" % keyData)
+                                make.attributes('-topmost', True)
+                                return None
+
+            print(full_text)
+            make.attributes('-topmost', False)
+            file_path = "%s\\%s.inf" % (os.path.expandvars("%APPDATA%"),
+                                        hashlib.sha256(full_text.encode()).hexdigest())
+            print(file_path)
+            with open(file_path, 'w', encoding="utf8") as file_file:
+                file_file.write(full_text)
+            save_path = filedialog.asksaveasfilename(
+                defaultextension=".csr",  # 默认文件扩展名
+                filetypes=[("Cert Request", "*.csr"), ("All files", "*.*")],  # 文件类型过滤器
+                initialdir="~",  # 初始目录
+                initialfile="%s.csr" % cn,  # 初始文件名
+                title="Save as"  # 对话框标题
+            )
+            result = TPMSmartCard.createCSR(file_path, save_path)
+            messagebox.showinfo(self.la("b_csr") + self.la("msg_create"), result)
+            # make.attributes('-topmost', True)
             make.destroy()
 
         make = ttk.Toplevel(self.root)
@@ -800,40 +946,43 @@ class SmartCardAPP:
         make.geometry(f"+{self.size[0]}+{self.size[1]}")
         make.attributes('-topmost', True)
         make.title(self.la("msg_create") + self.la("msg_cert"))
-        cn_tag = ttk.Label(make, text=self.la("user_name") + ": ", bootstyle="info")
+
+        cn_var = tk.StringVar()
+        cn_var.trace('w', change)
+        cn_tag = ttk.Label(make, text=self.la("user_name") + ": ")
         cn_tag.grid(column=0, row=0, pady=10, padx=15)
-        cn_txt = ttk.Entry(make, bootstyle="info", width=81)
+        cn_txt = ttk.Entry(make, bootstyle="info", width=83, textvariable=cn_var)
         cn_txt.grid(column=1, row=0, pady=10, padx=5, columnspan=6)
-        cn_tip = ttk.Label(make, text="(1~255%s)" % self.la("msg_char"), bootstyle="info")
+        cn_tip = ttk.Label(make, text="%s, 1-255%s" % (self.la("msg_must_in"), self.la("msg_char")))
         cn_tip.grid(column=7, row=0, pady=10, padx=5)
 
-        st_tag = ttk.Label(make, text=self.la("user_area") + ": ", bootstyle="info")
+        st_tag = ttk.Label(make, text=self.la("user_area") + ": ")
         st_tag.grid(column=0, row=1, pady=10, padx=15, sticky=W)
         st_txt = ttk.Entry(make, bootstyle="info", width=25)
         st_txt.grid(column=1, row=1, pady=10, padx=5, sticky=W, columnspan=2)
 
-        ll_tag = ttk.Label(make, text=self.la("user_city") + ": ", bootstyle="info")
+        ll_tag = ttk.Label(make, text=self.la("user_city") + ": ")
         ll_tag.grid(column=3, row=1, pady=10, padx=15, sticky=W)
         ll_txt = ttk.Entry(make, bootstyle="info", width=25)
         ll_txt.grid(column=4, row=1, pady=10, padx=5, sticky=W, columnspan=2)
 
-        cc_tag = ttk.Label(make, text=self.la("user_code") + ": ", bootstyle="info")
+        cc_tag = ttk.Label(make, text=self.la("user_code") + ": ")
         cc_tag.grid(column=6, row=1, pady=10, padx=15)
         cc_txt = ttk.Combobox(make, bootstyle="info", width=8, values=list(self.conf['cncode'].keys()))
         cc_txt.grid(column=7, row=1, pady=10, padx=5, sticky=W, columnspan=2)
         cc_txt.set("N/A")
 
-        on_tag = ttk.Label(make, text=self.la("user_on_t") + ": ", bootstyle="info")
+        on_tag = ttk.Label(make, text=self.la("user_on_t") + ": ")
         on_tag.grid(column=0, row=2, pady=10, padx=15, sticky=W)
         on_txt = ttk.Entry(make, bootstyle="info", width=35)
         on_txt.grid(column=1, row=2, pady=10, padx=5, sticky=W, columnspan=3)
 
-        ou_tag = ttk.Label(make, text=self.la("msg_ou_full") + ": ", bootstyle="info")
+        ou_tag = ttk.Label(make, text=self.la("msg_ou_full") + ": ")
         ou_tag.grid(column=4, row=2, pady=10, padx=15, sticky=W)
         ou_txt = ttk.Entry(make, bootstyle="info", width=36)
         ou_txt.grid(column=5, row=2, pady=10, padx=5, sticky=W, columnspan=3)
 
-        kl_tag = ttk.Label(make, text=self.la("pub_length") + ": ", bootstyle="info")
+        kl_tag = ttk.Label(make, text=self.la("pub_length") + ": ")
         kl_tag.grid(column=0, row=3, pady=10, padx=15)
         kl_txt = ttk.Combobox(make, bootstyle="info", width=7, values=["RSA1024", "RSA2048"])
         kl_txt.grid(column=1, row=3, pady=10, padx=5, sticky=W)
@@ -843,47 +992,72 @@ class SmartCardAPP:
         kl_sha.grid(column=2, row=3, pady=10, padx=5, sticky=W)
         kl_sha.set("SHA256")
 
-        ks_tag = ttk.Label(make, text=self.la("msg_ks_full") + ": ", bootstyle="info")
+        ks_tag = ttk.Label(make, text=self.la("msg_ks_full") + ": ")
         ks_tag.grid(column=3, row=3, pady=10, padx=15)
-        k_sign = ttk.Radiobutton(make, bootstyle="info", width=8, text=self.la('msg_sign'), )
+        v_sign = tk.IntVar()
+        v_sign.set(1)
+        v_sign.trace('w', change)
+        k_sign = ttk.Checkbutton(make, bootstyle="success", width=8, text=self.la('msg_sign'),
+                                 variable=v_sign)
         k_sign.grid(column=4, row=3, pady=10, padx=5, sticky=W)
-        k_data = ttk.Radiobutton(make, bootstyle="info", width=8, text=self.la('msg_data'), )
+        k_sign.state(['!alternate'])
+        k_sign.config(state=tk.DISABLED)
+        v_data = tk.IntVar()
+        v_data.set(1)
+        v_data.trace('w', change)
+        k_data = ttk.Checkbutton(make, bootstyle="success", width=8, text=self.la('msg_data'),
+                                 variable=v_data)
         k_data.grid(column=5, row=3, pady=10, padx=5, sticky=W)
+        k_data.state(['!alternate'])
 
-        ml_tag = ttk.Label(make, text=self.la("msg_ml_lite") + ": ", bootstyle="info")
+        ml_tag = ttk.Label(make, text=self.la("msg_ml_lite") + ": ")
         ml_tag.grid(column=6, row=3, pady=10, padx=15)
-        m_sign = ttk.Checkbutton(make, bootstyle="info-round-toggle", text=self.la('msg_ml_full'), )
+        um_var = tk.IntVar()
+        um_var.trace('w', change)
+        m_sign = ttk.Checkbutton(make, bootstyle="info-round-toggle", text=self.la('msg_ml_full'),
+                                 variable=um_var)
         m_sign.grid(column=7, row=3, pady=10, padx=5, sticky=W)
 
-        ku_tag = ttk.Label(make, text=self.la("key_usages") + ": ", bootstyle="info")
+        ku_tag = ttk.Label(make, text=self.la("key_usages") + ": ")
         ku_tag.grid(column=0, row=4, pady=10, padx=15)
         ku_num = 1
         ku_dat = {}
-        for ku_inf in ["DigitalSignature", "nonRepudiation", "Encipherment", "CertCRLsSign",
-                       "KeyAgreement", "EncipherOnly", "DecipherOnly"]:
-            ku_dat[ku_inf] = ttk.Checkbutton(make, bootstyle="info", width=10, text=self.la(ku_inf))
-            ku_dat[ku_inf].grid(column=ku_num, row=4)
+        ku_out = {}
+        ku_key = {"DigitalSignature": 0x0080,
+                  "nonRepudiation": 0x0040,
+                  "Encipherment": 0x0020 + 0x0010,
+                  "KeyAgreement": 0x0008,
+                  "CertCRLsSign": 0x0004 + 0x0002,
+                  "EncipherOnly": 0x0001,
+                  "DecipherOnly": 0x8000}
+        for ku_inf in ku_key:
+            ku_out[ku_inf] = tk.BooleanVar()
+            ku_dat[ku_inf] = ttk.Checkbutton(make, bootstyle="primary", width=10, text=self.la(ku_inf),
+                                             variable=ku_out[ku_inf])
+            ku_dat[ku_inf].grid(column=ku_num, row=4, padx=5)
             ku_num += 1
+            ku_dat[ku_inf].state(['!alternate'])
 
-        dn_tag = ttk.Label(make, text=self.la("msg_domain") + ": ", bootstyle="info")
+        dn_tag = ttk.Label(make, text=self.la("msg_domain") + ": ")
         dn_tag.grid(column=0, row=5, pady=10, padx=15)
-        dn_txt = ttk.Entry(make, bootstyle="info", width=81)
+        dn_txt = ttk.Entry(make, bootstyle="info", width=83)
         dn_txt.grid(column=1, row=5, pady=10, padx=5, columnspan=6)
-        dn_tip = ttk.Label(make, text="%s" % self.la("msg_splits"), bootstyle="info")
+        dn_tip = ttk.Label(make, text="%s" % self.la("msg_splits"))
         dn_tip.grid(column=7, row=5, pady=10, padx=5)
 
-        um_tag = ttk.Label(make, text=self.la("msg_emails") + ": ", bootstyle="info")
+        um_tag = ttk.Label(make, text=self.la("msg_emails") + ": ")
         um_tag.grid(column=0, row=6, pady=10, padx=15)
-        um_txt = ttk.Entry(make, bootstyle="info", width=81)
+        um_txt = ttk.Entry(make, bootstyle="default", width=83)
         um_txt.grid(column=1, row=6, pady=10, padx=5, columnspan=6)
-        um_tip = ttk.Label(make, text="%s" % self.la("msg_splits"), bootstyle="info")
+        um_tip = ttk.Label(make, text=self.la("msg_ml_text"))
         um_tip.grid(column=7, row=6, pady=10, padx=5)
+        um_txt.config(state=tk.DISABLED)
 
-        dt_tag = ttk.Label(make, text=self.la("DESCRIPTION") + ": ", bootstyle="info")
+        dt_tag = ttk.Label(make, text=self.la("DESCRIPTION") + ": ")
         dt_tag.grid(column=0, row=7, pady=10, padx=15)
-        dt_txt = ttk.Entry(make, bootstyle="info", width=81)
+        dt_txt = ttk.Entry(make, bootstyle="info", width=83)
         dt_txt.grid(column=1, row=7, pady=10, padx=5, columnspan=6)
-        dt_tip = ttk.Label(make, text="(0~255%s)" % self.la("msg_char"), bootstyle="info")
+        dt_tip = ttk.Label(make, text="0-999%s" % self.la("msg_char"))
         dt_tip.grid(column=7, row=7, pady=10, padx=5)
 
         cancel_button = ttk.Button(make, text=self.la("msg_cancel"), command=make.destroy, bootstyle="danger")
