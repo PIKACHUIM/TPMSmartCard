@@ -100,3 +100,23 @@ class TPMSmartCard:
             result = "OK"
         print(result)
         return result
+
+    @staticmethod
+    def createCSR(in_file, in_path):
+        command = 'certreq -new -f "%s" "%s"' % (in_file, in_path)
+        print(command)
+        process = subprocess.run(command, shell=True, text=True, capture_output=True)
+        result = process.stdout
+        print(result)
+        return result
+
+    @staticmethod
+    def loadCerts(in_path):
+        command = ('CertReq -Accept -machine "%s"' % in_path)
+        # command = ('certutil -csp "Microsoft Base Smart Card Crypto Provider" '
+        #            ' -importcert "%s"' % in_path)
+        print(command)
+        process = subprocess.run(command, shell=True, text=True, capture_output=True)
+        result = process.stdout
+        print(result)
+        return result
