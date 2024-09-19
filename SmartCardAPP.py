@@ -748,7 +748,8 @@ class SmartCardAPP:
             file_path = filedialog.askopenfilename(
                 filetypes=[
                     ("PFX Files", "*.pfx;*.p12") if flag == "pfx" \
-                        else ("Cert Files", "*.cer;*.crt;*.pem;*.der;*.p7b")
+                        else ("Cert Chains", "*.p7b")
+                        # else ("Cert Files", "*.cer;*.crt;*.pem;*.der;*.p7b")
                 ]
             )
             if file_path:
