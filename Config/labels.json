@@ -1,10 +1,8 @@
 {
   "示例": [
     [
-      "标签名称",
       "X 偏移量",
-      "Y 偏移量",
-      "数据宽度"
+      "Y 偏移量"
     ],
     [
       "..."
@@ -12,7 +10,7 @@
   ],
   "card_info": {
     "conf": [
-      43,
+      35,
       275
     ],
     "data": [
@@ -35,22 +33,23 @@
   },
   "cert_info": {
     "conf": [
-      435,
+      432,
       278
     ],
     "data": [
       {
-        "cert_uuid": 150,
+        "cert_uuid": 200,
         "cert_name": 225
       },
       {
-        "cert_sign": 150,
+        "cert_sign": 67.5,
+        "cert_type": 67.5,
         "cert_open": 102,
         "cert_stop": 102
       },
       {
-        "is_ca_cert": 43,
-        "is_expired": 42,
+        "is_ca_cert": 68,
+        "is_expired": 67,
         "cert_sha1": 225
       },
       {
@@ -60,16 +59,18 @@
         "sub_usages": 220
       },
       {
-        "key_identy": 220
+        "key_identy": 250,
+        "uid_serial": 60
       },
       {
-        "sub_identy": 220
+        "sub_identy": 250,
+        "cer_policy": 60
       }
     ]
   },
   "cert_user": {
     "conf": [
-      435,
+      432,
       435
     ],
     "data": [

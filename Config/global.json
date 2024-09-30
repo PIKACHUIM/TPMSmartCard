@@ -9,6 +9,7 @@
     "cert_uuid": "证书编号",
     "cert_sha1": "证书SHA1",
     "cert_sign": "密钥类型",
+    "cert_type": "摘要类型",
     "cert_open": "生效日期",
     "cert_stop": "失效日期",
     "is_ca_cert": "是否为CA",
@@ -18,6 +19,8 @@
     "key_identy": "密钥标识",
     "sub_usages": "拓展用途",
     "sub_identy": "身份标识",
+    "uid_serial": "证书串号",
+    "cer_policy": "证书策略",
     "user_name": "通用名称",
     "user_code": "国家代码",
     "user_area": "所在地区",
@@ -159,7 +162,17 @@
     "DecipherOnly": "仅作解密",
     "DESCRIPTION": "证书描述",
     "msg_error_ut": "无效的参数",
-    "msg_error_it": "无效的邮箱/域名/IP："
+    "msg_error_it": "无效的邮箱/域名/IP：",
+    "msg_cert_pub_k": "导入密钥",
+    "msg_keys_cloud": "交换密钥",
+    "msg_cert_cloud": "云端下发",
+    "msg_urls_cloud": "云端地址",
+    "msg_tips_cloud": [
+      "请注意，你选择了使用云端下发证书\n\n",
+      "请将交换密钥提供给CA机构下发平台\n",
+      "然后将下发地址粘贴到[云端地址]处\n\n",
+      "(交换密钥已经复制到您的剪贴板中)"
+    ]
   },
   "en": {
     "card_name": "CardName",
@@ -171,6 +184,7 @@
     "cert_uuid": "SerialNO",
     "cert_sha1": "CertSHA1",
     "cert_sign": "Key Type",
+    "cert_type": "SignType",
     "cert_open": "noBefore",
     "cert_stop": "notAfter",
     "is_ca_cert": "CA Cert?",
@@ -180,6 +194,8 @@
     "key_identy": "Identity",
     "sub_usages": "SubUsage",
     "sub_identy": "Subjects",
+    "uid_serial": "Cert UID",
+    "cer_policy": "Policies",
     "user_name": "FullName",
     "user_code": "CCountry",
     "user_area": "AreaName",
@@ -288,10 +304,10 @@
     ],
     "delete_cert_titles": "Are you sure you want to delete %s: \n\n%s ?",
     "delete_cert_detail": [
-      "You may not be able to decrypt files or lose access rights\n",
-      "Danger: This operation is irreversible! And data cannot be recovered\n"
+      "You may lose decrypt files or permission\n",
+      "Danger: This operation is irreversible!!\n"
     ],
-    "delete_cert_checks": " I have confirmed the deletion of %s and understand the consequences",
+    "delete_cert_checks": " I have confirmed the deletion of %s\n and understand the consequences",
     "msg_file_not_found": "File not found",
     "msg_file_not_exist": "File does not exist",
     "msg_select_file_fp": "Certificate path",
