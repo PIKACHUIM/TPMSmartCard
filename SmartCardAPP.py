@@ -7,6 +7,7 @@ import random
 import tkinter
 from random import randint
 
+import base64
 import pyglet
 import locale
 import platform
@@ -20,6 +21,9 @@ from functools import partial
 from tkinter import messagebox, filedialog, font
 from Module.SmartCardAPI import SmartCardAPI
 from Module.TPMSmartCard import TPMSmartCard
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import ed25519
+from cryptography.hazmat.primitives import serialization
 
 
 class SmartCardAPP:
@@ -34,7 +38,7 @@ class SmartCardAPP:
             self.lang = "zh"
         else:
             self.lang = "en"
-
+        self.lang = "en"
         # 设置主窗口宽度和高度
         self.root.geometry("1080x540")
         self.size = self.get_screens()
@@ -157,9 +161,12 @@ class SmartCardAPP:
 
         for cert_now in self.data.certs:
             if "cert_main" in self.tables:
-                cert_name = self.la("msg_no_cert")
                 if len(cert_now.split(' ')) > 1:
                     cert_name = " ".join(cert_now.split(' ')[:-1])
+                elif self.data.certs[cert_now].sc_cert is not None:
+                    cert_name = self.data.certs[cert_now].sc_cert.OwnersInfo['CN']
+                else:
+                    cert_name = self.la("msg_no_cert")
                 self.tables["cert_main"][0].insert("", tk.END, values=(
                     cert_now.split(' ')[-1],
                     cert_name,
@@ -314,8 +321,9 @@ class SmartCardAPP:
                     )
                 else:
                     save_path = "%s\\%s.crt" % (in_path, str(now_cert.sc_cert.SerialNums))
-                with open(save_path, "w") as save_file:
-                    save_file.write(now_cert.sc_text)
+                if len(save_path) > 0 and os.path.exists(save_path):
+                    with open(save_path, "w") as save_file:
+                        save_file.write(now_cert.sc_text)
                 if in_path is None:
                     messagebox.showinfo(self.la("msg_cert_out_ok_item"),
                                         self.la("msg_cert_out_ok") % str(now_cert.sc_cert.CommonName))
@@ -334,8 +342,9 @@ class SmartCardAPP:
     def cert_select(self, event):
         treeview = event.widget
         selected_item = treeview.selection()
-        for fill_name in self.labels["cert_info"]:
-            self.labels["cert_info"][fill_name][1].config(text="")
+        for item_name in ["cert_info", "cert_user", "cert_last"]:
+            for fill_name in self.labels[item_name]:
+                self.labels[item_name][fill_name][1].config(text="")
         if len(selected_item) > 0:
             selected_name = treeview.set(selected_item[0], '#2')
             selected_uuid = treeview.set(selected_item[0], '#1')
@@ -344,21 +353,47 @@ class SmartCardAPP:
                 self.pick["cert"] = selected_name + " " + selected_uuid
             else:
                 self.pick["cert"] = selected_uuid
+            # 模糊匹配 =================================================================================
+            if self.pick["cert"] not in self.data.certs:
+                for now_line in self.data.certs:
+                    now_uuid = now_line.split(" ")[-1]
+                    if now_uuid == selected_uuid:
+                        self.pick["cert"] = now_line
+                        break
             self.button["cert_main"]["non"].config(state=tk.NORMAL)
-            self.button["cert_main"]["sys"].config(state=tk.NORMAL)
-            self.button["cert_main"]["out"].config(state=tk.NORMAL)
+            # 精确查找证书 =============================================================================
             if self.pick["cert"] in self.data.certs:
                 cert_now = self.data.certs[self.pick["cert"]]
                 if cert_now.sc_cert is not None:
+                    self.button["cert_main"]["sys"].config(state=tk.NORMAL)
+                    self.button["cert_main"]["out"].config(state=tk.NORMAL)
                     cert_now = cert_now.sc_cert
                     Algorithms = str(cert_now.Algorithms).split("With")[0]
+                    user_name = cert_now.OwnersInfo["CN"] if "CN" in cert_now.OwnersInfo else "(Empty)"
+                    user_name = user_name[:35] + ".." if len(user_name) > 35 else user_name
+                    last_name = cert_now.IssuerInfo["CN"] if "CN" in cert_now.IssuerInfo else "(Empty)"
+                    last_name = last_name[:35] + ".." if len(last_name) > 35 else last_name
+                    cer_policy = "(Empty)"
+                    if 'certificatePolicies' in cert_now.CertExtend:
+                        cer_policy = ""
+                        tmp_counts = 0
+                        tmp_policy = str(cert_now.CertExtend['certificatePolicies']).split("\n")
+                        for i in tmp_policy:
+                            if i.find("Policy: ") >= 0:
+                                if tmp_counts > 0:
+                                    cer_policy += ","
+                                cer_policy += i.replace("Policy: ", "")
+                                tmp_counts += 1
+                        if len(cer_policy) > 36:
+                            cer_policy = cer_policy[:36] + "..."
                     cert_map = {
                         "cert_name": cert_now.CommonName,
                         "cert_uuid": cert_now.SerialNums,
-                        "cert_sign": cert_now.pub_key_al + cert_now.pub_length + " " + Algorithms.upper() + " (Digest)",
+                        "cert_sign": cert_now.pub_key_al + cert_now.pub_length,
+                        "cert_type": Algorithms.upper(),
                         "cert_open": cert_now.IssuedDate,
                         "cert_stop": cert_now.ExpireDate,
-                        "cert_sha1": str(cert_now.CertSHA160).replace(":", ""),
+                        "cert_sha1": "HEX " + str(cert_now.CertSHA160).replace(":", ""),
                         "is_ca_cert": cert_now.is_ca_cert,
                         "is_expired": cert_now.is_expired,
 
@@ -366,17 +401,19 @@ class SmartCardAPP:
                             if len(str(cert_now.MainUsages)) >= 86 else cert_now.MainUsages,
                         "sub_usages": str(cert_now.SubsUsages)[:86] + "..." \
                             if len(str(cert_now.SubsUsages)) >= 86 else cert_now.SubsUsages,
-                        "key_identy": cert_now.MainHashID,
-                        "sub_identy": cert_now.SubsHashID,
-
-                        "user_name": cert_now.OwnersInfo["CN"] if "CN" in cert_now.OwnersInfo else "(Empty)",
+                        "key_identy": str(cert_now.MainHashID).replace(":", ""),
+                        "sub_identy": str(cert_now.SubsHashID).replace(":", ""),
+                        "uid_serial": cert_now.OwnersInfo["UID"] if "UID" in cert_now.OwnersInfo else \
+                            cert_now.OwnersInfo["SERIALNUMBER"] if "SERIALNUMBER" in cert_now.OwnersInfo else "(Empty)",
+                        "cer_policy": cer_policy,
+                        "user_name": user_name,
                         "user_code": cert_now.OwnersInfo["C"] if "C" in cert_now.OwnersInfo else "N/A",
                         "user_area": cert_now.OwnersInfo["S"] if "S" in cert_now.OwnersInfo else "N/A",
                         "user_city": cert_now.OwnersInfo["L"] if "L" in cert_now.OwnersInfo else "N/A",
                         "user_on_t": cert_now.OwnersInfo["O"] if "O" in cert_now.OwnersInfo else "(Empty)",
                         "user_ou_t": cert_now.OwnersInfo["OU"] if "OU" in cert_now.OwnersInfo else "(Empty)",
 
-                        "last_name": cert_now.IssuerInfo["CN"] if "CN" in cert_now.IssuerInfo else "(Empty)",
+                        "last_name": last_name,
                         "last_code": cert_now.IssuerInfo["C"] if "C" in cert_now.IssuerInfo else "N/A",
                         "last_area": cert_now.IssuerInfo["S"] if "S" in cert_now.IssuerInfo else "N/A",
                         "last_city": cert_now.IssuerInfo["L"] if "L" in cert_now.IssuerInfo else "N/A",
@@ -388,6 +425,9 @@ class SmartCardAPP:
                             label_now = self.labels[label]
                             if fill_name in label_now:
                                 label_now[fill_name][1].config(text=cert_map[fill_name])
+                else:
+                    self.button["cert_main"]["sys"].config(state=tk.DISABLED)
+                    self.button["cert_main"]["out"].config(state=tk.DISABLED)
             print(selected_name)
 
     def about_pages(self):
@@ -685,9 +725,9 @@ class SmartCardAPP:
         data = self.data.cards if in_name == "card" else self.data.certs
         if self.pick[in_name] in data:
             make = ttk.Toplevel(self.root)
-            make.geometry("500x200")
+            make.geometry("300x220")
             make.geometry(f"+{self.size[0]}+{self.size[1]}")
-            make.title(self.la("msg_remove") + "%s" % in_name)
+            make.title(self.la("msg_remove") + self.la("msg_" + in_name))
 
             def submit():
                 if in_name == "card":
@@ -710,46 +750,95 @@ class SmartCardAPP:
 
             kill_tag = ttk.Label(make,
                                  text=self.la("delete_cert_titles") % (
-                                     in_name, self.pick[in_name]))
+                                     self.la("msg_" + in_name), self.pick[in_name]))
             kill_tag.place(x=20, y=10)
 
             kill_tip = ttk.Label(make, bootstyle="danger",
                                  text=self.la("delete_cert_detail"))
             kill_tip.place(x=20, y=80)
             kill_var = tk.BooleanVar()
-            kill_yes = ttk.Checkbutton(make, text=self.la("delete_cert_checks") % in_name,
+            kill_yes = ttk.Checkbutton(make, text=self.la("delete_cert_checks") % self.la("msg_" + in_name),
                                        bootstyle="dark", command=checks, variable=kill_var)
             kill_yes.state(['!alternate'])
-            kill_yes.place(x=20, y=120)
+            kill_yes.place(x=20, y=130)
 
             cancel_b = ttk.Button(make, text=self.la("msg_cancel"), command=make.destroy, bootstyle="success")
-            cancel_b.place(x=20, y=150)
+            cancel_b.place(x=20, y=180)
             submit_b = ttk.Button(make, text=self.la("msg_remove"), command=submit, bootstyle="danger")
-            submit_b.place(x=180, y=150)
+            submit_b.place(x=230, y=180)
             submit_b.config(state=tk.DISABLED)
 
     def cert_import(self, flag="pfx"):
         make = ttk.Toplevel(self.root)
+        make.attributes('-topmost', True)
         make.geometry("700x160" if flag == "pfx" else "700x120")
         make.geometry(f"+{self.size[0]}+{self.size[1]}")
         make.title(self.la("msg_import") + self.la("msg_cert"))
 
         def change(*args):
             if flag == "pfx" and len(pass_txt.get()) == 0:
-                submit_button.config(state=tk.DISABLED)
+                if not v_clouds.get():
+                    submit_button.config(state=tk.DISABLED)
             if len(path_txt.get()) == 0:
                 submit_button.config(state=tk.DISABLED)
             elif not os.path.exists(path_txt.get()):
                 submit_button.config(state=tk.DISABLED)
             else:
                 submit_button.config(state=tk.NORMAL)
+            if v_clouds.get():
+                if len(path_txt.get()) == 0:
+                    submit_button.config(state=tk.DISABLED)
+                else:
+                    submit_button.config(state=tk.NORMAL)
+
+        def x25519():
+            private_key = ed25519.Ed25519PrivateKey.generate()
+            public_key = private_key.public_key()
+            private_key = private_key.private_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PrivateFormat.Raw,
+                encryption_algorithm=serialization.NoEncryption()
+            )
+            public_key = public_key.public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw
+            )
+            return base64.b64encode(private_key).decode(), base64.b64encode(public_key).decode()
+
+        def clouds(*args):
+            # 云端下发 ====================================
+            if v_clouds.get():
+                pass_tag.config(text=self.la("msg_keys_cloud") + ": ")
+                path_tip.grid_forget()
+                private_key, public_key = x25519()
+                pass_txt.delete(0, tk.END)
+                pass_txt.config(show="")
+                pass_txt.insert(0, public_key)
+                # path_tip.config(text="              ")
+                path_tag.config(text=self.la("msg_urls_cloud"))
+
+                if len(path_txt.get()) == 0:
+                    submit_button.config(state=tk.DISABLED)
+                else:
+                    submit_button.config(state=tk.NORMAL)
+                pyperclip.copy(public_key)
+                make.attributes('-topmost', False)
+                messagebox.showinfo(self.la("msg_cert_cloud"), self.la("msg_tips_cloud"))
+                make.attributes('-topmost', True)
+            else:
+                path_tip.grid(column=2, row=0, pady=10, padx=5)
+                pass_tag.config(text=self.la("msg_cert") + self.la("msg_pass") + ": ")
+                pass_txt.delete(0, tk.END)
+                pass_txt.config(show="*")
+                # path_tip.config(text=self.la("msg_open") + self.la("msg_file"))
+                path_tag.config(text=self.la("msg_select_file_fp"))
 
         def search():
             file_path = filedialog.askopenfilename(
                 filetypes=[
                     ("PFX Files", "*.pfx;*.p12") if flag == "pfx" \
                         else ("Cert Chains", "*.p7b")
-                        # else ("Cert Files", "*.cer;*.crt;*.pem;*.der;*.p7b")
+                    # else ("Cert Files", "*.cer;*.crt;*.pem;*.der;*.p7b")
                 ]
             )
             if file_path:
@@ -776,6 +865,14 @@ class SmartCardAPP:
 
         # 在新窗口中添加输入部件
 
+        # # 导入来源 =====================================================================================
+        # from_tag = ttk.Label(make, text=self.la("msg_cert_pub_k") + ": ", bootstyle="info")
+        # from_tag.grid_forget()
+        # code_txt = ttk.Entry(make, bootstyle="info", width=60)
+        # code_txt.grid_forget()
+        # code_txt.config(state=tk.DISABLED)
+
+        # 导入路径 =====================================================================================
         path_var = tk.StringVar()
         path_var.trace('w', change)
         path_tag = ttk.Label(make, text=self.la("msg_select_file_fp") + ": ", bootstyle="info")
@@ -784,6 +881,8 @@ class SmartCardAPP:
         path_txt.grid(column=1, row=0, pady=10, padx=5)
         path_tip = ttk.Button(make, text=self.la("msg_open") + self.la("msg_file"), bootstyle="info", command=search)
         path_tip.grid(column=2, row=0, pady=10, padx=5)
+
+        # 导入密码 =====================================================================================
         if flag == "pfx":
             pass_var = tk.StringVar()
             pass_var.trace('w', change)
@@ -791,20 +890,22 @@ class SmartCardAPP:
             pass_tag.grid(column=0, row=1, pady=10, padx=15)
             pass_txt = ttk.Entry(make, bootstyle="info", width=60, show="*", textvariable=pass_var)
             pass_txt.grid(column=1, row=1, pady=10, padx=5)
-            pass_tip = ttk.Label(make, text="(0~63%s)" % self.la("msg_char"), bootstyle="info")
-            pass_tip.grid(column=2, row=1, pady=10, padx=5)
+            v_clouds = tk.IntVar()
+            v_clouds.set(0)
+            v_clouds.trace('w', clouds)
+            k_clouds = ttk.Checkbutton(make, bootstyle="success-round-toggle", text=self.la('msg_cert_cloud'),
+                                       variable=v_clouds)
+            k_clouds.grid(column=2, row=1, pady=20, padx=5, sticky=W)
 
         cancel_button = ttk.Button(make, text=self.la("msg_cancel"), command=make.destroy, bootstyle="danger")
-        cancel_button.grid(column=0, row=2, pady=5, padx=15)
+        cancel_button.grid(column=0, row=3, pady=5, padx=15)
         submit_button = ttk.Button(make, text=self.la("msg_import") + flag.upper(), command=submit, bootstyle="success")
-        submit_button.grid(column=2, row=2, pady=5, padx=0)
+        submit_button.grid(column=2, row=3, pady=5, padx=0)
+        deals_process = ttk.Progressbar(make, length=432)
+        deals_process.grid(column=1, row=3, pady=10, padx=5, sticky=tk.W)
+        deals_process['value'] = 0
         if flag == "pfx":
             submit_button.config(state=tk.DISABLED)
-
-        deals_process = ttk.Progressbar(make, length=432)
-        deals_process.grid(column=1, row=2, pady=10, padx=5, sticky=tk.W)
-        deals_process['value'] = 0
-
         make.mainloop()
 
     def reqs_create(self):

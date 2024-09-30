@@ -103,7 +103,7 @@ class CertDataInfo:
         self.is_ca_cert = str(self.certExtend('basicConstraints')).split(":")[-1]
 
         self.CertPolicy = self.certExtend('certificatePolicies')
-        self.MainUsages = self.certExtend('keyUsage')
+        self.MainUsages = self.certExtend('keyUsage') if type(self.certExtend('keyUsage')) is str else ""
         self.MainHashID = self.certExtend('authorityKeyIdentifier')
         self.SubsUsages = self.certExtend('extendedKeyUsage')
         self.SubsOwners = self.certExtend('subjectAltName')
