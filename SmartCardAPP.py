@@ -38,7 +38,7 @@ class SmartCardAPP:
             self.lang = "zh"
         else:
             self.lang = "en"
-        self.lang = "en"
+        # self.lang = "en"
         # 设置主窗口宽度和高度
         self.root.geometry("1080x540")
         self.size = self.get_screens()
@@ -1044,7 +1044,7 @@ class SmartCardAPP:
             make.destroy()
 
         make = ttk.Toplevel(self.root)
-        make.geometry("800x440")
+        make.geometry("800x520")
         make.geometry(f"+{self.size[0]}+{self.size[1]}")
         make.attributes('-topmost', True)
         make.title(self.la("msg_create") + self.la("msg_cert"))
@@ -1162,10 +1162,70 @@ class SmartCardAPP:
         dt_tip = ttk.Label(make, text="0-999%s" % self.la("msg_char"))
         dt_tip.grid(column=7, row=7, pady=10, padx=5)
 
+        def resign(*args):
+            if va_self.get():
+                # open_dt.config(state=tk.NORMAL)
+                # stop_dt.config(state=tk.NORMAL)
+                is_ca_t.config(state=tk.NORMAL)
+                for i in ext_list:
+                    ext_dat[i].config(state=tk.NORMAL)
+            else:
+                # open_dt.config(state=tk.DISABLED)
+                # stop_dt.config(state=tk.DISABLED)
+                is_ca_t.config(state=tk.DISABLED)
+                for i in ext_list:
+                    ext_dat[i].config(state=tk.DISABLED)
+
+        va_self = tk.BooleanVar()
+        va_self.trace('w', resign)
+        tg_self = ttk.Label(make, text=self.la("is_sign") + ": ")
+        tg_self.grid(column=0, row=8, pady=10, padx=15)
+        is_self = ttk.Checkbutton(make, bootstyle="info-round-toggle", text=self.la('is_self'), variable=va_self)
+        is_self.grid(column=1, row=8, pady=10, padx=5)
+
+        open_pt = ttk.Label(make, text=self.la("cert_open") + ": ")
+        open_pt.grid(column=2, row=8, pady=10, padx=15)
+        open_dt = DateEntry(make, style='success.TCalendar', width=15)
+        open_dt.grid(column=3, row=8, pady=10, padx=15, columnspan=2)
+        stop_pt = ttk.Label(make, text=self.la("cert_stop") + ": ")
+        stop_pt.grid(column=5, row=8, pady=10, padx=15)
+        stop_dt = DateEntry(make, style='success.TCalendar', width=15)
+        stop_dt.grid(column=6, row=8, pady=10, padx=15, columnspan=2)
+
+        # advance = ttk.Label(make, text=self.la("advance") + ": ")
+        # advance.grid(column=0, row=9, pady=10, padx=15)
+        va_ca_t = tk.BooleanVar()
+        is_ca_t = ttk.Checkbutton(make, bootstyle="info",
+                                  text=self.la('is_ca_t'),
+                                  variable=va_ca_t)
+        is_ca_t.grid(column=0, row=9, pady=10, padx=5)
+
+        ext_list = {
+            "codeSign": "",
+            "fileSign": "",
+            "mainSign": "",
+            "sslUsage": "",
+            "sshUsage": "",
+            "efsUsage": "",
+            "bitLocks": "",
+            # "anyUsage": "",
+        }
+        ext_out = {}
+        ext_dat = {}
+        ext_num = 1
+        for ext_name in ext_list:
+            ext_out[ext_name] = tk.BooleanVar()
+            ext_dat[ext_name] = ttk.Checkbutton(make, bootstyle="primary", width=10, text=self.la(ext_name),
+                                                variable=ext_out[ext_name])
+            ext_dat[ext_name].grid(column=ext_num, row=9, padx=5)
+            ext_num += 1
+            ext_dat[ext_name].state(['!alternate'])
+        resign()
+
         cancel_button = ttk.Button(make, text=self.la("msg_cancel"), command=make.destroy, bootstyle="danger")
-        cancel_button.grid(column=0, row=8, pady=5, padx=15)
+        cancel_button.grid(column=0, row=10, pady=5, padx=15)
         submit_button = ttk.Button(make, text=self.la("msg_create_csr"), command=submit, bootstyle="success")
-        submit_button.grid(column=7, row=8, pady=5, padx=0)
+        submit_button.grid(column=7, row=10, pady=5, padx=0)
         submit_button.config(state=tk.DISABLED)
 
         make.mainloop()
