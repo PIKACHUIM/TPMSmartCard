@@ -176,8 +176,15 @@
     "is_sign": "签名选项",
     "is_self": "自签名",
     "is_ca_t": "CA证书",
-    "advance": "拓展选项"
-
+    "advance": "拓展选项",
+    "codeSign": "代码签名",
+    "fileSign": "文档签名",
+    "mailSign": "邮件加密",
+    "sslUsage": "TLS 认证",
+    "sshUsage": "SSH 认证",
+    "efsUsage": "EFS 加密",
+    "bitLocks": "Bitlocker",
+    "anyUsage": "任意用途"
   },
   "en": {
     "card_name": "CardName",
@@ -319,6 +326,52 @@
     "msg_import_results": [
       "\nNote: After the certificate is imported, the private key cannot be exported or backed up from the TPM in any way",
       "\nTo backup, please keep the original PFX file and password, otherwise data may be lost"
-    ]
+    ],
+    "msg_no_cert": "(Certificate not found)",
+    "msg_ou_full": "Organizational Unit",
+    "msg_ks_full": "Key Restrictions",
+    "msg_ml_lite": "Email Features",
+    "msg_ml_full": "SMIME",
+    "msg_ml_text": "Email Features Required",
+    "msg_must_in": "Required",
+    "msg_none_in": "Optional",
+    "msg_sign": "Allow Signing",
+    "msg_data": "Allow Decryption",
+    "msg_domain": "Domain List",
+    "msg_emails": "Email List",
+    "msg_splits": "Separated by semicolons",
+    "msg_create_csr": "Create Certificate Request",
+    "DigitalSignature": "Digital Signature",
+    "nonRepudiation": "Acceptance Signature",
+    "Encipherment": "Encryption and Decryption",
+    "KeyAgreement": "Key Negotiation",
+    "CertCRLsSign": "Certificate Issuance",
+    "EncipherOnly": "For Encryption Only",
+    "DecipherOnly": "For Decryption Only",
+    "DESCRIPTION": "Certificate Description",
+    "msg_error_ut": "Invalid Parameter",
+    "msg_error_it": "Invalid Email/Domain/IP:",
+    "msg_cert_pub_k": "Import Key",
+    "msg_keys_cloud": "Exchange Keys",
+    "msg_cert_cloud": "Cloud Issuance",
+    "msg_urls_cloud": "Cloud Addresses",
+    "msg_tips_cloud": [
+      "Please note that you have chosen to issue certificates using the cloud\n\n",
+      "Please provide the exchange key to the CA issuance platform\n",
+      "Then paste the issuance address in the [Cloud Addresses] field\n\n",
+      "(The exchange key has been copied to your clipboard)"
+    ],
+    "is_sign": "Signing Options",
+    "is_self": "Self-signed",
+    "is_ca_t": "CA Certificate",
+    "advance": "Advanced Options",
+    "codeSign": "Code Signing",
+    "fileSign": "Document Signing",
+    "mailSign": "Email Encryption",
+    "sslUsage": "TLS Authentication",
+    "sshUsage": "SSH Authentication",
+    "efsUsage": "EFS Encryption",
+    "bitLocks": "Bitlocker",
+    "anyUsage": "Any Purpose"
   }
 }
