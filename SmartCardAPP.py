@@ -4,7 +4,6 @@ import json
 import re
 import time
 import random
-import tkinter
 from random import randint
 
 import base64
@@ -19,6 +18,7 @@ from ttkbootstrap import *
 import ttkbootstrap as ttk
 from functools import partial
 from tkinter import messagebox, filedialog, font
+from tkcalendar import DateEntry
 from Module.SmartCardAPI import SmartCardAPI
 from Module.TPMSmartCard import TPMSmartCard
 from cryptography.hazmat.backends import default_backend
@@ -974,11 +974,11 @@ class SmartCardAPP:
             full_text = ('[Version]\n'
                          'Signature="$Windows NT$"\n'
                          '[NewRequest]\n'
-                         'RequestType = PKCS10\n'
                          'ProviderName = "Microsoft Base Smart Card Crypto Provider"\n'
                          'ProviderType = 0\n'
                          'Exportable = FALSE\n'
                          'MachineKeySet = TRUE\n')
+
             full_text += 'Subject = "%s%s%s%s%s%s%s%s"\n' % (
                 "CN=%s," % cn if len(cn) > 0 else "Unknown,",
                 "C=%s," % cc if len(cc) > 0 else "",
@@ -1003,10 +1003,30 @@ class SmartCardAPP:
             # full_text += 'SMIME= %s\n' % "TRUE" if um_var.get() else "FALSE"
             full_text += 'HashAlgorithm= %s\n' % ken_sha
             full_text += 'KeyLength= %s\n' % ken_len
+            # 自签证书和拓展 ===============================================================
+            if va_self.get():
+                # 类型和时间 ===============================================================
+                full_text += 'RequestType = Cert\n'
+                full_text += 'NotBefore = "%s 00:00"\n' % open_dt.entry.get().split(" ")[0]
+                full_text += 'NotAfter = "%s 00:00"\n' % stop_dt.entry.get().split(" ")[0]
+            else:
+                full_text += 'RequestType = PKCS10\n'
+            # 拓展用途 =====================================================================
+            full_text += '\n[EnhancedKeyUsageExtension]\n'
+            if va_ca_t.get():
+                full_text += 'OID=2.5.29.37\n'
+                full_text += 'OID=2.5.29.32\n'
+            for i in ext_list:
+                if ext_out[i].get():
+                    full_text += ext_list[i] + "\n"
             if len(domain) > 0 or len(emails) > 0:
-                if um_var.get():
-                    full_text += '[EnhancedKeyUsageExtension]\nOID=1.2.840.113549.1.9.15\n'
-                full_text += '[Extensions]\n'
+                full_text += 'OID=1.2.840.113549.1.9.15\n'
+            # 拓展属性 ======================================================================
+            full_text += '\n[Extensions]\n'
+            if va_ca_t.get():
+                full_text += '2.5.29.19 = "{text}ca=1"\n'
+            if len(domain) > 0 or len(emails) > 0:
+                full_text += '2.5.29.17 = {text}\n'
                 allData = {"EMail": emails, "DNS": domain}
                 for keyType in allData:
                     extData = allData[keyType]
@@ -1019,8 +1039,9 @@ class SmartCardAPP:
                                 )
                             else:
                                 make.attributes('-topmost', False)
-                                messagebox.showwarning(self.la("msg_error_ut"),
-                                                       self.la("msg_error_it") + "\n%s" % keyData)
+                                messagebox.showwarning(
+                                    self.la("msg_error_ut"),
+                                    self.la("msg_error_it") + "\n%s" % keyData)
                                 make.attributes('-topmost', True)
                                 return None
 
@@ -1041,6 +1062,7 @@ class SmartCardAPP:
             result = TPMSmartCard.createCSR(file_path, save_path)
             messagebox.showinfo(self.la("b_csr") + self.la("msg_create"), result)
             # make.attributes('-topmost', True)
+            self.load_status()
             make.destroy()
 
         make = ttk.Toplevel(self.root)
@@ -1185,29 +1207,39 @@ class SmartCardAPP:
 
         open_pt = ttk.Label(make, text=self.la("cert_open") + ": ")
         open_pt.grid(column=2, row=8, pady=10, padx=15)
-        open_dt = DateEntry(make, style='success.TCalendar', width=15)
+        # open_va = tkinter.IntVar()
+        open_dt = ttk.DateEntry(make, style='success.TCalendar', width=15)
+        # open_dt = DateEntry(make, width=15, date_pattern='MM/dd/yyyy 00:00 AM')
         open_dt.grid(column=3, row=8, pady=10, padx=15, columnspan=2)
+
         stop_pt = ttk.Label(make, text=self.la("cert_stop") + ": ")
         stop_pt.grid(column=5, row=8, pady=10, padx=15)
-        stop_dt = DateEntry(make, style='success.TCalendar', width=15)
+        stop_dt = ttk.DateEntry(make, style='success.TCalendar', width=15)
         stop_dt.grid(column=6, row=8, pady=10, padx=15, columnspan=2)
 
         # advance = ttk.Label(make, text=self.la("advance") + ": ")
         # advance.grid(column=0, row=9, pady=10, padx=15)
+        def set_ca(*args):
+            if va_ca_t.get():
+                ku_out["CertCRLsSign"].set(True)
+            else:
+                ku_out["CertCRLsSign"].set(False)
+
         va_ca_t = tk.BooleanVar()
+        va_ca_t.trace('w', set_ca)
         is_ca_t = ttk.Checkbutton(make, bootstyle="info",
                                   text=self.la('is_ca_t'),
                                   variable=va_ca_t)
         is_ca_t.grid(column=0, row=9, pady=10, padx=5)
 
         ext_list = {
-            "codeSign": "",
-            "fileSign": "",
-            "mainSign": "",
-            "sslUsage": "",
-            "sshUsage": "",
-            "efsUsage": "",
-            "bitLocks": "",
+            "codeSign": "OID=1.3.6.1.5.5.7.3.3\nOID=2.23.140.1.4.1",
+            "fileSign": "OID=1.2.840.113583.1.1.5\nOID=1.3.6.1.4.1.311.10.3.12",
+            "mailSign": "OID=1.3.6.1.5.5.7.3.4\nOID=1.3.6.1.4.1.311.21.19",
+            "sslUsage": "OID=1.3.6.1.5.5.7.3.1\nOID=1.3.6.1.5.5.7.3.2",
+            "sshUsage": "OID=1.3.6.1.5.5.7.3.10\nOID=1.3.6.1.5.5.7.3.2",
+            "efsUsage": "OID=1.3.6.1.4.1.311.10.3.4\nOID=1.3.6.1.4.1.311.10.3.4.1",
+            "bitLocks": "OID=1.3.6.1.4.1.311.67.1.1\nOID=1.3.6.1.4.1.311.67.1.2",
             # "anyUsage": "",
         }
         ext_out = {}
@@ -1227,7 +1259,6 @@ class SmartCardAPP:
         submit_button = ttk.Button(make, text=self.la("msg_create_csr"), command=submit, bootstyle="success")
         submit_button.grid(column=7, row=10, pady=5, padx=0)
         submit_button.config(state=tk.DISABLED)
-
         make.mainloop()
 
 
