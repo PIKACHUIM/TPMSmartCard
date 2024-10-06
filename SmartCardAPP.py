@@ -18,10 +18,8 @@ from ttkbootstrap import *
 import ttkbootstrap as ttk
 from functools import partial
 from tkinter import messagebox, filedialog, font
-from tkcalendar import DateEntry
 from Module.SmartCardAPI import SmartCardAPI
 from Module.TPMSmartCard import TPMSmartCard
-from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
 
