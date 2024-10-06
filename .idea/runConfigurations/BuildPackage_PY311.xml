@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="BuildPackage" type="ShConfigurationType">
+  <configuration default="false" name="BuildPackage-PY311" type="ShConfigurationType">
     <option name="SCRIPT_TEXT" value="@ echo off %1 %2 ver|find &quot;5.&quot;&gt;nul&amp;&amp;goto :Admin mshta vbscript:createobject(&quot;shell.application&quot;).shellexecute(&quot;%~s0&quot;,&quot;goto :Admin&quot;,&quot;&quot;,&quot;runas&quot;,1)(window.close)&amp;goto :eof :Admin python SmartCardAPP.py" />
     <option name="INDEPENDENT_SCRIPT_PATH" value="false" />
     <option name="SCRIPT_PATH" value="$PROJECT_DIR$/BuildPackage.bat" />
