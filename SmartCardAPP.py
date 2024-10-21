@@ -4,6 +4,7 @@ import json
 import re
 import time
 import random
+import tkinter
 from random import randint
 
 import base64
@@ -924,12 +925,12 @@ class SmartCardAPP:
                 if um_var.get():
                     um_txt.config(state=tk.NORMAL)
                     um_txt.config(bootstyle="info")
-                    dt_tip.config(text="0-999%s" % self.la("msg_char"))
+                    um_tip.config(text="0-999%s" % self.la("msg_char"))
                 else:
                     um_txt.delete(0, tk.END)
                     um_txt.config(state=tk.DISABLED)
                     um_txt.config(bootstyle="default")
-                    dt_tip.config(text=self.la("msg_ml_text"))
+                    um_tip.config(text=self.la("msg_ml_text"))
             # 密钥限制开关 ===============================
             if v_data.get():
                 v_sign.set(1)
@@ -1064,7 +1065,7 @@ class SmartCardAPP:
             make.destroy()
 
         make = ttk.Toplevel(self.root)
-        make.geometry("800x520")
+        make.geometry("800x530")
         make.geometry(f"+{self.size[0]}+{self.size[1]}")
         make.attributes('-topmost', True)
         make.title(self.la("msg_create") + self.la("msg_cert"))
@@ -1101,7 +1102,7 @@ class SmartCardAPP:
 
         ou_tag = ttk.Label(make, text=self.la("msg_ou_full") + ": ")
         ou_tag.grid(column=4, row=2, pady=10, padx=15, sticky=W)
-        ou_txt = ttk.Entry(make, bootstyle="info", width=36)
+        ou_txt = ttk.Entry(make, bootstyle="info", width=39)
         ou_txt.grid(column=5, row=2, pady=10, padx=5, sticky=W, columnspan=3)
 
         kl_tag = ttk.Label(make, text=self.la("pub_length") + ": ")
@@ -1184,14 +1185,26 @@ class SmartCardAPP:
 
         def resign(*args):
             if va_self.get():
-                # open_dt.config(state=tk.NORMAL)
-                # stop_dt.config(state=tk.NORMAL)
+                # open_dt.grid(column=3, row=8, pady=10, padx=15, columnspan=2)
+                # stop_dt.grid(column=6, row=8, pady=10, padx=15, columnspan=2)
+                # open_pt.grid(column=2, row=8, pady=10, padx=15)
+                # stop_pt.grid(column=5, row=8, pady=10, padx=15)
+                open_dt.entry.config(state=tk.NORMAL)
+                stop_dt.entry.config(state=tk.NORMAL)
+                open_dt.button.config(state=tk.NORMAL)
+                stop_dt.button.config(state=tk.NORMAL)
                 is_ca_t.config(state=tk.NORMAL)
                 for i in ext_list:
                     ext_dat[i].config(state=tk.NORMAL)
             else:
-                # open_dt.config(state=tk.DISABLED)
-                # stop_dt.config(state=tk.DISABLED)
+                # open_pt.grid_forget()
+                # stop_pt.grid_forget()
+                # open_dt.grid_forget()
+                # stop_dt.grid_forget()
+                open_dt.entry.config(state=tk.DISABLED)
+                stop_dt.entry.config(state=tk.DISABLED)
+                open_dt.button.config(state=tk.DISABLED)
+                stop_dt.button.config(state=tk.DISABLED)
                 is_ca_t.config(state=tk.DISABLED)
                 for i in ext_list:
                     ext_dat[i].config(state=tk.DISABLED)
@@ -1199,24 +1212,29 @@ class SmartCardAPP:
         va_self = tk.BooleanVar()
         va_self.trace('w', resign)
         tg_self = ttk.Label(make, text=self.la("is_sign") + ": ")
-        tg_self.grid(column=0, row=8, pady=10, padx=15)
+        tg_self.grid(column=0, row=8, pady=20, padx=15)
         is_self = ttk.Checkbutton(make, bootstyle="info-round-toggle", text=self.la('is_self'), variable=va_self)
         is_self.grid(column=1, row=8, pady=10, padx=5)
 
         open_pt = ttk.Label(make, text=self.la("cert_open") + ": ")
         open_pt.grid(column=2, row=8, pady=10, padx=15)
-        # open_va = tkinter.IntVar()
         open_dt = ttk.DateEntry(make, style='success.TCalendar', width=15)
-        # open_dt = DateEntry(make, width=15, date_pattern='MM/dd/yyyy 00:00 AM')
         open_dt.grid(column=3, row=8, pady=10, padx=15, columnspan=2)
-
+        open_dt.entry.config(state=tk.DISABLED)
+        open_dt.button.config(state=tk.DISABLED)
         stop_pt = ttk.Label(make, text=self.la("cert_stop") + ": ")
         stop_pt.grid(column=5, row=8, pady=10, padx=15)
         stop_dt = ttk.DateEntry(make, style='success.TCalendar', width=15)
         stop_dt.grid(column=6, row=8, pady=10, padx=15, columnspan=2)
+        date_tp = open_dt.entry.get()
+        date_tp = str(int(date_tp[:4]) + 1) + date_tp[4:]
+        stop_dt.entry.delete(0, tk.END)
+        stop_dt.entry.insert(0, date_tp)
+        stop_dt.entry.config(state=tk.DISABLED)
+        stop_dt.button.config(state=tk.DISABLED)
 
-        # advance = ttk.Label(make, text=self.la("advance") + ": ")
-        # advance.grid(column=0, row=9, pady=10, padx=15)
+
+
         def set_ca(*args):
             if va_ca_t.get():
                 ku_out["CertCRLsSign"].set(True)
