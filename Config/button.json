@@ -1,50 +1,50 @@
 {
   "main_main": [
     [
-      20,
+      28,
       440
     ],
     {
       "name": "inf",
       "text": "b_inf",
       "type": "success",
-      "w": 125
+      "w": 121
     },
     {
       "name": "osc",
       "text": "b_osc",
       "type": "secondary",
-      "w": 125
+      "w": 121
     },
     {
       "name": "git",
       "text": "b_git",
       "type": "dark",
-      "w": 125
+      "w": 121
     }
   ],
   "main_line": [
     [
-      20,
+      28,
       480
     ],
     {
       "name": "ing",
       "text": "b_ing",
       "type": "info",
-      "w": 125
+      "w": 121
     },
     {
       "name": "tpm",
       "text": "b_tpm",
       "type": "warning",
-      "w": 125
+      "w": 121
     },
     {
       "name": "set",
       "text": "b_set",
       "type": "primary",
-      "w": 125
+      "w": 121
     }
   ],
   "card_main": [
@@ -74,6 +74,36 @@
       "name": "del",
       "text": "b_del",
       "type": "danger",
+      "w": 80
+    }
+  ],
+  "card_opts": [
+    [
+      28,
+      385
+    ],
+    {
+      "name": "ssh",
+      "text": "b_ssh",
+      "type": "secondary",
+      "w": 100
+    },
+    {
+      "name": "key",
+      "text": "b_key",
+      "type": "success",
+      "w": 100
+    },
+    {
+      "name": "bak",
+      "text": "b_bak",
+      "type": "info",
+      "w": 80
+    },
+    {
+      "name": "rec",
+      "text": "b_rec",
+      "type": "warning",
       "w": 80
     }
   ],

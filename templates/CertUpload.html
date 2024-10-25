@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<form action="http://127.0.0.1:1080/put/cert"
+      method="POST"
+      enctype="multipart/form-data"
+      style="width:60%;margin-left:20%">
+    <div>
+        <div>
+            传输密钥：
+            <input type="text" name="pubkey" required>
+        </div>
+        <div>
+            证书密码：
+            <input type="text" name="pfxkey" required>
+        </div>
+        <div>
+            证书文件：
+            <input type="file" name="vaults" required>
+        </div>
+        <div>
+            <button type="submit">
+                确认上传
+            </button>
+        </div>
+    </div>
+</form>
+</body>
+</html>

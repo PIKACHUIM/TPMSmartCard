@@ -15,14 +15,20 @@ import subprocess
 import webbrowser
 import pyperclip
 import threading
+
+import requests
+from cryptography.hazmat.primitives import serialization
+from flask import request
 from ttkbootstrap import *
 import ttkbootstrap as ttk
 from functools import partial
 from tkinter import messagebox, filedialog, font
 from Module.SmartCardAPI import SmartCardAPI
 from Module.TPMSmartCard import TPMSmartCard
-from cryptography.hazmat.primitives.asymmetric import ed25519
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+
+from SubApp.CertImport import CertImport
+from SubApp.MoreConfig import MoreConfig
 
 
 class SmartCardAPP:
@@ -40,6 +46,7 @@ class SmartCardAPP:
         # self.lang = "en"
         # 设置主窗口宽度和高度
         self.root.geometry("1080x540")
+        self.root.iconbitmap("Config/iconer/icon02.ico")
         self.size = self.get_screens()
         self.root.geometry(f"+{self.size[0]}+{self.size[1]}")
         self.root.title("TPM Smart Card Manager")
@@ -82,6 +89,7 @@ class SmartCardAPP:
             "cert_main": self.view_button("cert_main"),
             "main_main": self.view_button("main_main"),
             "main_line": self.view_button("main_line"),
+            "card_opts": self.view_button("card_opts"),
         }
 
         self.labels = {
@@ -146,6 +154,8 @@ class SmartCardAPP:
         self.button["card_main"]["puk"].config(state=tk.DISABLED)
         self.button["cert_main"]["sys"].config(state=tk.DISABLED)
         self.button["cert_main"]["out"].config(state=tk.DISABLED)
+        self.button["card_opts"]["bak"].config(state=tk.DISABLED)
+        self.button["card_opts"]["rec"].config(state=tk.DISABLED)
         self.tables["card_main"][0].delete(*self.tables["card_main"][0].get_children())
         self.tables["cert_main"][0].delete(*self.tables["cert_main"][0].get_children())
         for item_name in ["card_info", "cert_info", "cert_user", "cert_last"]:
@@ -244,6 +254,8 @@ class SmartCardAPP:
                 "ing": (self.load_status, None),
                 "tpm": (self.check_tpm_h, None),
                 "set": (None, None),
+                "ssh": (MoreConfig.setupSSH, None),
+                "key": (MoreConfig.startSSH, None),
             }
             # bt_fun = {}
             for now in bt_all:
@@ -768,144 +780,8 @@ class SmartCardAPP:
             submit_b.config(state=tk.DISABLED)
 
     def cert_import(self, flag="pfx"):
-        make = ttk.Toplevel(self.root)
-        make.attributes('-topmost', True)
-        make.geometry("700x160" if flag == "pfx" else "700x120")
-        make.geometry(f"+{self.size[0]}+{self.size[1]}")
-        make.title(self.la("msg_import") + self.la("msg_cert"))
-
-        def change(*args):
-            if flag == "pfx" and len(pass_txt.get()) == 0:
-                if not v_clouds.get():
-                    submit_button.config(state=tk.DISABLED)
-            if len(path_txt.get()) == 0:
-                submit_button.config(state=tk.DISABLED)
-            elif not os.path.exists(path_txt.get()):
-                submit_button.config(state=tk.DISABLED)
-            else:
-                submit_button.config(state=tk.NORMAL)
-            if v_clouds.get():
-                if len(path_txt.get()) == 0:
-                    submit_button.config(state=tk.DISABLED)
-                else:
-                    submit_button.config(state=tk.NORMAL)
-
-        def x25519():
-            private_key = ed25519.Ed25519PrivateKey.generate()
-            public_key = private_key.public_key()
-            private_key = private_key.private_bytes(
-                encoding=serialization.Encoding.Raw,
-                format=serialization.PrivateFormat.Raw,
-                encryption_algorithm=serialization.NoEncryption()
-            )
-            public_key = public_key.public_bytes(
-                encoding=serialization.Encoding.Raw,
-                format=serialization.PublicFormat.Raw
-            )
-            return base64.b64encode(private_key).decode(), base64.b64encode(public_key).decode()
-
-        def clouds(*args):
-            # 云端下发 ====================================
-            if v_clouds.get():
-                pass_tag.config(text=self.la("msg_keys_cloud") + ": ")
-                path_tip.grid_forget()
-                private_key, public_key = x25519()
-                pass_txt.delete(0, tk.END)
-                pass_txt.config(show="")
-                pass_txt.insert(0, public_key)
-                # path_tip.config(text="              ")
-                path_tag.config(text=self.la("msg_urls_cloud"))
-
-                if len(path_txt.get()) == 0:
-                    submit_button.config(state=tk.DISABLED)
-                else:
-                    submit_button.config(state=tk.NORMAL)
-                pyperclip.copy(public_key)
-                make.attributes('-topmost', False)
-                messagebox.showinfo(self.la("msg_cert_cloud"), self.la("msg_tips_cloud"))
-                make.attributes('-topmost', True)
-            else:
-                path_tip.grid(column=2, row=0, pady=10, padx=5)
-                pass_tag.config(text=self.la("msg_cert") + self.la("msg_pass") + ": ")
-                pass_txt.delete(0, tk.END)
-                pass_txt.config(show="*")
-                # path_tip.config(text=self.la("msg_open") + self.la("msg_file"))
-                path_tag.config(text=self.la("msg_select_file_fp"))
-
-        def search():
-            file_path = filedialog.askopenfilename(
-                filetypes=[
-                    ("PFX Files", "*.pfx;*.p12") if flag == "pfx" \
-                        else ("Cert Chains", "*.p7b")
-                    # else ("Cert Files", "*.cer;*.crt;*.pem;*.der;*.p7b")
-                ]
-            )
-            if file_path:
-                print(f"File Path：{file_path}")
-                path_txt.delete(0, tk.END)
-                path_txt.insert(0, file_path)
-                make.attributes('-topmost', True)
-
-        def submit():
-            if not os.path.exists(path_txt.get()):
-                messagebox.showwarning(self.la("fail"),
-                                       self.la("msg_file_not_exist"))
-            else:
-                make.attributes('-topmost', False)
-                if flag == "pfx":
-                    result = TPMSmartCard.initCerts(path_txt.get(),
-                                                    pass_txt.get())
-                else:
-                    result = TPMSmartCard.loadCerts(path_txt.get())
-                self.load_status()
-                make.destroy()
-                messagebox.showinfo(self.la("msg_import") + self.la("msg_cert") + self.la("msg_result"),
-                                    result + self.la("msg_import_results"))
-
-        # 在新窗口中添加输入部件
-
-        # # 导入来源 =====================================================================================
-        # from_tag = ttk.Label(make, text=self.la("msg_cert_pub_k") + ": ", bootstyle="info")
-        # from_tag.grid_forget()
-        # code_txt = ttk.Entry(make, bootstyle="info", width=60)
-        # code_txt.grid_forget()
-        # code_txt.config(state=tk.DISABLED)
-
-        # 导入路径 =====================================================================================
-        path_var = tk.StringVar()
-        path_var.trace('w', change)
-        path_tag = ttk.Label(make, text=self.la("msg_select_file_fp") + ": ", bootstyle="info")
-        path_tag.grid(column=0, row=0, pady=10, padx=15)
-        path_txt = ttk.Entry(make, bootstyle="info", width=60, textvariable=path_var)
-        path_txt.grid(column=1, row=0, pady=10, padx=5)
-        path_tip = ttk.Button(make, text=self.la("msg_open") + self.la("msg_file"), bootstyle="info", command=search)
-        path_tip.grid(column=2, row=0, pady=10, padx=5)
-
-        # 导入密码 =====================================================================================
-        if flag == "pfx":
-            pass_var = tk.StringVar()
-            pass_var.trace('w', change)
-            pass_tag = ttk.Label(make, text=self.la("msg_cert") + self.la("msg_pass") + ": ", bootstyle="info")
-            pass_tag.grid(column=0, row=1, pady=10, padx=15)
-            pass_txt = ttk.Entry(make, bootstyle="info", width=60, show="*", textvariable=pass_var)
-            pass_txt.grid(column=1, row=1, pady=10, padx=5)
-            v_clouds = tk.IntVar()
-            v_clouds.set(0)
-            v_clouds.trace('w', clouds)
-            k_clouds = ttk.Checkbutton(make, bootstyle="success-round-toggle", text=self.la('msg_cert_cloud'),
-                                       variable=v_clouds)
-            k_clouds.grid(column=2, row=1, pady=20, padx=5, sticky=W)
-
-        cancel_button = ttk.Button(make, text=self.la("msg_cancel"), command=make.destroy, bootstyle="danger")
-        cancel_button.grid(column=0, row=3, pady=5, padx=15)
-        submit_button = ttk.Button(make, text=self.la("msg_import") + flag.upper(), command=submit, bootstyle="success")
-        submit_button.grid(column=2, row=3, pady=5, padx=0)
-        deals_process = ttk.Progressbar(make, length=432)
-        deals_process.grid(column=1, row=3, pady=10, padx=5, sticky=tk.W)
-        deals_process['value'] = 0
-        if flag == "pfx":
-            submit_button.config(state=tk.DISABLED)
-        make.mainloop()
+        sub = CertImport(flag, self.root, self)
+        sub.page.mainloop()
 
     def reqs_create(self):
         def change(*args):
@@ -1232,8 +1108,6 @@ class SmartCardAPP:
         stop_dt.entry.insert(0, date_tp)
         stop_dt.entry.config(state=tk.DISABLED)
         stop_dt.button.config(state=tk.DISABLED)
-
-
 
         def set_ca(*args):
             if va_ca_t.get():
