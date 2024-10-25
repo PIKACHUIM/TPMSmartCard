@@ -41,9 +41,15 @@ Compared to directly storing certificates within the Windows system, the advanta
 
 - 虚拟智能卡管理：创建、删除、虚拟智能卡，修改重置密码
 - 证书和密钥管理：导入、删除、证书和密钥，查看数字证书
+- 证书生成和下发：从本地生成密钥+CSR，或从云端安全下发
+- 已支持SSH2登录：使用卡上509证书私钥登录远程SSH服务器
+- 其他功能：支持安装和启动OpenSC/SSHAgent、查看TPM状态
 
 - Virtual smart card management: create, delete, virtual smart cards, modify and reset passwords
 - Certificate and Key Management: Import, Delete, Certificate and Key, View Digital Certificates
+- Certificate generation and issuance: Generate keys and CSR locally, or securely issue certificates from the cloud
+- SSH2 login supported: Use the 509 certificate private key on the card to log in to the remote SSH server
+- Other features: Support installation and startup of OpenSC/SSHAgent, view TPM status
 
 ## 要求 / Requirement
 
