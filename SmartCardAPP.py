@@ -323,7 +323,7 @@ class SmartCardAPP:
             now_cert = self.data.certs[self.pick["cert"]]
             if now_cert.sc_cert is not None:
                 if in_path is None:
-                    save_path = filedialog.asksaveasfilename(
+                    in_path = filedialog.asksaveasfilename(
                         defaultextension=".crt",  # 默认文件扩展名
                         filetypes=[("Cert files", "*.crt"), ("All files", "*.*")],  # 文件类型过滤器
                         initialdir="~",  # 初始目录，对于Windows系统，你可能想要设置为os.path.expanduser('~')
@@ -331,14 +331,17 @@ class SmartCardAPP:
                         title="Save as"  # 对话框标题
                     )
                 else:
-                    save_path = "%s\\%s.crt" % (in_path, str(now_cert.sc_cert.SerialNums))
-                if len(save_path) > 0 and os.path.exists(save_path):
-                    with open(save_path, "w") as save_file:
+                    in_path = "%s\\%s.crt" % (in_path, str(now_cert.sc_cert.SerialNums))
+                if in_path is None or len(in_path) <= 0:
+                    messagebox.showwarning(self.la("msg_cert_out_ft_item"), self.la("msg_cert_out_ft_path"))
+                else:
+                    with open(in_path, "w") as save_file:
                         save_file.write(now_cert.sc_text)
-                if in_path is None:
-                    messagebox.showinfo(self.la("msg_cert_out_ok_item"),
-                                        self.la("msg_cert_out_ok") % str(now_cert.sc_cert.CommonName))
-                return save_path
+                    messagebox.showinfo(
+                        self.la("msg_cert_out_ok_item"),
+                        self.la("msg_cert_out_ok_text") % str(now_cert.sc_cert.CommonName)
+                    )
+                    return in_path
             else:
                 messagebox.showerror(self.la("msg_cert_out_ft_item"), self.la("msg_cert_out_ft_text"))
         else:

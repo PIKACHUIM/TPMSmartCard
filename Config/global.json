@@ -68,11 +68,12 @@
     "msg_cert_out_ok_item": "成功",
     "msg_cert_out_ok_text": [
       "证书导出成功：%s\n",
-      "注意：只能导出证书公钥数据，私钥存储在TPM上无法导出"
+      "注意：只能导出证书公钥数据, 私钥已被TPM加密无法导出!\n"
     ],
     "msg_cert_out_ft_item": "错误",
     "msg_cert_out_ft_text": "证书读取错误",
     "msg_cert_out_ft_none": "无法找到证书",
+    "msg_cert_out_ft_path": "请先选择路径!\n",
     "msg_about_title": "关于本工具",
     "msg_about_about": [
       "============================================\n",
@@ -259,12 +260,13 @@
     "msg_cert_out_ok_item": "Success",
     "msg_cert_out_ok_text": [
       "Certificate export successful: %s\n",
-      "Note: Only the public key data of the certificate can be exported, \n",
-      "the private key is stored on the TPM and cannot be exported"
+      "Note: Only the public key data of the select certificate is exported,\n",
+      "      The private key is encrypted by the TPM and can NOT be exported\n"
     ],
     "msg_cert_out_ft_item": "Error",
     "msg_cert_out_ft_text": "Certificate read error",
     "msg_cert_out_ft_none": "Certificate not found",
+    "msg_cert_out_ft_path": "Please select a path!\n",
     "msg_about_title": "About This Tool",
     "msg_about_about": [
       "============================================\n",
