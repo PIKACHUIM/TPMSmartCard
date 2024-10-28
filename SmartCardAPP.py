@@ -453,11 +453,11 @@ class SmartCardAPP:
             if line.find("TpmActivated") >= 0:
                 if line.find("True") >= 0:
                     messagebox.showinfo(self.la("msg_tpm_check_text"),
-                                        self.la("msg_tpm_check_done") % "\n".join(results))
+                                        self.la("msg_tpm_check_done") % "".join(results))
                     return True
                 else:
                     messagebox.showerror(self.la("msg_tpm_check_text"),
-                                         self.la("msg_tpm_check_fail") % "\n".join(results))
+                                         self.la("msg_tpm_check_fail") % "".join(results))
         messagebox.showwarning(self.la("msg_tpm_check_text"),
                                self.la("msg_tpm_check_none") % "\n".join(results))
         return False

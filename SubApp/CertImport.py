@@ -30,14 +30,15 @@ class CertImport:
         self.path_txt = ttk.Entry(self.page, bootstyle="info", width=60, textvariable=self.path_var)
         self.path_tip = ttk.Button(self.page, bootstyle="info", command=self.search,
                                    text=self.main.la("msg_open") + self.main.la("msg_file"))
-        # 导入密码 =====================================================================================
         if self.flag == "pfx":
             self.pass_var = tk.StringVar()
-            self.pass_var.trace('w', self.change)
             self.pass_tag = ttk.Label(self.page, bootstyle="info",
                                       text=self.main.la("msg_cert") + self.main.la("msg_pass") + ": ")
             self.pass_txt = ttk.Entry(self.page, bootstyle="info", width=60, show="*",
                                       textvariable=self.pass_var)
+        # 导入密码 =====================================================================================
+        if self.flag == "pfx":
+            self.pass_var.trace('w', self.change)
             self.v_clouds = tk.IntVar()
             self.v_clouds.set(0)
             self.v_clouds.trace('w', self.clouds)
@@ -58,15 +59,16 @@ class CertImport:
 
     def packUI(self):
         self.page.attributes('-topmost', True)
-        self.page.geometry("700x160" if self.flag == "pfx" else "700x120")
+        self.page.geometry("700x160" if self.flag == "pfx" else "620x120")
         self.page.geometry(f"+{self.main.size[0]}+{self.main.size[1]}")
         self.page.title(self.main.la("msg_import") + self.main.la("msg_cert"))
         self.path_tag.grid(column=0, row=0, pady=10, padx=15)
         self.path_txt.grid(column=1, row=0, pady=10, padx=5)
         self.path_tip.grid(column=2, row=0, pady=10, padx=5)
-        self.pass_tag.grid(column=0, row=1, pady=10, padx=15)
-        self.pass_txt.grid(column=1, row=1, pady=10, padx=5)
-        self.k_clouds.grid(column=2, row=1, pady=20, padx=5, sticky=W)
+        if self.flag == "pfx":
+            self.pass_tag.grid(column=0, row=1, pady=10, padx=15)
+            self.pass_txt.grid(column=1, row=1, pady=10, padx=5)
+            self.k_clouds.grid(column=2, row=1, pady=20, padx=5, sticky=W)
         self.cancel_button.grid(column=0, row=3, pady=5, padx=15)
         self.submit_button.grid(column=2, row=3, pady=5, padx=0)
         self.deals_process.grid(column=1, row=3, pady=10, padx=5, sticky=tk.W)
