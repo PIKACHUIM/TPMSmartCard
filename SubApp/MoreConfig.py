@@ -20,3 +20,7 @@ class MoreConfig:
     @staticmethod
     def startSSH():
         os.startfile("SSHCardAgent.exe")
+
+
+if __name__ == "__main__":
+    MoreConfig.setupSSH()
