@@ -46,7 +46,6 @@
     <ROW Directory="Atlantic_Dir" Directory_Parent="tzdata_Dir" DefaultDir="Atlantic"/>
     <ROW Directory="Australia_Dir" Directory_Parent="tzdata_Dir" DefaultDir="AUSTRA~1|Australia"/>
     <ROW Directory="Brazil_Dir" Directory_Parent="tzdata_Dir" DefaultDir="Brazil"/>
-    <ROW Directory="Caches_Dir" Directory_Parent="APPDIR" DefaultDir="Caches"/>
     <ROW Directory="Canada_Dir" Directory_Parent="tzdata_Dir" DefaultDir="Canada"/>
     <ROW Directory="Chile_Dir" Directory_Parent="tzdata_Dir" DefaultDir="Chile"/>
     <ROW Directory="Config_Dir" Directory_Parent="APPDIR" DefaultDir="Config"/>
@@ -195,6 +194,7 @@
     <ROW Directory="openssl_Dir" Directory_Parent="backends_Dir" DefaultDir="openssl"/>
     <ROW Directory="opt0.4_Dir" Directory_Parent="tcl8.6_Dir" DefaultDir="opt0.4"/>
     <ROW Directory="packaging_1_Dir" Directory_Parent="_vendor_1_Dir" DefaultDir="PACKAG~1|packaging"/>
+    <ROW Directory="packaging_2_Dir" Directory_Parent="lib_Dir" DefaultDir="PACKAG~1|packaging"/>
     <ROW Directory="packaging_Dir" Directory_Parent="_vendor_Dir" DefaultDir="PACKAG~1|packaging"/>
     <ROW Directory="parser_Dir" Directory_Parent="dateutil_Dir" DefaultDir="parser"/>
     <ROW Directory="parsers_Dir" Directory_Parent="xml_Dir" DefaultDir="parsers"/>
@@ -289,7 +289,6 @@
     <ROW Component="Buenos_Aires" ComponentId="{D28FB8FF-79DB-4205-B895-5F67DCDD4626}" Directory_="Argentina_Dir" Attributes="0" KeyPath="Buenos_Aires" Type="0"/>
     <ROW Component="C4FE6FD5B7C4D07B3A313E754A9A6A8" ComponentId="{1BA6F163-130C-4D2F-819B-6CE3D9DBE5AC}" Directory_="APPDIR" Attributes="4" KeyPath="C4FE6FD5B7C4D07B3A313E754A9A6A8" Options="2"/>
     <ROW Component="CET" ComponentId="{AC7A2D64-FEE4-40D8-BD8E-0EB8226CFD41}" Directory_="tzdata_Dir" Attributes="0" KeyPath="CET" Type="0"/>
-    <ROW Component="Caches" ComponentId="{37B4C8AF-1660-4735-B97C-257C82D96BC5}" Directory_="Caches_Dir" Attributes="0"/>
     <ROW Component="Casey" ComponentId="{93701728-4932-45AC-A0D1-7B5BA06839FF}" Directory_="Antarctica_Dir" Attributes="0" KeyPath="Casey" Type="0"/>
     <ROW Component="CertImport.pyc" ComponentId="{D43AF8C9-9FA8-4916-8B15-583872935D4D}" Directory_="SubApp_Dir" Attributes="0" KeyPath="CertImport.pyc" Type="0"/>
     <ROW Component="CertUpload.html" ComponentId="{03B91E6B-3C95-4B12-9FCF-434BED198426}" Directory_="templates_Dir" Attributes="0" KeyPath="CertUpload.html" Type="0"/>
@@ -301,7 +300,7 @@
     <ROW Component="Louisville" ComponentId="{89B71A3D-3A31-4584-82EE-DE4ABCEB54B9}" Directory_="Kentucky_Dir" Attributes="0" KeyPath="Louisville" Type="0"/>
     <ROW Component="MapleMonoSCNFRegular.ttf" ComponentId="{2E97E79A-C091-477F-88BB-9C1B87C308D0}" Directory_="myfont_Dir" Attributes="0" Type="0"/>
     <ROW Component="MicrosoftTPMRootCertificateAuthority.cer" ComponentId="{5BF3DFC3-D895-45BF-BB1A-3F703A83E736}" Directory_="cacert_Dir" Attributes="0" KeyPath="MicrosoftTPMRootCertificateAuthority.cer" Type="0"/>
-    <ROW Component="MoreConfig.exe" ComponentId="{B60CB9EE-ADC8-4F26-B0A4-891A93FA9939}" Directory_="APPDIR" Attributes="256" KeyPath="MoreConfig.exe"/>
+    <ROW Component="MoreConfig.exe" ComponentId="{2BCC952D-C1E4-49A8-A97D-B2C58CF8B0C4}" Directory_="APPDIR" Attributes="256" KeyPath="MoreConfig.exe"/>
     <ROW Component="OPENSCSMARTCARDFRA" ComponentId="{7122AADA-FDF6-45C7-86F9-7BCA29FA158C}" Directory_="APPDIR" Attributes="4" KeyPath="OPENSCSMARTCARDFRA" Options="2"/>
     <ROW Component="OPENSCSMARTCARDFRA_1" ComponentId="{543C7667-72EF-4478-983E-4C2ADC1E2D9F}" Directory_="APPDIR" Attributes="4" KeyPath="OPENSCSMARTCARDFRA_1" Options="2"/>
     <ROW Component="OpenSC0.25.1_win32Light.msi" ComponentId="{A9EBDD9B-37AC-423E-B0FD-328063F228C0}" Directory_="OpenSC_Dir" Attributes="0" KeyPath="OpenSC0.25.1_win32Light.msi" Type="0"/>
@@ -486,6 +485,7 @@
     <ROW Component="logo.eps" ComponentId="{B6DFEECC-7354-4921-958B-EA1C9D59A0F7}" Directory_="images_1_Dir" Attributes="0" KeyPath="logo.eps" Type="0"/>
     <ROW Component="markers.pyc" ComponentId="{2BD5B26B-46AD-41DB-A9FC-B58A445704EE}" Directory_="packaging_Dir" Attributes="0" KeyPath="markers.pyc" Type="0"/>
     <ROW Component="markers.pyc_1" ComponentId="{04EAA480-8934-4838-855F-EEDAC8E2729A}" Directory_="packaging_1_Dir" Attributes="0" KeyPath="markers.pyc_1" Type="0"/>
+    <ROW Component="markers.pyc_2" ComponentId="{441839D5-062E-4581-9ACC-66C637EB1C17}" Directory_="packaging_2_Dir" Attributes="0" KeyPath="markers.pyc_2" Type="0"/>
     <ROW Component="metadata" ComponentId="{EF9DB58E-F234-45E7-BD1F-CCADC17FEA43}" Directory_="metadata_1_Dir" Attributes="0"/>
     <ROW Component="mime" ComponentId="{301B15DA-D546-4986-889F-A0D95D914CB9}" Directory_="mime_Dir" Attributes="0"/>
     <ROW Component="more.pyc" ComponentId="{24718C7E-F396-4CB9-999C-81AD4E32BAFB}" Directory_="more_itertools_Dir" Attributes="0" KeyPath="more.pyc" Type="0"/>
@@ -2951,6 +2951,20 @@
     <ROW File="SmartCardWEB.exe" Component_="SmartCardWEB.exe" FileName="SMARTC~2.EXE|SmartCardWEB.exe" Attributes="0" SourcePath="build\exe.win-amd64-3.11\SmartCardWEB.exe" SelfReg="false"/>
     <ROW File="SSHCardAgent.exe" Component_="SSHCardAgent.exe" FileName="SSHCAR~1.EXE|SSHCardAgent.exe" Attributes="0" SourcePath="build\exe.win-amd64-3.11\SSHCardAgent.exe" SelfReg="false"/>
     <ROW File="install.bat" Component_="button.json" FileName="install.bat" Attributes="0" SourcePath="build\exe.win-amd64-3.11\Config\install.bat" SelfReg="false"/>
+    <ROW File="markers.pyc_2" Component_="markers.pyc_2" FileName="markers.pyc" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\markers.pyc" SelfReg="false"/>
+    <ROW File="py.typed" Component_="markers.pyc_2" FileName="PY~1.TYP|py.typed" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\py.typed" SelfReg="false"/>
+    <ROW File="requirements.pyc_2" Component_="markers.pyc_2" FileName="REQUIR~1.PYC|requirements.pyc" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\requirements.pyc" SelfReg="false"/>
+    <ROW File="specifiers.pyc_2" Component_="markers.pyc_2" FileName="SPECIF~1.PYC|specifiers.pyc" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\specifiers.pyc" SelfReg="false"/>
+    <ROW File="tags.pyc_2" Component_="markers.pyc_2" FileName="tags.pyc" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\tags.pyc" SelfReg="false"/>
+    <ROW File="utils.pyc_11" Component_="markers.pyc_2" FileName="utils.pyc" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\utils.pyc" SelfReg="false"/>
+    <ROW File="version.pyc_9" Component_="markers.pyc_2" FileName="version.pyc" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\version.pyc" SelfReg="false"/>
+    <ROW File="_elffile.pyc_2" Component_="markers.pyc_2" FileName="_elffile.pyc" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\_elffile.pyc" SelfReg="false"/>
+    <ROW File="_manylinux.pyc_2" Component_="markers.pyc_2" FileName="_MANYL~1.PYC|_manylinux.pyc" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\_manylinux.pyc" SelfReg="false"/>
+    <ROW File="_musllinux.pyc_2" Component_="markers.pyc_2" FileName="_MUSLL~1.PYC|_musllinux.pyc" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\_musllinux.pyc" SelfReg="false"/>
+    <ROW File="_parser.pyc_5" Component_="markers.pyc_2" FileName="_parser.pyc" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\_parser.pyc" SelfReg="false"/>
+    <ROW File="_structures.pyc_2" Component_="markers.pyc_2" FileName="_STRUC~1.PYC|_structures.pyc" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\_structures.pyc" SelfReg="false"/>
+    <ROW File="_tokenizer.pyc_2" Component_="markers.pyc_2" FileName="_TOKEN~1.PYC|_tokenizer.pyc" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\_tokenizer.pyc" SelfReg="false"/>
+    <ROW File="__init__.pyc_1" Component_="markers.pyc_2" FileName="__init__.pyc" Attributes="0" SourcePath="build\exe.win-amd64-3.11\lib\packaging\__init__.pyc" SelfReg="false"/>
     <ROW File="MoreConfig.exe" Component_="MoreConfig.exe" FileName="MORECO~1.EXE|MoreConfig.exe" Attributes="0" SourcePath="build\exe.win-amd64-3.11\MoreConfig.exe" SelfReg="false"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.BootstrOptComponent">
@@ -3065,7 +3079,6 @@
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiCreateFolderComponent">
     <ROW Directory_="APPDIR" Component_="APPDIR" ManualDelete="true"/>
-    <ROW Directory_="Caches_Dir" Component_="Caches" ManualDelete="false"/>
     <ROW Directory_="cli_Dir" Component_="cli" ManualDelete="false"/>
     <ROW Directory_="metadata_1_Dir" Component_="metadata" ManualDelete="false"/>
     <ROW Directory_="tests_2_Dir" Component_="tests" ManualDelete="false"/>
@@ -3357,7 +3370,6 @@
     <ROW Feature_="MainFeature" Component_="python311.dll"/>
     <ROW Feature_="MainFeature" Component_="SmartCardAPP.exe"/>
     <ROW Feature_="MainFeature" Component_="AI_ExePath"/>
-    <ROW Feature_="MainFeature" Component_="Caches"/>
     <ROW Feature_="MainFeature" Component_="MicrosoftTPMRootCertificateAuthority.cer"/>
     <ROW Feature_="MainFeature" Component_="icon01.ico"/>
     <ROW Feature_="MainFeature" Component_="base.pyc_11"/>
@@ -3413,6 +3425,7 @@
     <ROW Feature_="MainFeature" Component_="etree"/>
     <ROW Feature_="MainFeature" Component_="sax"/>
     <ROW Feature_="MainFeature" Component_="MoreConfig.exe"/>
+    <ROW Feature_="MainFeature" Component_="markers.pyc_2"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiIconsComponent">
     <ROW Name="icon02.exe" SourcePath="Config\iconer\icon02.ico" Index="0"/>

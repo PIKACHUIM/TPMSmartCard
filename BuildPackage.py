@@ -4,10 +4,11 @@ from cx_Freeze import setup, Executable
 
 # ADD FILES
 files = [
-    ("templates/", "templates/"),
-    ("SSHCardAgent.exe", "SSHCardAgent.exe"),
     ("Config/", "Config/"),
     ("OpenSC/", "OpenSC/"),
+    ("templates/", "templates/"),
+    ("MoreConfig.exe", "MoreConfig.exe"),
+    ("SSHCardAgent.exe", "SSHCardAgent.exe"),
 ]
 
 # TARGET
