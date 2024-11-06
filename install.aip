@@ -18,10 +18,10 @@
     <ROW Property="ARPURLINFOABOUT" Value="https://github.com/PIKACHUIM/TPMSmartCard/"/>
     <ROW Property="ARPURLUPDATEINFO" Value="https://github.com/PIKACHUIM/TPMSmartCard/releases"/>
     <ROW Property="Manufacturer" Value="Pikachu Ren"/>
-    <ROW Property="ProductCode" Value="2052:{DD732215-E951-4A3B-8CB3-8DDFE12E27AF} " Type="16"/>
+    <ROW Property="ProductCode" Value="2052:{3B2B1981-DB7A-4BD7-8A41-2768DC66D1E3} " Type="16"/>
     <ROW Property="ProductLanguage" Value="1033"/>
     <ROW Property="ProductName" Value="TPM Virtual Smart Card Manager"/>
-    <ROW Property="ProductVersion" Value="1.2.2024.1025" Options="32"/>
+    <ROW Property="ProductVersion" Value="1.3.2024.1106" Options="32"/>
     <ROW Property="SecureCustomProperties" Value="OLDPRODUCTS;AI_NEWERPRODUCTFOUND;AI_SETUPEXEPATH;SETUPEXEDIR"/>
     <ROW Property="UpgradeCode" Value="{1DBDEF20-A1BA-42CD-BD8F-CCB6F4BE2247}"/>
     <ROW Property="WindowsType9X" MultiBuildValue="DefaultBuild:Windows 9x/ME" ValueLocId="-"/>
@@ -3520,8 +3520,8 @@
     <ATTRIBUTE name="UsedTheme" value="azure"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiUpgradeComponent">
-    <ROW UpgradeCode="[|UpgradeCode]" VersionMin="0.0.1" VersionMax="255.255.6555.6555" Attributes="257" ActionProperty="OLDPRODUCTS"/>
-    <ROW UpgradeCode="[|UpgradeCode]" VersionMin="255.255.6555.6555" Attributes="2" ActionProperty="AI_NEWERPRODUCTFOUND"/>
+    <ROW UpgradeCode="[|UpgradeCode]" VersionMin="0.0.1" VersionMax="[|ProductVersion]" Attributes="769" ActionProperty="OLDPRODUCTS"/>
+    <ROW UpgradeCode="[|UpgradeCode]" VersionMin="[|ProductVersion]" Attributes="2" ActionProperty="AI_NEWERPRODUCTFOUND"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.PreReqComponent">
     <ROW PrereqKey="A918597FE054CCCB65ABDBA0AD8F63C" DisplayName="Visual C++ Redistributable for Visual Studio 2015-2022 x86" VersionMin="14.30" SetupFileUrl="Setups\Visual C++ Redistributable for Visual Studio 2015-2022 x86\VC_redist.x86.exe" Location="0" ExactSize="0" WinNTVersions="Windows 7 RTM x86" WinNT64Versions="Windows 7 RTM x64, Windows Server 2008 R2 RTM x64" Operator="0" NoUiComLine="/q /norestart" Options="f" TargetName="Visual C++ Redistributable for Visual Studio 2015-2022 x86\VC_redist.x86.exe" Feature="A918597FE054CCCB65ABDBA0AD8F63C"/>
