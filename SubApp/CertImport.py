@@ -50,8 +50,10 @@ class CertImport:
                                         text=self.main.la("msg_cancel"))
         self.submit_button = ttk.Button(self.page, bootstyle="success", command=self.submit,
                                         text=self.main.la("msg_import") + self.flag.upper())
-        self.deals_process = ttk.Progressbar(self.page, length=432)
-        self.deals_process['value'] = 0
+        # self.deals_process = ttk.Progressbar(self.page, length=432)
+        # self.deals_process['value'] = 0
+        self.import_output = ttk.Label(self.page, bootstyle="info", text=self.main.la(self.flag + "_text"))
+
         if self.flag == "pfx":
             self.submit_button.config(state=tk.DISABLED)
         # 执行操作 =====================================================================================
@@ -71,7 +73,8 @@ class CertImport:
             self.k_clouds.grid(column=2, row=1, pady=20, padx=5, sticky=W)
         self.cancel_button.grid(column=0, row=3, pady=5, padx=15)
         self.submit_button.grid(column=2, row=3, pady=5, padx=0)
-        self.deals_process.grid(column=1, row=3, pady=10, padx=5, sticky=tk.W)
+        # self.deals_process.grid(column=1, row=3, pady=10, padx=5, sticky=tk.W)
+        self.import_output.grid(column=1, row=3, pady=10, padx=5, sticky=tk.W)
 
     def change(self, *args):
         if self.flag == "pfx" and len(self.pass_txt.get()) == 0:

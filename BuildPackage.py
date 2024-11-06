@@ -26,7 +26,7 @@ server = Executable(
 # SETUP CX FREEZE
 setup(
     name="TPM Virtual Smart Card Manager",
-    version="1.2",
+    version="1.3.2024.1106",
     description="TPM Virtual Smart Card Manager",
     author="Pikachu Ren",
     options={'build_exe': {

@@ -2,6 +2,7 @@ import hashlib
 import os
 import json
 import re
+import sys
 import time
 import random
 import tkinter
@@ -49,7 +50,7 @@ class SmartCardAPP:
         self.root.iconbitmap("Config/iconer/icon02.ico")
         self.size = self.get_screens()
         self.root.geometry(f"+{self.size[0]}+{self.size[1]}")
-        self.root.title("TPM Smart Card Manager")
+        self.root.title(self.la("main_text"))
         self.data = SmartCardAPI()
         self.tpms = TPMSmartCard()
         pyglet.font.add_file("Config/myfont/MapleMono-SC-NF-Regular.ttf")
@@ -108,6 +109,7 @@ class SmartCardAPP:
         self.button["cert_main"]["non"].config(state=tk.DISABLED)
 
         self.button["main_line"]["set"].config(state=tk.DISABLED)
+        self.check_datas()
         self.load_status()
         self.root.mainloop()
 
@@ -123,6 +125,15 @@ class SmartCardAPP:
         if type(temp_data[in_name]) is list:
             return "".join(temp_data[in_name])
         return temp_data[in_name]
+
+    def check_datas(self):
+        opensc_path_x64 = r"C:\Program Files\OpenSC Project\OpenSC"
+        opensc_path_x86 = r"C:\Program Files (x86)\OpenSC Project\OpenSC"
+        if not os.path.exists(opensc_path_x64) and not os.path.exists(opensc_path_x86):
+            if messagebox.askquestion(self.la("sc_title"), self.la("sc_datas")) == 'yes':
+                self.install_osc()
+                os.startfile(sys.executable)
+                exit(0)
 
     def get_screens(self):
         # 获取窗口的宽度和高度
@@ -319,6 +330,7 @@ class SmartCardAPP:
             print(selected_name)
 
     def cert_out_to(self, in_path=None):
+        la_path = in_path
         if self.pick["cert"] in self.data.certs:
             now_cert = self.data.certs[self.pick["cert"]]
             if now_cert.sc_cert is not None:
@@ -337,10 +349,11 @@ class SmartCardAPP:
                 else:
                     with open(in_path, "w") as save_file:
                         save_file.write(now_cert.sc_text)
-                    messagebox.showinfo(
-                        self.la("msg_cert_out_ok_item"),
-                        self.la("msg_cert_out_ok_text") % str(now_cert.sc_cert.CommonName)
-                    )
+                    if la_path is None:
+                        messagebox.showinfo(
+                            self.la("msg_cert_out_ok_item"),
+                            self.la("msg_cert_out_ok_text") % str(now_cert.sc_cert.CommonName)
+                        )
                     return in_path
             else:
                 messagebox.showerror(self.la("msg_cert_out_ft_item"), self.la("msg_cert_out_ft_text"))
@@ -1156,6 +1169,4 @@ class SmartCardAPP:
 
 
 if __name__ == "__main__":
-    # os.system('cd /d "%~dp0"')
-    # print(os.getcwd())
     app = SmartCardAPP()

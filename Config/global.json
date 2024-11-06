@@ -1,5 +1,6 @@
 {
   "zh": {
+    "main_text": "TPM虚拟智能卡管理工具",
     "card_name": "卡片名称",
     "card_uuid": "卡片编号",
     "card_path": "实例路径",
@@ -79,7 +80,7 @@
       "============================================\n",
       "              TPM Virtual Smart Card Manager\n",
       "============================================\n",
-      "                   版本：V0.3.0 Sep01 / 2024\n",
+      "                   版本：V1.3.0 Nov01 / 2024\n",
       "                   作者：Pikachu Ren        \n",
       "                   许可：The MIT License    \n",
       "============================================\n",
@@ -189,9 +190,14 @@
     "sshUsage": "SSH 认证",
     "efsUsage": "EFS 加密",
     "bitLocks": "Bitlocker",
-    "anyUsage": "任意用途"
+    "anyUsage": "任意用途",
+    "pfx_text": "注意：只能导入不含证书链的PFX文件，且证书须为RSA1024/2048和SHA1/256!",
+    "cer_text": "注意：只能导入虚拟智能卡存在对应密钥的证书，其他证书请直接安装到系统",
+    "sc_title": "未安装OpenSC",
+    "sc_datas": "您似乎还没有安装OpenSC\n是否立即安装?"
   },
   "en": {
+    "main_text": "TPM Virtual Smart Card Manager",
     "card_name": "CardName",
     "card_uuid": "CardUUID",
     "card_path": "CardPath",
@@ -272,7 +278,7 @@
       "============================================\n",
       "              TPM Virtual Smart Card Manager\n",
       "============================================\n",
-      "                   Version: V0.3.0 Sep1/2024\n",
+      "                   Version: V1.3.0 Nov1/2024\n",
       "                   Authors: Pikachu Ren     \n",
       "                   License: The MIT License \n",
       "============================================\n",
@@ -382,6 +388,10 @@
     "sshUsage": "SSH Authentication",
     "efsUsage": "EFS Encryption",
     "bitLocks": "Bitlocker",
-    "anyUsage": "Any Purpose"
+    "anyUsage": "Any Purpose",
+    "pfx_text": "Note: only the rsa1024-2048+sha1-256 pfx without chain can be import",
+    "cer_text": "Note: only the certs with corresponding keys on card can be imported",
+    "sc_title": "OpenSC not Install",
+    "sc_datas": "It seems you have not installed OpenSC\nInstall now?"
   }
 }

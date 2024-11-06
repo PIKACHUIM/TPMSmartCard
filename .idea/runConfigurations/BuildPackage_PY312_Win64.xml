@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="BuildPackage-PY311-Win64" type="ShConfigurationType">
-    <option name="SCRIPT_TEXT" value="@ echo off %1 %2 ver|find &quot;5.&quot;&gt;nul&amp;&amp;goto :Admin mshta vbscript:createobject(&quot;shell.application&quot;).shellexecute(&quot;%~s0&quot;,&quot;goto :Admin&quot;,&quot;&quot;,&quot;runas&quot;,1)(window.close)&amp;goto :eof :Admin python SmartCardAPP.py" />
+  <configuration default="false" name="BuildPackage-PY312-Win64" type="ShConfigurationType">
+    <option name="SCRIPT_TEXT" value="powershell.exe &quot;Start-Process python.exe 'BuildPackage.py build' -verb runAs &quot;" />
     <option name="INDEPENDENT_SCRIPT_PATH" value="false" />
     <option name="SCRIPT_PATH" value="$PROJECT_DIR$/Builds/BuildPackage-PY312-Win64.bat" />
     <option name="SCRIPT_OPTIONS" value="" />
@@ -10,7 +10,7 @@
     <option name="INTERPRETER_PATH" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="EXECUTE_IN_TERMINAL" value="true" />
-    <option name="EXECUTE_SCRIPT_FILE" value="true" />
+    <option name="EXECUTE_SCRIPT_FILE" value="false" />
     <envs />
     <method v="2" />
   </configuration>
