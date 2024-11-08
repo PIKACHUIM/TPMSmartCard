@@ -848,13 +848,13 @@ class SmartCardAPP:
             return None
 
         def submit():
-            cn = cn_var.get().replace(",", " ")
-            st = st_txt.get().replace(",", " ")
-            ll = ll_txt.get().replace(",", " ")
-            cc = cc_txt.get().replace(",", " ")
-            ou = ou_txt.get().replace(",", " ")
-            on = on_txt.get().replace(",", " ")
-            dt = dt_txt.get().replace(",", " ")
+            cn = cn_var.get().replace(",", " ").replace("\"", "")
+            st = st_txt.get().replace(",", " ").replace("\"", "")
+            ll = ll_txt.get().replace(",", " ").replace("\"", "")
+            cc = cc_txt.get().replace(",", " ").replace("\"", "")
+            ou = ou_txt.get().replace(",", " ").replace("\"", "")
+            on = on_txt.get().replace(",", " ").replace("\"", "")
+            dt = dt_txt.get().replace(",", " ").replace("\"", "")
             cc = self.conf['cncode'][cc] if cc in self.conf['cncode'] else ""
             domain = dn_txt.get().replace(",", ";").split(";")
             emails = um_txt.get().replace(",", ";").split(";")
