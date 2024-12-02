@@ -10,7 +10,6 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from ttkbootstrap import *
 import ttkbootstrap as ttk
-
 from Module.Cryptography import Crypto
 from Module.TPMSmartCard import TPMSmartCard
 
@@ -45,6 +44,14 @@ class CertImport:
             self.k_clouds = ttk.Checkbutton(self.page, bootstyle="success-round-toggle",
                                             text=self.main.la('msg_cert_cloud'),
                                             variable=self.v_clouds)
+            self.v_csp_ts = tk.IntVar()
+            self.v_csp_ts.set(0)
+            self.v_csp_ts.trace('w', self.csp_ts)
+            self.csp_sets = ttk.Checkbutton(self.page, bootstyle="success-round-toggle",
+                                            text=self.main.la('csp_sets'),
+                                            variable=self.v_csp_ts)
+            self.csp_data = ttk.Combobox(self.page, bootstyle="info", width=40,
+                                         values=list())
         # 确认按钮 ====================================================================================
         self.cancel_button = ttk.Button(self.page, bootstyle="danger", command=self.page.destroy,
                                         text=self.main.la("msg_cancel"))
@@ -65,16 +72,17 @@ class CertImport:
         self.page.geometry(f"+{self.main.size[0]}+{self.main.size[1]}")
         self.page.title(self.main.la("msg_import") + self.main.la("msg_cert"))
         self.path_tag.grid(column=0, row=0, pady=10, padx=15)
-        self.path_txt.grid(column=1, row=0, pady=10, padx=5)
-        self.path_tip.grid(column=2, row=0, pady=10, padx=5)
+        self.path_txt.grid(column=1, row=0, pady=10, padx=5, columnspan=2)
+        self.path_tip.grid(column=3, row=0, pady=10, padx=5)
         if self.flag == "pfx":
             self.pass_tag.grid(column=0, row=1, pady=10, padx=15)
-            self.pass_txt.grid(column=1, row=1, pady=10, padx=5)
-            self.k_clouds.grid(column=2, row=1, pady=20, padx=5, sticky=W)
+            self.pass_txt.grid(column=1, row=1, pady=10, padx=5, columnspan=2)
+            self.k_clouds.grid(column=3, row=1, pady=20, padx=5, sticky=W)
+            self.csp_sets.grid(column=1, row=3, pady=20, padx=5, sticky=W)
         self.cancel_button.grid(column=0, row=3, pady=5, padx=15)
-        self.submit_button.grid(column=2, row=3, pady=5, padx=0)
+        self.submit_button.grid(column=3, row=3, pady=5, padx=0)
         # self.deals_process.grid(column=1, row=3, pady=10, padx=5, sticky=tk.W)
-        self.import_output.grid(column=1, row=3, pady=10, padx=5, sticky=tk.W)
+        self.import_output.grid(column=2, row=3, pady=10, padx=5, sticky=tk.W)
 
     def change(self, *args):
         if self.flag == "pfx" and len(self.pass_txt.get()) == 0:
@@ -101,6 +109,20 @@ class CertImport:
         self.pri_key = client_pri_key
         self.pub_key = base64.b64encode(client_pub_pem).decode()
 
+    def csp_ts(self, *args):
+        if self.v_csp_ts.get():
+            self.import_output.grid_forget()
+            self.csp_data.grid(column=2, row=3, pady=10, padx=5, sticky=tk.W)
+            csp_list = TPMSmartCard.CSPFetch()
+            csp_data = "Microsoft Base Smart Card Crypto Provider"
+            self.csp_data.config(values=csp_list)
+            if csp_data in csp_list:
+                self.csp_data.current(csp_list.index(csp_data))
+
+        else:
+            self.import_output.grid(column=2, row=3, pady=10, padx=5, sticky=tk.W)
+            self.csp_data.grid_forget()
+
     def clouds(self, *args):
         # 云端下发 ====================================
         if self.v_clouds.get():
@@ -122,7 +144,7 @@ class CertImport:
             messagebox.showinfo(self.main.la("msg_cert_cloud"), self.main.la("msg_tips_cloud"))
             self.page.attributes('-topmost', True)
         else:
-            self.path_tip.grid(column=2, row=0, pady=10, padx=5)
+            self.path_tip.grid(column=3, row=0, pady=10, padx=5)
             self.path_txt.delete(0, tk.END)
             self.pass_tag.config(text=self.main.la("msg_cert") + self.main.la("msg_pass") + ": ")
             self.pass_txt.delete(0, tk.END)
@@ -170,15 +192,22 @@ class CertImport:
                             encrypted_data.encode()
                         )
                     )
+
+                    # tmp = base64.b64encode(decrypted_data)
+                    # tmp = tmp.decode()
+                    # result = TPMSmartCard.baseCerts(tmp, responded_json['pfxkey'])
+
                     tmp = hashlib.sha256(decrypted_data).hexdigest()
                     cert_path = os.path.join(os.getenv('APPDATA'), tmp + ".pfx")
                     with open(cert_path, 'wb') as save_file:
                         save_file.write(decrypted_data)
                     result = TPMSmartCard.initCerts(
-                        cert_path, responded_json['pfxkey'])
+                        cert_path, responded_json['pfxkey'],
+                        self.csp_data.get() if self.v_csp_ts.get() else None)
                     with open(cert_path, 'wb') as save_file:
                         for i in range(0, int(len(decrypted_data) / 16 + 1)):
                             save_file.write(randbytes(16))
+
                     self.main.load_status()
                 else:
                     messagebox.showwarning(self.main.la("fail"),
@@ -200,8 +229,9 @@ class CertImport:
             else:
                 self.page.attributes('-topmost', False)
                 if self.flag == "pfx":
-                    result = TPMSmartCard.initCerts(self.path_txt.get(),
-                                                    self.pass_txt.get())
+                    result = TPMSmartCard.initCerts(
+                        self.path_txt.get(), self.pass_txt.get(),
+                        in_csp=self.csp_data.get() if self.v_csp_ts.get() else None)
                 else:
                     result = TPMSmartCard.loadCerts(self.path_txt.get())
                 self.main.load_status()

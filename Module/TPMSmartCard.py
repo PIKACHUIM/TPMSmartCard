@@ -59,14 +59,49 @@ class TPMSmartCard:
 
     @staticmethod
     def initCerts(in_path,
-                  in_pass=""):
-        command = ('certutil -csp "Microsoft Base Smart Card Crypto Provider" '
-                   ' -p "%s" -importpfx "%s"' % (in_pass, in_path))
+                  in_pass="",
+                  in_csp=None):
+        if in_csp is None:
+            in_csp = "Microsoft Base Smart Card Crypto Provider"
+        command = ('certutil -csp "%s"  -p "%s" -importpfx "%s"' % (in_csp, in_pass, in_path))
         print(command)
         process = subprocess.run(command, shell=True, text=True, capture_output=True)
         result = process.stdout
         print(result)
         return result
+
+    @staticmethod
+    def baseCerts(in_data,
+                  in_pass=""):
+        command = ('Import/TPMImport.exe -user -b %s "%s"' % (in_data, in_pass))
+        print(command)
+        process = subprocess.run(command, shell=True, text=True, capture_output=True)
+        result = process.stdout
+        print(result)
+        return result
+
+    @staticmethod
+    def CSPFetch():
+        command = ('certutil -csplist')
+        print(command)
+        process = subprocess.run(command, shell=True, text=True, capture_output=True)
+        outputs = process.stdout
+        results = []
+        tmp_str = None
+        for line in outputs.split('\n'):
+            if len(line) <= 0:
+                if tmp_str is not None:
+                    results.append(tmp_str)
+                    tmp_str = None
+                continue
+            if tmp_str is None:
+                line = line.split(": ")
+                if len(line) < 1:
+                    continue
+                line = line[1]
+                tmp_str = line
+        print(results)
+        return results
 
     @staticmethod
     def dropCerts(in_name):
