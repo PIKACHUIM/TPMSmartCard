@@ -9,35 +9,35 @@
     }
   },
   "card_main": {
-    "pack": [28, 30, 158],
+    "pack": [28, 23, 170],
     "data": {
       "ITEM": [
         30,
         "card_list"
       ],
       "NAME": [
-        175,
+        200,
         "card_name"
       ],
       "UUID": [
-        135,
+        110,
         "card_uuid"
       ]
     }
   },
   "cert_main": {
-    "pack": [428, 30, 158],
+    "pack": [428, 23, 170],
     "data": {
       "ITEM": [
-        55,
+        60,
         "cert_guid"
       ],
       "NAME": [
-        300,
+        290,
         "cert_name"
       ],
       "LENS": [
-        65,
+        70,
         "pub_length"
       ],
       "USED": [

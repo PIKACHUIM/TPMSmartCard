@@ -88,7 +88,7 @@ class CertDataInfo:
         self.IssuedDate = self._certs_['start_time'] if 'start_time' in self._certs_ else "Unknown"
         self.ExpireDate = self._certs_['end_time'] if 'end_time' in self._certs_ else "Unknown"
         self.CertSHA160 = self._certs_['cert_sha1'] if 'cert_sha1' in self._certs_ else "Unknown"
-        
+
         self.pub_length = str(self._certs_['pubkey_len']) if 'pubkey_len' in self._certs_ else "Unknown"
         self.pub_origin = str(self._certs_['pubkey']) if 'pubkey' in self._certs_ else "Unknown"
         self.pub_key_al = str(self._certs_['pubkey_type']) if 'pubkey_type' in self._certs_ else "Unknown"
@@ -103,7 +103,7 @@ class CertDataInfo:
         self.is_ca_cert = str(self.certExtend('basicConstraints')).split(":")[-1]
 
         self.CertPolicy = self.certExtend('certificatePolicies')
-        self.MainUsages = self.certExtend('keyUsage') if type(self.certExtend('keyUsage')) is str else ""
+        self.MainUsages = self.certExtend('keyUsage') if len(str(self.certExtend('keyUsage'))) > 0 else ""
         self.MainHashID = self.certExtend('authorityKeyIdentifier')
         self.SubsUsages = self.certExtend('extendedKeyUsage')
         self.SubsOwners = self.certExtend('subjectAltName')

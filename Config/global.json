@@ -97,7 +97,7 @@
     "msg_pass_next_same": "新旧密码不能相同",
     "msg_pass_change_ok": "修改重置密码结果",
     "msg_pass_change_tx": "PIN密码修改",
-    "msg_pass_resets_tx": "%重置PIN密码",
+    "msg_pass_resets_tx": "PIN重置密码",
     "msg_card": "卡片",
     "msg_info": "信息",
     "msg_open": "打开",
@@ -112,7 +112,7 @@
     "msg_confirm": "确认",
     "msg_cancel": "取消",
     "msg_disable": "禁用",
-    "msg_char": "字符",
+    "msg_char": "字",
     "msg_create": "创建",
     "msg_result": "结果",
     "msg_user": "用户",
@@ -148,8 +148,8 @@
     "msg_no_cert": "(未找到证书)",
     "msg_ou_full": "组织单元",
     "msg_ks_full": "密钥限制",
-    "msg_ml_lite": "邮件特性",
-    "msg_ml_full": "SMIME",
+    "msg_ml_lite": "其他特性",
+    "msg_ml_full": "邮件加密",
     "msg_ml_text": "需邮件特性",
     "msg_must_in": "必填",
     "msg_none_in": "选填",
@@ -158,7 +158,7 @@
     "msg_domain": "域名列表",
     "msg_emails": "邮箱列表",
     "msg_splits": "用分号分割",
-    "msg_create_csr": "创建证书请求",
+    "msg_create_csr": "创建请求",
     "DigitalSignature": "数字签名",
     "nonRepudiation": "认可签名",
     "Encipherment": "加密解密",
@@ -195,7 +195,8 @@
     "cer_text": "注意：只能导入当前虚拟智能卡已存在对应密钥的证书",
     "sc_title": "未安装OpenSC",
     "sc_datas": "您似乎还没有安装OpenSC\n是否立即安装?",
-    "csp_sets": "使用自定义CSP"
+    "csp_sets": "使用自定义CSP",
+    "csp_set_": "选择CSP"
   },
   "en": {
     "main_text": "TPM Virtual Smart Card Manager",
@@ -348,7 +349,7 @@
     "msg_ou_full": "Organizational Unit",
     "msg_ks_full": "Key Restrictions",
     "msg_ml_lite": "Email Features",
-    "msg_ml_full": "SMIME",
+    "msg_ml_full": " SMIME",
     "msg_ml_text": "Email Features Required",
     "msg_must_in": "Required",
     "msg_none_in": "Optional",
@@ -357,7 +358,7 @@
     "msg_domain": "Domain List",
     "msg_emails": "Email List",
     "msg_splits": "Separated by semicolons",
-    "msg_create_csr": "Create Certificate Request",
+    "msg_create_csr": "Create CSR",
     "DigitalSignature": "Digital Signature",
     "nonRepudiation": "Acceptance Signature",
     "Encipherment": "Encryption and Decryption",
@@ -394,6 +395,7 @@
     "cer_text": "Note: Only the Cert with key on the card can import",
     "sc_title": "OpenSC not Install",
     "sc_datas": "It seems you have not installed OpenSC\nInstall now?",
-    "csp_sets": "Use custom CSP"
+    "csp_sets": "Use custom CSP",
+    "csp_set_": "Use CSP"
   }
 }

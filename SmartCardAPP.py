@@ -67,6 +67,14 @@ class SmartCardAPP:
             "label_name": font.Font(family=FONT_NAME,
                                     size=-12, weight="bold")
         }
+        style_head = ttk.Style()
+        style_head.configure("Treeview.Heading", font=self.t_fonts['label_name'])
+        style_head.configure("Treeview", font=self.t_fonts['label_data'])
+        # style_head.configure("TButton", font=self.t_fonts['label_name'])
+        style_head.configure("TLabel", font=self.t_fonts['label_name'])
+        style_head.configure("TCheckbutton", font=self.t_fonts['label_name'])
+        style_head.configure("TCheckbutton", font=self.t_fonts['label_name'])
+
         self.frames = {
             "card_main": self.view_frames("card_main"),
             "card_info": self.view_frames("card_info"),
@@ -220,7 +228,8 @@ class SmartCardAPP:
             inf = ttk.Treeview(self.root,
                                bootstyle=t_style,
                                show="headings",
-                               columns=tb_name)
+                               columns=tb_name,
+                               )
             bar = ttk.Scrollbar(self.root,
                                 bootstyle=t_style,
                                 orient='vertical',
@@ -228,12 +237,12 @@ class SmartCardAPP:
             inf.configure(yscrollcommand=bar.set)
             # 设置表格组件 ====================================================
             inf.place(x=tb_pack[0], y=tb_pack[1], width=tb_lens + 25)
-            bar.place(x=tb_pack[0] + tb_lens + 10,
-                      y=tb_pack[1] + 33, height=tb_pack[2])
+            bar.place(x=tb_pack[0] + tb_lens + 13,
+                      y=tb_pack[1] + 29, height=tb_pack[2])
             # 设置表列信息 ====================================================
             for th_name in tb_data:
                 inf.heading(th_name, text=self.la(tb_data[th_name][1]))  # 标题
-                inf.column(th_name, anchor='center', width=tb_data[th_name][0])
+                inf.column(th_name, anchor='w', width=tb_data[th_name][0])
             return inf, bar
         return None, None
 
@@ -817,7 +826,7 @@ class SmartCardAPP:
                 if um_var.get():
                     um_txt.config(state=tk.NORMAL)
                     um_txt.config(bootstyle="info")
-                    um_tip.config(text="0-999%s" % self.la("msg_char"))
+                    um_tip.config(text="0-65536%s" % self.la("msg_char"))
                 else:
                     um_txt.delete(0, tk.END)
                     um_txt.config(state=tk.DISABLED)
@@ -862,13 +871,16 @@ class SmartCardAPP:
             emails = [i for i in emails if len(i) > 0]
             ken_len = kl_txt.get()[3:]
             ken_sha = kl_sha.get().lower()
+            csp_txt = "Microsoft Base Smart Card Crypto Provider"
+            if v_csp_ts.get() and len(csp_data.get()) > 0:
+                csp_txt = csp_data.get()
             full_text = ('[Version]\n'
                          'Signature="$Windows NT$"\n'
                          '[NewRequest]\n'
-                         'ProviderName = "Microsoft Base Smart Card Crypto Provider"\n'
+                         'ProviderName = "%s"\n'
                          'ProviderType = 0\n'
                          'Exportable = FALSE\n'
-                         'MachineKeySet = TRUE\n')
+                         'MachineKeySet = TRUE\n' % csp_txt)
 
             full_text += 'Subject = "%s%s%s%s%s%s%s%s"\n' % (
                 "CN=%s," % cn if len(cn) > 0 else "Unknown,",
@@ -956,8 +968,21 @@ class SmartCardAPP:
             self.load_status()
             make.destroy()
 
+        def csp_ts(*args):
+            all_keys = list(locals().keys()) + list(globals().keys())
+            if "v_csp_ts" in all_keys and "csp_data" in all_keys:
+                if v_csp_ts.get():
+                    csp_data.grid(column=2, row=10, pady=5, padx=15, sticky=W, columnspan=5)
+                    csp_list = TPMSmartCard.CSPFetch()
+                    csp_name = "Microsoft Base Smart Card Crypto Provider"
+                    csp_data.config(values=csp_list)
+                    if csp_name in csp_list:
+                        csp_data.current(csp_list.index(csp_name))
+                else:
+                    csp_data.grid_forget()
+
         make = ttk.Toplevel(self.root)
-        make.geometry("800x530")
+        make.geometry("800x540")
         make.geometry(f"+{self.size[0]}+{self.size[1]}")
         make.attributes('-topmost', True)
         make.title(self.la("msg_create") + self.la("msg_cert"))
@@ -968,7 +993,7 @@ class SmartCardAPP:
         cn_tag.grid(column=0, row=0, pady=10, padx=15)
         cn_txt = ttk.Entry(make, bootstyle="info", width=83, textvariable=cn_var)
         cn_txt.grid(column=1, row=0, pady=10, padx=5, columnspan=6)
-        cn_tip = ttk.Label(make, text="%s, 1-255%s" % (self.la("msg_must_in"), self.la("msg_char")))
+        cn_tip = ttk.Label(make, text="%s1-64%s" % (self.la("msg_must_in"), self.la("msg_char")))
         cn_tip.grid(column=7, row=0, pady=10, padx=5)
 
         st_tag = ttk.Label(make, text=self.la("user_area") + ": ")
@@ -983,7 +1008,7 @@ class SmartCardAPP:
 
         cc_tag = ttk.Label(make, text=self.la("user_code") + ": ")
         cc_tag.grid(column=6, row=1, pady=10, padx=15)
-        cc_txt = ttk.Combobox(make, bootstyle="info", width=8, values=list(self.conf['cncode'].keys()))
+        cc_txt = ttk.Combobox(make, bootstyle="info", width=7, values=list(self.conf['cncode'].keys()))
         cc_txt.grid(column=7, row=1, pady=10, padx=5, sticky=W, columnspan=2)
         cc_txt.set("N/A")
 
@@ -994,7 +1019,7 @@ class SmartCardAPP:
 
         ou_tag = ttk.Label(make, text=self.la("msg_ou_full") + ": ")
         ou_tag.grid(column=4, row=2, pady=10, padx=15, sticky=W)
-        ou_txt = ttk.Entry(make, bootstyle="info", width=39)
+        ou_txt = ttk.Entry(make, bootstyle="info", width=38)
         ou_txt.grid(column=5, row=2, pady=10, padx=5, sticky=W, columnspan=3)
 
         kl_tag = ttk.Label(make, text=self.la("pub_length") + ": ")
@@ -1007,7 +1032,7 @@ class SmartCardAPP:
         kl_sha.grid(column=2, row=3, pady=10, padx=5, sticky=W)
         kl_sha.set("SHA256")
 
-        ks_tag = ttk.Label(make, text=self.la("msg_ks_full") + ": ")
+        ks_tag = ttk.Label(make, text=self.la("msg_ks_full"))
         ks_tag.grid(column=3, row=3, pady=10, padx=15)
         v_sign = tk.IntVar()
         v_sign.set(1)
@@ -1025,7 +1050,7 @@ class SmartCardAPP:
         k_data.grid(column=5, row=3, pady=10, padx=5, sticky=W)
         k_data.state(['!alternate'])
 
-        ml_tag = ttk.Label(make, text=self.la("msg_ml_lite") + ": ")
+        ml_tag = ttk.Label(make, text=self.la("msg_ml_lite"))
         ml_tag.grid(column=6, row=3, pady=10, padx=15)
         um_var = tk.IntVar()
         um_var.trace('w', change)
@@ -1049,7 +1074,7 @@ class SmartCardAPP:
             ku_out[ku_inf] = tk.BooleanVar()
             ku_dat[ku_inf] = ttk.Checkbutton(make, bootstyle="primary", width=10, text=self.la(ku_inf),
                                              variable=ku_out[ku_inf])
-            ku_dat[ku_inf].grid(column=ku_num, row=4, padx=5)
+            ku_dat[ku_inf].grid(column=ku_num, row=4, padx=8 if ku_inf == "DecipherOnly" else 5)
             ku_num += 1
             ku_dat[ku_inf].state(['!alternate'])
 
@@ -1058,22 +1083,22 @@ class SmartCardAPP:
         dn_txt = ttk.Entry(make, bootstyle="info", width=83)
         dn_txt.grid(column=1, row=5, pady=10, padx=5, columnspan=6)
         dn_tip = ttk.Label(make, text="%s" % self.la("msg_splits"))
-        dn_tip.grid(column=7, row=5, pady=10, padx=5)
+        dn_tip.grid(column=7, row=5, pady=10, padx=0)
 
         um_tag = ttk.Label(make, text=self.la("msg_emails") + ": ")
         um_tag.grid(column=0, row=6, pady=10, padx=15)
         um_txt = ttk.Entry(make, bootstyle="default", width=83)
         um_txt.grid(column=1, row=6, pady=10, padx=5, columnspan=6)
         um_tip = ttk.Label(make, text=self.la("msg_ml_text"))
-        um_tip.grid(column=7, row=6, pady=10, padx=5)
+        um_tip.grid(column=7, row=6, pady=10, padx=0)
         um_txt.config(state=tk.DISABLED)
 
         dt_tag = ttk.Label(make, text=self.la("DESCRIPTION") + ": ")
         dt_tag.grid(column=0, row=7, pady=10, padx=15)
         dt_txt = ttk.Entry(make, bootstyle="info", width=83)
         dt_txt.grid(column=1, row=7, pady=10, padx=5, columnspan=6)
-        dt_tip = ttk.Label(make, text="0-999%s" % self.la("msg_char"))
-        dt_tip.grid(column=7, row=7, pady=10, padx=5)
+        dt_tip = ttk.Label(make, text="0-65536%s" % self.la("msg_char"))
+        dt_tip.grid(column=7, row=7, pady=10, padx=0)
 
         def resign(*args):
             if va_self.get():
@@ -1165,6 +1190,14 @@ class SmartCardAPP:
         submit_button = ttk.Button(make, text=self.la("msg_create_csr"), command=submit, bootstyle="success")
         submit_button.grid(column=7, row=10, pady=5, padx=0)
         submit_button.config(state=tk.DISABLED)
+        v_csp_ts = tk.IntVar()
+        v_csp_ts.set(0)
+        v_csp_ts.trace('w', csp_ts)
+        csp_sets = ttk.Checkbutton(make, bootstyle="info-round-toggle", text=self.la('csp_set_'),
+                                   variable=v_csp_ts)
+        csp_data = ttk.Combobox(make, bootstyle="info", width=62, values=list())
+        csp_sets.grid(column=1, row=10, pady=5, padx=15, sticky=W)
+        # csp_data.grid(column=2, row=10, pady=5, padx=15, sticky=W, columnspan=4)
         make.mainloop()
 
 
