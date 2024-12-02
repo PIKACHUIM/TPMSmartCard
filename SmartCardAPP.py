@@ -50,7 +50,7 @@ class SmartCardAPP:
         self.root.iconbitmap("Config/iconer/icon02.ico")
         self.size = self.get_screens()
         self.root.geometry(f"+{self.size[0]}+{self.size[1]}")
-        self.root.title(self.la("main_text"))
+        self.root.title(self.i18n("main_text"))
         self.data = SmartCardAPI()
         self.tpms = TPMSmartCard()
         pyglet.font.add_file("Config/myfont/MapleMono-SC-NF-Regular.ttf")
@@ -121,7 +121,7 @@ class SmartCardAPP:
         self.load_status()
         self.root.mainloop()
 
-    def la(self, in_name):
+    def i18n(self, in_name):
         if "global" not in self.conf:
             return in_name
         temp_data = self.conf["global"]
@@ -138,7 +138,7 @@ class SmartCardAPP:
         opensc_path_x64 = r"C:\Program Files\OpenSC Project\OpenSC"
         opensc_path_x86 = r"C:\Program Files (x86)\OpenSC Project\OpenSC"
         if not os.path.exists(opensc_path_x64) and not os.path.exists(opensc_path_x86):
-            if messagebox.askquestion(self.la("sc_title"), self.la("sc_datas")) == 'yes':
+            if messagebox.askquestion(self.i18n("sc_title"), self.i18n("sc_datas")) == 'yes':
                 self.install_osc()
                 os.startfile(sys.executable)
                 exit(0)
@@ -194,7 +194,7 @@ class SmartCardAPP:
                 elif self.data.certs[cert_now].sc_cert is not None:
                     cert_name = self.data.certs[cert_now].sc_cert.OwnersInfo['CN']
                 else:
-                    cert_name = self.la("msg_no_cert")
+                    cert_name = self.i18n("msg_no_cert")
                 self.tables["cert_main"][0].insert("", tk.END, values=(
                     cert_now.split(' ')[-1],
                     cert_name,
@@ -209,7 +209,7 @@ class SmartCardAPP:
             tag = ttk.LabelFrame(bootstyle="info",
                                  width=tb_conf[in_name][0],
                                  height=tb_conf[in_name][1],
-                                 text=self.la(in_name))
+                                 text=self.i18n(in_name))
             tag.place(x=tb_conf[in_name][2], y=tb_conf[in_name][3])
             return tag
         return None
@@ -241,7 +241,7 @@ class SmartCardAPP:
                       y=tb_pack[1] + 29, height=tb_pack[2])
             # 设置表列信息 ====================================================
             for th_name in tb_data:
-                inf.heading(th_name, text=self.la(tb_data[th_name][1]))  # 标题
+                inf.heading(th_name, text=self.i18n(tb_data[th_name][1]))  # 标题
                 inf.column(th_name, anchor='w', width=tb_data[th_name][0])
             return inf, bar
         return None, None
@@ -281,10 +281,10 @@ class SmartCardAPP:
             for now in bt_all:
                 bt_fun = bt_map[now['name']] if now['name'] in bt_map else (None, None)
                 if bt_fun[1] is None:
-                    bta = ttk.Button(self.root, text=self.la(now['text']),
+                    bta = ttk.Button(self.root, text=self.i18n(now['text']),
                                      bootstyle=now['type'], command=bt_fun[0])
                 else:
-                    bta = ttk.Button(self.root, text=self.la(now['text']),
+                    bta = ttk.Button(self.root, text=self.i18n(now['text']),
                                      bootstyle=now['type'], command=partial(bt_fun[0], bt_fun[1]))
                 bta.place(x=bt_btx, y=bt_bty, width=now['w'])
                 bt_btx = bt_btx + now['w'] + 2
@@ -303,7 +303,7 @@ class SmartCardAPP:
             for tb_line in tb_conf['data']:
                 tb_it_x = tb_ln_x
                 for tb_item in tb_line:
-                    tag = ttk.Label(bootstyle="default", text=self.la(tb_item) + ": "
+                    tag = ttk.Label(bootstyle="default", text=self.i18n(tb_item) + ": "
                                     , font=self.t_fonts['label_name'])
                     tag.place(x=tb_it_x, y=tb_it_y)
                     inf = ttk.Label(bootstyle="default", text="", font=self.t_fonts['label_data'])
@@ -354,20 +354,20 @@ class SmartCardAPP:
                 else:
                     in_path = "%s\\%s.crt" % (in_path, str(now_cert.sc_cert.SerialNums))
                 if in_path is None or len(in_path) <= 0:
-                    messagebox.showwarning(self.la("msg_cert_out_ft_item"), self.la("msg_cert_out_ft_path"))
+                    messagebox.showwarning(self.i18n("msg_cert_out_ft_item"), self.i18n("msg_cert_out_ft_path"))
                 else:
                     with open(in_path, "w") as save_file:
                         save_file.write(now_cert.sc_text)
                     if la_path is None:
                         messagebox.showinfo(
-                            self.la("msg_cert_out_ok_item"),
-                            self.la("msg_cert_out_ok_text") % str(now_cert.sc_cert.CommonName)
+                            self.i18n("msg_cert_out_ok_item"),
+                            self.i18n("msg_cert_out_ok_text") % str(now_cert.sc_cert.CommonName)
                         )
                     return in_path
             else:
-                messagebox.showerror(self.la("msg_cert_out_ft_item"), self.la("msg_cert_out_ft_text"))
+                messagebox.showerror(self.i18n("msg_cert_out_ft_item"), self.i18n("msg_cert_out_ft_text"))
         else:
-            messagebox.showerror(self.la("msg_cert_out_ft_item"), self.la("msg_cert_out_ft_none"))
+            messagebox.showerror(self.i18n("msg_cert_out_ft_item"), self.i18n("msg_cert_out_ft_none"))
         return None
 
     def cert_system(self):
@@ -384,7 +384,7 @@ class SmartCardAPP:
         if len(selected_item) > 0:
             selected_name = treeview.set(selected_item[0], '#2')
             selected_uuid = treeview.set(selected_item[0], '#1')
-            selected_name = selected_name.replace(self.la("msg_no_cert"), "")
+            selected_name = selected_name.replace(self.i18n("msg_no_cert"), "")
             if selected_name != "":
                 self.pick["cert"] = selected_name + " " + selected_uuid
             else:
@@ -467,8 +467,8 @@ class SmartCardAPP:
             print(selected_name)
 
     def about_pages(self):
-        messagebox.showinfo(self.la("msg_about_title"),
-                            self.la("msg_about_about"))
+        messagebox.showinfo(self.i18n("msg_about_title"),
+                            self.i18n("msg_about_about"))
 
     def check_tpm_h(self):
         process = subprocess.run(" powershell Get-TPM", text=True,
@@ -477,14 +477,14 @@ class SmartCardAPP:
         for line in results:
             if line.find("TpmActivated") >= 0:
                 if line.find("True") >= 0:
-                    messagebox.showinfo(self.la("msg_tpm_check_text"),
-                                        self.la("msg_tpm_check_done") % "".join(results))
+                    messagebox.showinfo(self.i18n("msg_tpm_check_text"),
+                                        self.i18n("msg_tpm_check_done") % "".join(results))
                     return True
                 else:
-                    messagebox.showerror(self.la("msg_tpm_check_text"),
-                                         self.la("msg_tpm_check_fail") % "".join(results))
-        messagebox.showwarning(self.la("msg_tpm_check_text"),
-                               self.la("msg_tpm_check_none") % "\n".join(results))
+                    messagebox.showerror(self.i18n("msg_tpm_check_text"),
+                                         self.i18n("msg_tpm_check_fail") % "".join(results))
+        messagebox.showwarning(self.i18n("msg_tpm_check_text"),
+                               self.i18n("msg_tpm_check_none") % "\n".join(results))
         return False
 
     def open_github(self):
@@ -502,10 +502,10 @@ class SmartCardAPP:
             password = item.get()
             # print(password)
             if len(password) < 4:
-                tips.config(text="❌ " + self.la("msg_pass_length_l1" if not is_same else "msg_pass_length_l2"))
+                tips.config(text="❌ " + self.i18n("msg_pass_length_l1" if not is_same else "msg_pass_length_l2"))
                 submit_button.config(state=tk.DISABLED)
             elif is_same and next_txt.get() != same_txt.get():
-                tips.config(text="❌ " + self.la("msg_pass_not_same_"))
+                tips.config(text="❌ " + self.i18n("msg_pass_not_same_"))
                 submit_button.config(state=tk.DISABLED)
             else:
                 tips.config(text="✅ ")
@@ -519,7 +519,7 @@ class SmartCardAPP:
             else:
                 submit_button.config(state=tk.DISABLED)
             if in_type == "pin" and pass_txt.get() == next_txt.get() == same_txt.get():
-                tips.config(text="❌ " + self.la("msg_pass_next_same"))
+                tips.config(text="❌ " + self.i18n("msg_pass_next_same"))
                 submit_button.config(state=tk.DISABLED)
 
         def submit():
@@ -530,29 +530,29 @@ class SmartCardAPP:
             # print(pass_key, pass_new, same_new)
             if pass_key == "" or len(pass_key) < 4:
                 make.attributes('-topmost', False)
-                messagebox.showwarning(self.la("warn"), self.la("msg_pass_length_l1"))
+                messagebox.showwarning(self.i18n("warn"), self.i18n("msg_pass_length_l1"))
                 make.attributes('-topmost', True)
             elif pass_new == "" or len(pass_new) < 4:
                 make.attributes('-topmost', False)
-                messagebox.showwarning(self.la("warn"), self.la("msg_pass_length_l2"))
+                messagebox.showwarning(self.i18n("warn"), self.i18n("msg_pass_length_l2"))
                 make.attributes('-topmost', True)
             elif pass_new != same_new:
                 make.attributes('-topmost', False)
-                messagebox.showwarning(self.la("warn"), self.la("msg_pass_not_same_"))
+                messagebox.showwarning(self.i18n("warn"), self.i18n("msg_pass_not_same_"))
                 make.attributes('-topmost', True)
             else:
                 result = TPMSmartCard.changePIN(pass_key, pass_new, card_uid,
                                                 type="--change-pin" \
                                                     if in_type == "pin" else "--unblock-pin")
-                messagebox.showinfo(self.la("msg_pass_change_ok"), result)
+                messagebox.showinfo(self.i18n("msg_pass_change_ok"), result)
                 make.destroy()
 
         make = ttk.Toplevel(self.root)
         make.geometry("700x200")
         make.geometry(f"+{self.size[0]}+{self.size[1]}")
-        make.title(self.la("msg_pass_change_tx") if in_type == "pin" else self.la("msg_pass_resets_tx"))
+        make.title(self.i18n("msg_pass_change_tx") if in_type == "pin" else self.i18n("msg_pass_resets_tx"))
 
-        pass_lan = self.la("msg_old") + " PIN: " if in_type == "pin" else self.la("msg_card") + " PUK: "
+        pass_lan = self.i18n("msg_old") + " PIN: " if in_type == "pin" else self.i18n("msg_card") + " PUK: "
         pass_var = tk.StringVar()
         pass_tag = ttk.Label(make, text=pass_lan, bootstyle="info")
         pass_txt = ttk.Entry(make, bootstyle="info", width=60, textvariable=pass_var, show="*")
@@ -563,7 +563,7 @@ class SmartCardAPP:
         pass_tip.grid(column=2, row=1, pady=10, padx=5, sticky=W)
 
         next_var = tk.StringVar()
-        next_pin = ttk.Label(make, text=self.la("msg_new") + " PIN: ", bootstyle="info")
+        next_pin = ttk.Label(make, text=self.i18n("msg_new") + " PIN: ", bootstyle="info")
         next_txt = ttk.Entry(make, bootstyle="info", width=60, textvariable=next_var, show="*")
         next_tip = ttk.Label(make, text="", bootstyle="info")
         next_var.trace('w', partial(change, next_txt, next_tip, True))
@@ -572,7 +572,7 @@ class SmartCardAPP:
         next_tip.grid(column=2, row=2, pady=10, padx=5, sticky=W)
 
         same_var = tk.StringVar()
-        same_pin = ttk.Label(make, text=self.la("msg_confirm") + " PIN: ", bootstyle="info")
+        same_pin = ttk.Label(make, text=self.i18n("msg_confirm") + " PIN: ", bootstyle="info")
         same_txt = ttk.Entry(make, bootstyle="info", width=60, textvariable=same_var, show="*")
         same_tip = ttk.Label(make, text="", bootstyle="info")
         same_var.trace('w', partial(change, same_txt, same_tip, True))
@@ -580,9 +580,9 @@ class SmartCardAPP:
         same_txt.grid(column=1, row=3, pady=10, padx=5)
         same_tip.grid(column=2, row=3, pady=10, padx=5, sticky=W)
 
-        cancel_button = ttk.Button(make, text=self.la("msg_cancel"), command=make.destroy, bootstyle="danger")
+        cancel_button = ttk.Button(make, text=self.i18n("msg_cancel"), command=make.destroy, bootstyle="danger")
         cancel_button.grid(column=0, row=4, pady=5, padx=15)
-        submit_button = ttk.Button(make, text=self.la("msg_confirm"), command=submit, bootstyle="info")
+        submit_button = ttk.Button(make, text=self.i18n("msg_confirm"), command=submit, bootstyle="info")
         submit_button.grid(column=2, row=4, pady=5, padx=0)
         submit_button.config(state=tk.DISABLED)
         make.mainloop()
@@ -599,7 +599,7 @@ class SmartCardAPP:
                 puks_txt.delete(0, tk.END)
                 puks_txt.config(state=tk.DISABLED)
                 make.attributes('-topmost', False)
-                messagebox.showinfo(self.la("msg_disable") + "PUK", self.la("msg_ban_puk_warn"))
+                messagebox.showinfo(self.i18n("msg_disable") + "PUK", self.i18n("msg_ban_puk_warn"))
                 make.attributes('-topmost', True)
             else:
                 puks_txt.config(state=tk.NORMAL)
@@ -619,16 +619,16 @@ class SmartCardAPP:
         def submit():
             if name_txt.get() == "":
                 make.attributes('-topmost', True)
-                messagebox.showwarning(self.la("fail"), self.la("msg_new_card_txt_e"))
+                messagebox.showwarning(self.i18n("fail"), self.i18n("msg_new_card_txt_e"))
             elif not 4 <= len(pins_txt.get()) <= 15:
                 make.attributes('-topmost', True)
-                messagebox.showwarning(self.la("fail"), self.la("msg_new_card_pin_e"))
+                messagebox.showwarning(self.i18n("fail"), self.i18n("msg_new_card_pin_e"))
             elif len(puks_txt.get()) > 0 and not 8 <= len(puks_txt.get()) <= 16:
                 make.attributes('-topmost', True)
-                messagebox.showwarning(self.la("fail"), self.la("msg_new_card_puk_e"))
+                messagebox.showwarning(self.i18n("fail"), self.i18n("msg_new_card_puk_e"))
             elif len(adks_txt.get()) != 48:
                 make.attributes('-topmost', True)
-                messagebox.showwarning(self.la("fail"), self.la("msg_new_card_key_e"))
+                messagebox.showwarning(self.i18n("fail"), self.i18n("msg_new_card_key_e"))
             else:
                 deals_process['value'] = 0
                 global deals_destroy
@@ -652,19 +652,19 @@ class SmartCardAPP:
                     puk = puks_txt.get()
                     adk = adks_txt.get()
                     out = "%s PIN: %s\n%s PUK: %s\n%s: %s" % (
-                        self.la("msg_user"), pin,
-                        self.la("msg_user"), puk,
-                        self.la("mag_admin_key"), adk
+                        self.i18n("msg_user"), pin,
+                        self.i18n("msg_user"), puk,
+                        self.i18n("mag_admin_key"), adk
                     )
                     # cid = result.find("ROOT")
                     # if cid >= 0:
                     #     out = result[cid:cid + 25] + "\n" + out
                     if deals_destroy:
                         make.destroy()
-                        messagebox.showinfo(self.la("msg_create") + self.la("msg_result"), result)
+                        messagebox.showinfo(self.i18n("msg_create") + self.i18n("msg_result"), result)
                         pyperclip.copy(out)
-                        messagebox.showinfo(self.la("msg_card") + self.la("msg_info"),
-                                            out + self.la("msg_new_card_dones"))
+                        messagebox.showinfo(self.i18n("msg_card") + self.i18n("msg_info"),
+                                            out + self.i18n("msg_new_card_dones"))
 
                 def update():
                     global deals_destroy
@@ -688,55 +688,55 @@ class SmartCardAPP:
         make.geometry("700x240")
         make.geometry(f"+{self.size[0]}+{self.size[1]}")
         make.attributes('-topmost', True)
-        make.title(self.la("msg_new_tpm_card"))
+        make.title(self.i18n("msg_new_tpm_card"))
 
         # 在新窗口中添加输入部件
-        cancel_button = ttk.Button(make, text=self.la("msg_cancel") + self.la("msg_create"),
+        cancel_button = ttk.Button(make, text=self.i18n("msg_cancel") + self.i18n("msg_create"),
                                    command=cancel, bootstyle="danger")
         cancel_button.grid(column=0, row=4, pady=5, padx=15)
-        submit_button = ttk.Button(make, text=self.la("msg_create") + self.la("msg_card"),
+        submit_button = ttk.Button(make, text=self.i18n("msg_create") + self.i18n("msg_card"),
                                    command=submit, bootstyle="info")
         submit_button.grid(column=2, row=4, pady=5, padx=0)
         submit_button.config(state=tk.DISABLED)
 
         name_var = tk.StringVar()
-        name_tag = ttk.Label(make, text=self.la("card_name") + ": ", bootstyle="info")
+        name_tag = ttk.Label(make, text=self.i18n("card_name") + ": ", bootstyle="info")
         name_tag.grid(column=0, row=0, pady=10, padx=15)
         name_txt = ttk.Entry(make, bootstyle="info", width=60, textvariable=name_var)
         name_txt.insert(0, "Personal TPM Virtual Smart Card")
         name_txt.grid(column=1, row=0, pady=10, padx=5)
-        name_tip = ttk.Label(make, text="(1~63%s)" % self.la("msg_char"), bootstyle="info")
+        name_tip = ttk.Label(make, text="(1~63%s)" % self.i18n("msg_char"), bootstyle="info")
         name_tip.grid(column=2, row=0, pady=10, padx=5)
         name_var.trace('w', change)
 
         pins_var = tk.StringVar()
         pins_var.trace('w', change)
-        pins_tag = ttk.Label(make, text=self.la("msg_card") + " PIN: ", bootstyle="info")
+        pins_tag = ttk.Label(make, text=self.i18n("msg_card") + " PIN: ", bootstyle="info")
         pins_tag.grid(column=0, row=1, pady=10, padx=15)
         pins_txt = ttk.Entry(make, bootstyle="info", width=60, textvariable=pins_var, show="*")
         # for i in range(0, 8):
         #     pins_txt.insert(0, str(random.randint(0, 9)))
         pins_txt.grid(column=1, row=1, pady=10, padx=5)
-        pins_tip = ttk.Label(make, text="(4~15%s)" % self.la("msg_char"), bootstyle="info")
+        pins_tip = ttk.Label(make, text="(4~15%s)" % self.i18n("msg_char"), bootstyle="info")
         pins_tip.grid(column=2, row=1, pady=10, padx=5)
 
-        puks_tag = ttk.Label(make, text=self.la("msg_card") + " PUK: ", bootstyle="info")
+        puks_tag = ttk.Label(make, text=self.i18n("msg_card") + " PUK: ", bootstyle="info")
         puks_tag.grid(column=0, row=2, pady=10, padx=15)
         puks_txt = ttk.Entry(make, bootstyle="info", width=60)
         puks_txt.grid(column=1, row=2, pady=10, padx=5)
         puks_var = tk.BooleanVar()
-        puks_tip = ttk.Checkbutton(make, text=self.la("msg_disable") + " PUK", bootstyle="info-round-toggle",
+        puks_tip = ttk.Checkbutton(make, text=self.i18n("msg_disable") + " PUK", bootstyle="info-round-toggle",
                                    variable=puks_var, command=disable)
         puks_tip.grid(column=2, row=2, pady=10, padx=5)
         for i in range(0, 16):
             puks_txt.insert(0, str(random.randint(0, 9)))
 
-        adks_tag = ttk.Label(make, text=self.la("mag_admin_key") + ": ", bootstyle="info")
+        adks_tag = ttk.Label(make, text=self.i18n("mag_admin_key") + ": ", bootstyle="info")
         adks_tag.grid(column=0, row=3, pady=10, padx=15)
         adks_txt = ttk.Entry(make, bootstyle="info", width=60)
         adks_txt.grid(column=1, row=3, pady=10, padx=5)
         adks_var = tk.BooleanVar()
-        adks_tip = ttk.Checkbutton(make, text=self.la("mag_random_new"), bootstyle="info-round-toggle",
+        adks_tip = ttk.Checkbutton(make, text=self.i18n("mag_random_new"), bootstyle="info-round-toggle",
                                    variable=adks_var, command=randoms)
         for i in range(0, 48):
             adks_txt.insert(0, str(random.randint(0, 9)))
@@ -763,7 +763,7 @@ class SmartCardAPP:
             make = ttk.Toplevel(self.root)
             make.geometry("300x220")
             make.geometry(f"+{self.size[0]}+{self.size[1]}")
-            make.title(self.la("msg_remove") + self.la("msg_" + in_name))
+            make.title(self.i18n("msg_remove") + self.i18n("msg_" + in_name))
 
             def submit():
                 if in_name == "card":
@@ -775,8 +775,8 @@ class SmartCardAPP:
                 make.destroy()
                 if len(result) > 0:
                     if in_name == "cert":
-                        result += self.la("delete_cert_reboot")
-                    messagebox.showinfo(self.la("msg_remove") + self.la("msg_result"), result)
+                        result += self.i18n("delete_cert_reboot")
+                    messagebox.showinfo(self.i18n("msg_remove") + self.i18n("msg_result"), result)
 
             def checks():
                 if kill_var.get():
@@ -785,27 +785,28 @@ class SmartCardAPP:
                     submit_b.config(state=tk.DISABLED)
 
             kill_tag = ttk.Label(make,
-                                 text=self.la("delete_cert_titles") % (
-                                     self.la("msg_" + in_name), self.pick[in_name]))
+                                 text=self.i18n("delete_cert_titles") % (
+                                     self.i18n("msg_" + in_name), self.pick[in_name]))
             kill_tag.place(x=20, y=10)
 
             kill_tip = ttk.Label(make, bootstyle="danger",
-                                 text=self.la("delete_cert_detail"))
+                                 text=self.i18n("delete_cert_detail"))
             kill_tip.place(x=20, y=80)
             kill_var = tk.BooleanVar()
-            kill_yes = ttk.Checkbutton(make, text=self.la("delete_cert_checks") % self.la("msg_" + in_name),
+            kill_yes = ttk.Checkbutton(make, text=self.i18n("delete_cert_checks") % self.i18n("msg_" + in_name),
                                        bootstyle="dark", command=checks, variable=kill_var)
             kill_yes.state(['!alternate'])
             kill_yes.place(x=20, y=130)
 
-            cancel_b = ttk.Button(make, text=self.la("msg_cancel"), command=make.destroy, bootstyle="success")
+            cancel_b = ttk.Button(make, text=self.i18n("msg_cancel"), command=make.destroy, bootstyle="success")
             cancel_b.place(x=20, y=180)
-            submit_b = ttk.Button(make, text=self.la("msg_remove"), command=submit, bootstyle="danger")
+            submit_b = ttk.Button(make, text=self.i18n("msg_remove"), command=submit, bootstyle="danger")
             submit_b.place(x=230, y=180)
             submit_b.config(state=tk.DISABLED)
 
     def cert_import(self, flag="pfx"):
         sub = CertImport(flag, self.root, self)
+        self.load_status()
         sub.page.mainloop()
 
     def reqs_create(self):
@@ -826,12 +827,12 @@ class SmartCardAPP:
                 if um_var.get():
                     um_txt.config(state=tk.NORMAL)
                     um_txt.config(bootstyle="info")
-                    um_tip.config(text="0-65536%s" % self.la("msg_char"))
+                    um_tip.config(text="0-65536%s" % self.i18n("msg_char"))
                 else:
                     um_txt.delete(0, tk.END)
                     um_txt.config(state=tk.DISABLED)
                     um_txt.config(bootstyle="default")
-                    um_tip.config(text=self.la("msg_ml_text"))
+                    um_tip.config(text=self.i18n("msg_ml_text"))
             # 密钥限制开关 ===============================
             if v_data.get():
                 v_sign.set(1)
@@ -943,8 +944,8 @@ class SmartCardAPP:
                             else:
                                 make.attributes('-topmost', False)
                                 messagebox.showwarning(
-                                    self.la("msg_error_ut"),
-                                    self.la("msg_error_it") + "\n%s" % keyData)
+                                    self.i18n("msg_error_ut"),
+                                    self.i18n("msg_error_it") + "\n%s" % keyData)
                                 make.attributes('-topmost', True)
                                 return None
 
@@ -963,7 +964,7 @@ class SmartCardAPP:
                 title="Save as"  # 对话框标题
             )
             result = TPMSmartCard.createCSR(file_path, save_path)
-            messagebox.showinfo(self.la("b_csr") + self.la("msg_create"), result)
+            messagebox.showinfo(self.i18n("b_csr") + self.i18n("msg_create"), result)
             # make.attributes('-topmost', True)
             self.load_status()
             make.destroy()
@@ -985,44 +986,44 @@ class SmartCardAPP:
         make.geometry("800x540")
         make.geometry(f"+{self.size[0]}+{self.size[1]}")
         make.attributes('-topmost', True)
-        make.title(self.la("msg_create") + self.la("msg_cert"))
+        make.title(self.i18n("msg_create") + self.i18n("msg_cert"))
 
         cn_var = tk.StringVar()
         cn_var.trace('w', change)
-        cn_tag = ttk.Label(make, text=self.la("user_name") + ": ")
+        cn_tag = ttk.Label(make, text=self.i18n("user_name") + ": ")
         cn_tag.grid(column=0, row=0, pady=10, padx=15)
         cn_txt = ttk.Entry(make, bootstyle="info", width=83, textvariable=cn_var)
         cn_txt.grid(column=1, row=0, pady=10, padx=5, columnspan=6)
-        cn_tip = ttk.Label(make, text="%s1-64%s" % (self.la("msg_must_in"), self.la("msg_char")))
+        cn_tip = ttk.Label(make, text="%s1-64%s" % (self.i18n("msg_must_in"), self.i18n("msg_char")))
         cn_tip.grid(column=7, row=0, pady=10, padx=5)
 
-        st_tag = ttk.Label(make, text=self.la("user_area") + ": ")
+        st_tag = ttk.Label(make, text=self.i18n("user_area") + ": ")
         st_tag.grid(column=0, row=1, pady=10, padx=15, sticky=W)
         st_txt = ttk.Entry(make, bootstyle="info", width=25)
         st_txt.grid(column=1, row=1, pady=10, padx=5, sticky=W, columnspan=2)
 
-        ll_tag = ttk.Label(make, text=self.la("user_city") + ": ")
+        ll_tag = ttk.Label(make, text=self.i18n("user_city") + ": ")
         ll_tag.grid(column=3, row=1, pady=10, padx=15, sticky=W)
         ll_txt = ttk.Entry(make, bootstyle="info", width=25)
         ll_txt.grid(column=4, row=1, pady=10, padx=5, sticky=W, columnspan=2)
 
-        cc_tag = ttk.Label(make, text=self.la("user_code") + ": ")
+        cc_tag = ttk.Label(make, text=self.i18n("user_code") + ": ")
         cc_tag.grid(column=6, row=1, pady=10, padx=15)
         cc_txt = ttk.Combobox(make, bootstyle="info", width=7, values=list(self.conf['cncode'].keys()))
         cc_txt.grid(column=7, row=1, pady=10, padx=5, sticky=W, columnspan=2)
         cc_txt.set("N/A")
 
-        on_tag = ttk.Label(make, text=self.la("user_on_t") + ": ")
+        on_tag = ttk.Label(make, text=self.i18n("user_on_t") + ": ")
         on_tag.grid(column=0, row=2, pady=10, padx=15, sticky=W)
         on_txt = ttk.Entry(make, bootstyle="info", width=35)
         on_txt.grid(column=1, row=2, pady=10, padx=5, sticky=W, columnspan=3)
 
-        ou_tag = ttk.Label(make, text=self.la("msg_ou_full") + ": ")
+        ou_tag = ttk.Label(make, text=self.i18n("msg_ou_full") + ": ")
         ou_tag.grid(column=4, row=2, pady=10, padx=15, sticky=W)
         ou_txt = ttk.Entry(make, bootstyle="info", width=38)
         ou_txt.grid(column=5, row=2, pady=10, padx=5, sticky=W, columnspan=3)
 
-        kl_tag = ttk.Label(make, text=self.la("pub_length") + ": ")
+        kl_tag = ttk.Label(make, text=self.i18n("pub_length") + ": ")
         kl_tag.grid(column=0, row=3, pady=10, padx=15)
         kl_txt = ttk.Combobox(make, bootstyle="info", width=7, values=["RSA1024", "RSA2048"])
         kl_txt.grid(column=1, row=3, pady=10, padx=5, sticky=W)
@@ -1032,12 +1033,12 @@ class SmartCardAPP:
         kl_sha.grid(column=2, row=3, pady=10, padx=5, sticky=W)
         kl_sha.set("SHA256")
 
-        ks_tag = ttk.Label(make, text=self.la("msg_ks_full"))
+        ks_tag = ttk.Label(make, text=self.i18n("msg_ks_full"))
         ks_tag.grid(column=3, row=3, pady=10, padx=15)
         v_sign = tk.IntVar()
         v_sign.set(1)
         v_sign.trace('w', change)
-        k_sign = ttk.Checkbutton(make, bootstyle="success", width=8, text=self.la('msg_sign'),
+        k_sign = ttk.Checkbutton(make, bootstyle="success", width=8, text=self.i18n('msg_sign'),
                                  variable=v_sign)
         k_sign.grid(column=4, row=3, pady=10, padx=5, sticky=W)
         k_sign.state(['!alternate'])
@@ -1045,20 +1046,20 @@ class SmartCardAPP:
         v_data = tk.IntVar()
         v_data.set(1)
         v_data.trace('w', change)
-        k_data = ttk.Checkbutton(make, bootstyle="success", width=8, text=self.la('msg_data'),
+        k_data = ttk.Checkbutton(make, bootstyle="success", width=8, text=self.i18n('msg_data'),
                                  variable=v_data)
         k_data.grid(column=5, row=3, pady=10, padx=5, sticky=W)
         k_data.state(['!alternate'])
 
-        ml_tag = ttk.Label(make, text=self.la("msg_ml_lite"))
+        ml_tag = ttk.Label(make, text=self.i18n("msg_ml_lite"))
         ml_tag.grid(column=6, row=3, pady=10, padx=15)
         um_var = tk.IntVar()
         um_var.trace('w', change)
-        m_sign = ttk.Checkbutton(make, bootstyle="info-round-toggle", text=self.la('msg_ml_full'),
+        m_sign = ttk.Checkbutton(make, bootstyle="info-round-toggle", text=self.i18n('msg_ml_full'),
                                  variable=um_var)
         m_sign.grid(column=7, row=3, pady=10, padx=5, sticky=W)
 
-        ku_tag = ttk.Label(make, text=self.la("key_usages") + ": ")
+        ku_tag = ttk.Label(make, text=self.i18n("key_usages") + ": ")
         ku_tag.grid(column=0, row=4, pady=10, padx=15)
         ku_num = 1
         ku_dat = {}
@@ -1072,32 +1073,32 @@ class SmartCardAPP:
                   "DecipherOnly": 0x8000}
         for ku_inf in ku_key:
             ku_out[ku_inf] = tk.BooleanVar()
-            ku_dat[ku_inf] = ttk.Checkbutton(make, bootstyle="primary", width=10, text=self.la(ku_inf),
+            ku_dat[ku_inf] = ttk.Checkbutton(make, bootstyle="primary", width=10, text=self.i18n(ku_inf),
                                              variable=ku_out[ku_inf])
             ku_dat[ku_inf].grid(column=ku_num, row=4, padx=8 if ku_inf == "DecipherOnly" else 5)
             ku_num += 1
             ku_dat[ku_inf].state(['!alternate'])
 
-        dn_tag = ttk.Label(make, text=self.la("msg_domain") + ": ")
+        dn_tag = ttk.Label(make, text=self.i18n("msg_domain") + ": ")
         dn_tag.grid(column=0, row=5, pady=10, padx=15)
         dn_txt = ttk.Entry(make, bootstyle="info", width=83)
         dn_txt.grid(column=1, row=5, pady=10, padx=5, columnspan=6)
-        dn_tip = ttk.Label(make, text="%s" % self.la("msg_splits"))
+        dn_tip = ttk.Label(make, text="%s" % self.i18n("msg_splits"))
         dn_tip.grid(column=7, row=5, pady=10, padx=0)
 
-        um_tag = ttk.Label(make, text=self.la("msg_emails") + ": ")
+        um_tag = ttk.Label(make, text=self.i18n("msg_emails") + ": ")
         um_tag.grid(column=0, row=6, pady=10, padx=15)
         um_txt = ttk.Entry(make, bootstyle="default", width=83)
         um_txt.grid(column=1, row=6, pady=10, padx=5, columnspan=6)
-        um_tip = ttk.Label(make, text=self.la("msg_ml_text"))
+        um_tip = ttk.Label(make, text=self.i18n("msg_ml_text"))
         um_tip.grid(column=7, row=6, pady=10, padx=0)
         um_txt.config(state=tk.DISABLED)
 
-        dt_tag = ttk.Label(make, text=self.la("DESCRIPTION") + ": ")
+        dt_tag = ttk.Label(make, text=self.i18n("DESCRIPTION") + ": ")
         dt_tag.grid(column=0, row=7, pady=10, padx=15)
         dt_txt = ttk.Entry(make, bootstyle="info", width=83)
         dt_txt.grid(column=1, row=7, pady=10, padx=5, columnspan=6)
-        dt_tip = ttk.Label(make, text="0-65536%s" % self.la("msg_char"))
+        dt_tip = ttk.Label(make, text="0-65536%s" % self.i18n("msg_char"))
         dt_tip.grid(column=7, row=7, pady=10, padx=0)
 
         def resign(*args):
@@ -1128,18 +1129,18 @@ class SmartCardAPP:
 
         va_self = tk.BooleanVar()
         va_self.trace('w', resign)
-        tg_self = ttk.Label(make, text=self.la("is_sign") + ": ")
+        tg_self = ttk.Label(make, text=self.i18n("is_sign") + ": ")
         tg_self.grid(column=0, row=8, pady=20, padx=15)
-        is_self = ttk.Checkbutton(make, bootstyle="info-round-toggle", text=self.la('is_self'), variable=va_self)
+        is_self = ttk.Checkbutton(make, bootstyle="info-round-toggle", text=self.i18n('is_self'), variable=va_self)
         is_self.grid(column=1, row=8, pady=10, padx=5)
 
-        open_pt = ttk.Label(make, text=self.la("cert_open") + ": ")
+        open_pt = ttk.Label(make, text=self.i18n("cert_open") + ": ")
         open_pt.grid(column=2, row=8, pady=10, padx=15)
         open_dt = ttk.DateEntry(make, style='success.TCalendar', width=15)
         open_dt.grid(column=3, row=8, pady=10, padx=15, columnspan=2)
         open_dt.entry.config(state=tk.DISABLED)
         open_dt.button.config(state=tk.DISABLED)
-        stop_pt = ttk.Label(make, text=self.la("cert_stop") + ": ")
+        stop_pt = ttk.Label(make, text=self.i18n("cert_stop") + ": ")
         stop_pt.grid(column=5, row=8, pady=10, padx=15)
         stop_dt = ttk.DateEntry(make, style='success.TCalendar', width=15)
         stop_dt.grid(column=6, row=8, pady=10, padx=15, columnspan=2)
@@ -1159,7 +1160,7 @@ class SmartCardAPP:
         va_ca_t = tk.BooleanVar()
         va_ca_t.trace('w', set_ca)
         is_ca_t = ttk.Checkbutton(make, bootstyle="info",
-                                  text=self.la('is_ca_t'),
+                                  text=self.i18n('is_ca_t'),
                                   variable=va_ca_t)
         is_ca_t.grid(column=0, row=9, pady=10, padx=5)
 
@@ -1178,22 +1179,22 @@ class SmartCardAPP:
         ext_num = 1
         for ext_name in ext_list:
             ext_out[ext_name] = tk.BooleanVar()
-            ext_dat[ext_name] = ttk.Checkbutton(make, bootstyle="primary", width=10, text=self.la(ext_name),
+            ext_dat[ext_name] = ttk.Checkbutton(make, bootstyle="primary", width=10, text=self.i18n(ext_name),
                                                 variable=ext_out[ext_name])
             ext_dat[ext_name].grid(column=ext_num, row=9, padx=5)
             ext_num += 1
             ext_dat[ext_name].state(['!alternate'])
         resign()
 
-        cancel_button = ttk.Button(make, text=self.la("msg_cancel"), command=make.destroy, bootstyle="danger")
+        cancel_button = ttk.Button(make, text=self.i18n("msg_cancel"), command=make.destroy, bootstyle="danger")
         cancel_button.grid(column=0, row=10, pady=5, padx=15)
-        submit_button = ttk.Button(make, text=self.la("msg_create_csr"), command=submit, bootstyle="success")
+        submit_button = ttk.Button(make, text=self.i18n("msg_create_csr"), command=submit, bootstyle="success")
         submit_button.grid(column=7, row=10, pady=5, padx=0)
         submit_button.config(state=tk.DISABLED)
         v_csp_ts = tk.IntVar()
         v_csp_ts.set(0)
         v_csp_ts.trace('w', csp_ts)
-        csp_sets = ttk.Checkbutton(make, bootstyle="info-round-toggle", text=self.la('csp_set_'),
+        csp_sets = ttk.Checkbutton(make, bootstyle="info-round-toggle", text=self.i18n('csp_set_'),
                                    variable=v_csp_ts)
         csp_data = ttk.Combobox(make, bootstyle="info", width=62, values=list())
         csp_sets.grid(column=1, row=10, pady=5, padx=15, sticky=W)

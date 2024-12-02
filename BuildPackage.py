@@ -24,6 +24,14 @@ server = Executable(
     icon="Config/iconer/icon04.ico",
     # uac_admin=True
 )
+
+tokens = Executable(
+    script="SubApp/CertImport.py",
+    base="Win32GUI",
+    icon="Config/iconer/icon03.ico",
+    uac_admin=True
+)
+
 # SETUP CX FREEZE
 setup(
     name="TPM Virtual Smart Card Manager",
@@ -35,6 +43,6 @@ setup(
     }
     },
     executables=[
-        client, server
+        client, server, tokens
     ],
 )
