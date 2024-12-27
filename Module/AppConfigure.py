@@ -24,3 +24,6 @@ class AppConfigure:
         if type(temp_data[in_name]) is list:
             return "".join(temp_data[in_name])
         return temp_data[in_name]
+
+    def load_status(self):
+        pass

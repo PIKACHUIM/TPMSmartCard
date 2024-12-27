@@ -471,20 +471,23 @@ class SmartCardAPP:
                             self.i18n("msg_about_about"))
 
     def check_tpm_h(self):
-        process = subprocess.run(" powershell Get-TPM", text=True,
-                                 capture_output=True, shell=True)
-        results = process.stdout.splitlines()
-        for line in results:
+        process = subprocess.run("powershell Get-TPM", text=True, capture_output=True, shell=True)
+        results = process.stdout.replace(" ", "")
+        results = [i for i in ''.join(x for x in results if x.isprintable() or x == "\n").split("\n") if len(i)]
+        results = ["%-25s\t: %s" % (i.split(":")[0] + "\t" * int(16 / len(i.split(":")[0])), i.split(":")[1]) for i in
+                   results]
+        results = "\n".join(results).replace("TpmOwned\t\t", "TpmOwned\t")
+        for line in results.split("\n"):
             if line.find("TpmActivated") >= 0:
                 if line.find("True") >= 0:
                     messagebox.showinfo(self.i18n("msg_tpm_check_text"),
-                                        self.i18n("msg_tpm_check_done") % "".join(results))
+                                        self.i18n("msg_tpm_check_done") % results)
                     return True
                 else:
                     messagebox.showerror(self.i18n("msg_tpm_check_text"),
-                                         self.i18n("msg_tpm_check_fail") % "".join(results))
+                                         self.i18n("msg_tpm_check_fail") % results)
         messagebox.showwarning(self.i18n("msg_tpm_check_text"),
-                               self.i18n("msg_tpm_check_none") % "\n".join(results))
+                               self.i18n("msg_tpm_check_none") % results)
         return False
 
     def open_github(self):
@@ -501,7 +504,7 @@ class SmartCardAPP:
         def change(item, tips, is_same=False, *args):
             password = item.get()
             # print(password)
-            if len(password) < 4:
+            if len(password) < 8:
                 tips.config(text="❌ " + self.i18n("msg_pass_length_l1" if not is_same else "msg_pass_length_l2"))
                 submit_button.config(state=tk.DISABLED)
             elif is_same and next_txt.get() != same_txt.get():
@@ -509,7 +512,7 @@ class SmartCardAPP:
                 submit_button.config(state=tk.DISABLED)
             else:
                 tips.config(text="✅ ")
-            if len(pass_txt.get()) >= 4 and len(next_txt.get()) >= 4:
+            if len(pass_txt.get()) >= 8 and len(next_txt.get()) >= 8:
                 if next_txt.get() == same_txt.get():
                     next_tip.config(text="✅ ")
                     same_tip.config(text="✅ ")
@@ -528,11 +531,11 @@ class SmartCardAPP:
             pass_new = next_txt.get()
             same_new = same_txt.get()
             # print(pass_key, pass_new, same_new)
-            if pass_key == "" or len(pass_key) < 4:
+            if pass_key == "" or len(pass_key) < 8:
                 make.attributes('-topmost', False)
                 messagebox.showwarning(self.i18n("warn"), self.i18n("msg_pass_length_l1"))
                 make.attributes('-topmost', True)
-            elif pass_new == "" or len(pass_new) < 4:
+            elif pass_new == "" or len(pass_new) < 8:
                 make.attributes('-topmost', False)
                 messagebox.showwarning(self.i18n("warn"), self.i18n("msg_pass_length_l2"))
                 make.attributes('-topmost', True)
@@ -620,10 +623,10 @@ class SmartCardAPP:
             if name_txt.get() == "":
                 make.attributes('-topmost', True)
                 messagebox.showwarning(self.i18n("fail"), self.i18n("msg_new_card_txt_e"))
-            elif not 4 <= len(pins_txt.get()) <= 15:
+            elif not 8 <= len(pins_txt.get()) <= 15:
                 make.attributes('-topmost', True)
                 messagebox.showwarning(self.i18n("fail"), self.i18n("msg_new_card_pin_e"))
-            elif len(puks_txt.get()) > 0 and not 8 <= len(puks_txt.get()) <= 16:
+            elif len(puks_txt.get()) > 0 and not 16 <= len(puks_txt.get()) <= 16:
                 make.attributes('-topmost', True)
                 messagebox.showwarning(self.i18n("fail"), self.i18n("msg_new_card_puk_e"))
             elif len(adks_txt.get()) != 48:
@@ -685,7 +688,7 @@ class SmartCardAPP:
             make.destroy()
 
         make = ttk.Toplevel(self.root)
-        make.geometry("700x240")
+        make.geometry("710x240")
         make.geometry(f"+{self.size[0]}+{self.size[1]}")
         make.attributes('-topmost', True)
         make.title(self.i18n("msg_new_tpm_card"))

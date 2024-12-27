@@ -48,14 +48,14 @@ class CertImport:
         self.path_var = tk.StringVar()
         self.path_var.trace('w', self.change)
         self.path_tag = ttk.Label(self.page, bootstyle="info",
-                                  text="%s: " % self.main.i18n("msg_select_file_fp"))
+                                  text="%s" % self.main.i18n("msg_select_file_fp"))
         self.path_txt = ttk.Entry(self.page, bootstyle="info", width=60, textvariable=self.path_var)
         self.path_tip = ttk.Button(self.page, bootstyle="info", command=self.search,
                                    text=self.main.i18n("msg_open") + self.main.i18n("msg_file"))
         if self.flag == "pfx":
             self.pass_var = tk.StringVar()
             self.pass_tag = ttk.Label(self.page, bootstyle="info",
-                                      text=self.main.i18n("msg_cert") + self.main.i18n("msg_pass") + ": ")
+                                      text=self.main.i18n("msg_cert") + self.main.i18n("msg_pass"))
             self.pass_txt = ttk.Entry(self.page, bootstyle="info", width=60, show="*",
                                       textvariable=self.pass_var)
         # 导入密码 =====================================================================================
@@ -145,7 +145,7 @@ class CertImport:
     def clouds(self, *args):
         # 云端下发 ====================================
         if self.v_clouds.get():
-            self.pass_tag.config(text=self.main.i18n("msg_keys_cloud") + ": ")
+            self.pass_tag.config(text=self.main.i18n("msg_keys_cloud"))
             self.path_tip.grid_forget()
             self.x25519()
             self.pass_txt.delete(0, tk.END)
@@ -153,7 +153,7 @@ class CertImport:
             self.pass_txt.insert(0, self.pub_key)
             self.path_tag.config(text=self.main.i18n("msg_urls_cloud"))
             self.path_txt.delete(0, tk.END)
-            self.path_txt.insert(0, "http://127.0.0.1:1080/get/cert")
+            self.path_txt.insert(0, "https://cert.52pika.cn/card/get/cert")
             if len(self.path_txt.get()) == 0:
                 self.submit_button.config(state=tk.DISABLED)
             else:
@@ -165,7 +165,7 @@ class CertImport:
         else:
             self.path_tip.grid(column=3, row=0, pady=10, padx=5)
             self.path_txt.delete(0, tk.END)
-            self.pass_tag.config(text=self.main.i18n("msg_cert") + self.main.i18n("msg_pass") + ": ")
+            self.pass_tag.config(text=self.main.i18n("msg_cert") + self.main.i18n("msg_pass"))
             self.pass_txt.delete(0, tk.END)
             self.pass_txt.config(show="*")
             # path_tip.config(text=self.la("msg_open") + self.la("msg_file"))
@@ -212,11 +212,9 @@ class CertImport:
                             encrypted_data.encode()
                         )
                     )
-
                     # tmp = base64.b64encode(decrypted_data)
                     # tmp = tmp.decode()
                     # result = TPMSmartCard.baseCerts(tmp, responded_json['pfxkey'])
-
                     tmp = hashlib.sha256(decrypted_data).hexdigest()
                     cert_path = os.path.join(os.getenv('APPDATA'), tmp + ".pfx")
                     with open(cert_path, 'wb') as save_file:
@@ -227,15 +225,14 @@ class CertImport:
                     with open(cert_path, 'wb') as save_file:
                         for i in range(0, int(len(decrypted_data) / 16 + 1)):
                             save_file.write(randbytes(16))
+                    self.main.load_status()
                 else:
-                    messagebox.showwarning(self.main.i18n("fail"),
-                                           "Error Responded Data")
+                    messagebox.showwarning(self.main.i18n("fail"), "Error Responded Data")
                     self.page.attributes('-topmost', True)
                     if not self.apps:
                         return False
             else:
-                messagebox.showwarning(self.main.i18n("fail"),
-                                       "Error Responded Code")
+                messagebox.showwarning(self.main.i18n("fail"),"Error Responded Code")
                 self.page.attributes('-topmost', True)
                 if not self.apps:
                     return False
@@ -255,6 +252,7 @@ class CertImport:
                         in_csp=self.csp_data.get() if self.v_csp_ts.get() else None)
                 else:
                     result = TPMSmartCard.loadCerts(self.path_txt.get())
+                self.main.load_status()
                 self.page.destroy()
         messagebox.showinfo(
             self.main.i18n("msg_import") + self.main.i18n("msg_cert") + self.main.i18n("msg_result"),
