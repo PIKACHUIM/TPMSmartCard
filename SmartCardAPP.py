@@ -111,12 +111,11 @@ class SmartCardAPP:
         self.button["card_main"]["pin"].config(state=tk.DISABLED)
         self.button["card_main"]["puk"].config(state=tk.DISABLED)
         self.button["card_main"]["del"].config(state=tk.DISABLED)
-
         self.button["cert_main"]["sys"].config(state=tk.DISABLED)
         self.button["cert_main"]["out"].config(state=tk.DISABLED)
         self.button["cert_main"]["non"].config(state=tk.DISABLED)
-
         self.button["main_line"]["set"].config(state=tk.DISABLED)
+
         self.check_datas()
         self.load_status()
         self.root.mainloop()
@@ -135,6 +134,15 @@ class SmartCardAPP:
         return temp_data[in_name]
 
     def check_datas(self):
+        # TPM --------------------------------------------------------------------------------
+        tpm_status = self.check_tpm_h(out=False)
+        if tpm_status != 0:
+            messagebox.showerror(
+                self.i18n("msg_cert_out_ft_item"),
+                (self.i18n("msg_tpm_check_fail") % "None Activated TPM") if tpm_status == 1 \
+                    else (self.i18n("msg_tpm_check_none") % "Unknown TPM Status")
+            )
+        # OpenSC -----------------------------------------------------------------------------
         opensc_path_x64 = r"C:\Program Files\OpenSC Project\OpenSC"
         opensc_path_x86 = r"C:\Program Files (x86)\OpenSC Project\OpenSC"
         if not os.path.exists(opensc_path_x64) and not os.path.exists(opensc_path_x86):
@@ -470,7 +478,7 @@ class SmartCardAPP:
         messagebox.showinfo(self.i18n("msg_about_title"),
                             self.i18n("msg_about_about"))
 
-    def check_tpm_h(self):
+    def check_tpm_h(self, out=True):
         process = subprocess.run("powershell Get-TPM", text=True, capture_output=True, shell=True)
         results = process.stdout.replace(" ", "")
         results = [i for i in ''.join(x for x in results if x.isprintable() or x == "\n").split("\n") if len(i)]
@@ -480,15 +488,19 @@ class SmartCardAPP:
         for line in results.split("\n"):
             if line.find("TpmActivated") >= 0:
                 if line.find("True") >= 0:
-                    messagebox.showinfo(self.i18n("msg_tpm_check_text"),
-                                        self.i18n("msg_tpm_check_done") % results)
-                    return True
+                    if out:
+                        messagebox.showinfo(self.i18n("msg_tpm_check_text"),
+                                            self.i18n("msg_tpm_check_done") % results)
+                    return 0
                 else:
-                    messagebox.showerror(self.i18n("msg_tpm_check_text"),
-                                         self.i18n("msg_tpm_check_fail") % results)
-        messagebox.showwarning(self.i18n("msg_tpm_check_text"),
-                               self.i18n("msg_tpm_check_none") % results)
-        return False
+                    if out:
+                        messagebox.showerror(self.i18n("msg_tpm_check_text"),
+                                             self.i18n("msg_tpm_check_fail") % results)
+                    return 1
+        if out:
+            messagebox.showwarning(self.i18n("msg_tpm_check_text"),
+                                   self.i18n("msg_tpm_check_none") % results)
+        return -1
 
     def open_github(self):
         webbrowser.open('https://github.com/PIKACHUIM/TPMSmartCard')
