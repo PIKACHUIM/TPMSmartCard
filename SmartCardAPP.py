@@ -452,17 +452,17 @@ class SmartCardAPP:
                         "cer_policy": cer_policy,
                         "user_name": user_name,
                         "user_code": cert_now.OwnersInfo["C"] if "C" in cert_now.OwnersInfo else "N/A",
-                        "user_area": cert_now.OwnersInfo["S"] if "S" in cert_now.OwnersInfo else "N/A",
-                        "user_city": cert_now.OwnersInfo["L"] if "L" in cert_now.OwnersInfo else "N/A",
-                        "user_on_t": cert_now.OwnersInfo["O"] if "O" in cert_now.OwnersInfo else "(Empty)",
-                        "user_ou_t": cert_now.OwnersInfo["OU"] if "OU" in cert_now.OwnersInfo else "(Empty)",
+                        "user_area": cert_now.OwnersInfo["S"][:7] if "S" in cert_now.OwnersInfo else "N/A",
+                        "user_city": cert_now.OwnersInfo["L"][:7] if "L" in cert_now.OwnersInfo else "N/A",
+                        "user_on_t": cert_now.OwnersInfo["O"][:39] if "O" in cert_now.OwnersInfo else "(Empty)",
+                        "user_ou_t": cert_now.OwnersInfo["OU"][:39] if "OU" in cert_now.OwnersInfo else "(Empty)",
 
                         "last_name": last_name,
                         "last_code": cert_now.IssuerInfo["C"] if "C" in cert_now.IssuerInfo else "N/A",
-                        "last_area": cert_now.IssuerInfo["S"] if "S" in cert_now.IssuerInfo else "N/A",
-                        "last_city": cert_now.IssuerInfo["L"] if "L" in cert_now.IssuerInfo else "N/A",
-                        "last_on_t": cert_now.IssuerInfo["O"] if "O" in cert_now.IssuerInfo else "(Empty)",
-                        "last_ou_t": cert_now.IssuerInfo["OU"] if "OU" in cert_now.IssuerInfo else "(Empty)",
+                        "last_area": cert_now.IssuerInfo["S"][:7] if "S" in cert_now.IssuerInfo else "N/A",
+                        "last_city": cert_now.IssuerInfo["L"][:7] if "L" in cert_now.IssuerInfo else "N/A",
+                        "last_on_t": cert_now.IssuerInfo["O"][:39] if "O" in cert_now.IssuerInfo else "(Empty)",
+                        "last_ou_t": cert_now.IssuerInfo["OU"][:39] if "OU" in cert_now.IssuerInfo else "(Empty)",
                     }
                     for fill_name in cert_map:
                         for label in ["cert_info", "cert_user", "cert_last"]:
