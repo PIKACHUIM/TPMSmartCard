@@ -14,7 +14,7 @@ class OpenSCDealer:
         command = ".\\OpenSC\\%s.exe %s" % (in_tool, in_comm)
         process = subprocess.run(command, shell=True, text=True, capture_output=True)
         results = (process.stderr + process.stdout).replace("\t", "").split("\n")
-        print(results)
+        # print(results)
         return results
 
     def readCert(self, results, details):
@@ -30,7 +30,7 @@ class OpenSCDealer:
             results['Usage'],
             None if details.find("not found") >= 0 else details
         )
-        print(results)
+        # print(results)
 
     def readCard(self, results, card_name):
         results = [i.split(": ") for i in results[1:10] if len(i)]
@@ -50,7 +50,7 @@ class OpenSCDealer:
                     # results['ID'],
                     serials.lower(),
                 )
-            print(results)
+            # print(results)
 
     def readFile(self, in_data):
         pass

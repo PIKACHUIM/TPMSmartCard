@@ -604,7 +604,7 @@ class SmartCardAPP:
 
     def card_create(self):
         def change(*args):
-            if len(name_txt.get()) == 0 or len(pins_txt.get()) == 0:
+            if len(name_txt.get()) == 0 or len(pins_txt.get()) < 8:
                 submit_button.config(state=tk.DISABLED)
             else:
                 submit_button.config(state=tk.NORMAL)
@@ -700,7 +700,7 @@ class SmartCardAPP:
             make.destroy()
 
         make = ttk.Toplevel(self.root)
-        make.geometry("710x240")
+        make.geometry("660x250")
         make.geometry(f"+{self.size[0]}+{self.size[1]}")
         make.attributes('-topmost', True)
         make.title(self.i18n("msg_new_tpm_card"))
@@ -732,7 +732,7 @@ class SmartCardAPP:
         # for i in range(0, 8):
         #     pins_txt.insert(0, str(random.randint(0, 9)))
         pins_txt.grid(column=1, row=1, pady=10, padx=5)
-        pins_tip = ttk.Label(make, text="(4~15%s)" % self.i18n("msg_char"), bootstyle="info")
+        pins_tip = ttk.Label(make, text="(8~63%s)" % self.i18n("msg_char"), bootstyle="info")
         pins_tip.grid(column=2, row=1, pady=10, padx=5)
 
         puks_tag = ttk.Label(make, text=self.i18n("msg_card") + " PUK: ", bootstyle="info")
@@ -964,11 +964,11 @@ class SmartCardAPP:
                                 make.attributes('-topmost', True)
                                 return None
 
-            print(full_text)
+            # print(full_text)
             make.attributes('-topmost', False)
             file_path = "%s\\%s.inf" % (os.path.expandvars("%APPDATA%"),
                                         hashlib.sha256(full_text.encode()).hexdigest())
-            print(file_path)
+            # print(file_path)
             with open(file_path, 'w', encoding="utf8") as file_file:
                 file_file.write(full_text)
             save_path = filedialog.asksaveasfilename(
