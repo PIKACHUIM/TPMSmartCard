@@ -2,8 +2,11 @@ build/
 build/*
 Caches/
 Caches/*
-# 打包中间产物与产物（install.iss / build.yml 生成）
+# 打包中间产物与产物（install.iss / 工作流生成）
 dist/
 staging/
+# 覆盖全局 gitignore 里的 *.msi（UGit 自动生成的规则）：
+# OpenSC 安装包需要随仓库分发，否则 CI 里打包/安装都会缺文件
+!OpenSC/*.msi
 __pycache__
 .idea

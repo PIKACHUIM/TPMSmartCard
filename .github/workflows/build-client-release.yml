@@ -100,6 +100,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Ensure OpenSC installer
+        shell: pwsh
+        env:
+          MSI_NAME: 'OpenSC-0.25.1_win64-Light.msi'
+          MSI_URL: 'https://github.com/OpenSC/OpenSC/releases/download/0.25.1/OpenSC-0.25.1_win64-Light.msi'
+          MSI_SHA256: '3FD9CABDF54AD1D757E49D5B33CC5834A2186D8E67B0F4DCBD5882E02D6A3EB0'
+        run: |
+          # 程序运行时会调用 OpenSC\<msi> 安装 OpenSC，安装包也把它作为依赖一起分发，
+          # 因此这个 MSI 必须存在于 OpenSC\ 目录（cx_Freeze 会把整个目录复制进产物，
+          # install.iss 也从这里取依赖包）。
+          # 仓库里可能没有它（例如被全局 gitignore 的 *.msi 规则挡住而没提交），
+          # 缺失时从 OpenSC 官方 Release 下载同一份文件并校验 SHA256。
+          $target = Join-Path 'OpenSC' $env:MSI_NAME
+          if (Test-Path $target) {
+            $hash = (Get-FileHash $target -Algorithm SHA256).Hash
+            if ($hash -eq $env:MSI_SHA256) {
+              Write-Host "found $target (sha256 ok)"
+            } else {
+              Write-Host "WARNING: $target sha256 = $hash (expected $env:MSI_SHA256)"
+            }
+            exit 0
+          }
+
+          New-Item -ItemType Directory -Force -Path 'OpenSC' | Out-Null
+          Write-Host "not found in repo, downloading $env:MSI_URL"
+          Invoke-WebRequest -Uri $env:MSI_URL -OutFile $target -UseBasicParsing -TimeoutSec 300
+
+          $hash = (Get-FileHash $target -Algorithm SHA256).Hash
+          if ($hash -ne $env:MSI_SHA256) {
+            Remove-Item $target -Force -ErrorAction SilentlyContinue
+            throw "OpenSC msi sha256 mismatch: expected $env:MSI_SHA256, got $hash"
+          }
+          Write-Host "downloaded $target ($([math]::Round((Get-Item $target).Length / 1MB, 2)) MB)"
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
