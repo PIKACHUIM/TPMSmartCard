@@ -123,7 +123,7 @@
   "msg_cert_out_ft_none": "找不到憑證",
   "msg_cert_out_ft_path": "請先選擇路徑！\n",
   "msg_about_title": "關於本工具",
-  "msg_about_about": "============================================\n              TPM Virtual Smart Card Manager\n============================================\n                   版本：V1.5.0 Jan 01. 2025\n                   作者：Pikachu Ren        \n                   授權：The MIT License    \n============================================\n 專案位址：github.com/PIKACHUIM/TPMSmartCard\n============================================\n",
+  "msg_about_about": "============================================\n              TPM Virtual Smart Card Manager\n============================================\n                   版本：v1.6.0 Jan 01. 2025\n                   作者：Pikachu Ren        \n                   授權：The MIT License    \n============================================\n 專案位址：github.com/PIKACHUIM/TPMSmartCard\n============================================\n",
   "msg_tpm_check_text": "TPM狀態",
   "msg_tpm_check_done": "您的裝置已啟用TPM，詳細資訊：\n%s",
   "msg_tpm_check_fail": "您的裝置未啟用TPM，詳細資訊：\n%s",

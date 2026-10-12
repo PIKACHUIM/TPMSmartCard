@@ -45,13 +45,19 @@ THEME_NAME = os.environ.get("TPMSMART_THEME") or "yeti"
 COLOR_HEAD_BG = "#eef2f7"      # 表格表头背景
 COLOR_HEAD_FG = "#3c4a5a"      # 表格表头文字
 COLOR_MUTED = "#66788a"        # 分组框标题等次要文字
+FRAME_PAD = 13                 # 分组框内边距（内容区相对框体的内缩量）
 TABLE_ROW_HEIGHT = 20          # 表格行高兜底值（正常由主题决定，此处仅探测失败时使用）
 TABLE_HEAD_HEIGHT = 29         # 表格表头高度兜底值
+HEAD_PADDING = (6, 2)          # 表格表头内边距（收紧后表格整体高度更小）
 TABLE_BAR_WIDTH = 12           # 表格滚动条宽度
 FRAME_STYLE = "secondary"      # 分组框风格兜底值
 TABLE_STYLE = "secondary"      # 表格风格兜底值
 MIN_BUTTON_WIDTH = 56          # 按钮最小宽度
 BUTTON_PADDING_FALLBACK = 30   # 量不出控件尺寸时，文案宽度需额外预留的内边距
+# 原版主题：按钮使用的系统配色（ttkbootstrap 会给 Tk 控件自动上主题色）
+NATIVE_COLOR_BG = "SystemButtonFace"
+NATIVE_COLOR_FG = "SystemWindowText"
+NATIVE_COLOR_DIS = "SystemGrayText"
 # 原版主题下各控件使用的 ttk 默认样式名（避免被 ttkbootstrap 接管配色）
 NATIVE_STYLES = {
     "Button": "TButton",
@@ -160,6 +166,16 @@ class SmartCardAPP:
             if not in_bootstyle:
                 return widget_cls(master, **kwargs)
             return widget_cls(master, bootstyle=in_bootstyle, **kwargs)
+        if in_name == "Button":
+            # 原版主题：按钮用原生 Tk 控件，并显式套用系统配色
+            # （ttkbootstrap 会给 Tk 控件自动上主题色，这里必须覆盖掉）
+            button = tk.Button(master, **kwargs)
+            button.configure(background=NATIVE_COLOR_BG, foreground=NATIVE_COLOR_FG,
+                             activebackground=NATIVE_COLOR_BG,
+                             activeforeground=NATIVE_COLOR_FG,
+                             disabledforeground=NATIVE_COLOR_DIS,
+                             relief="raised", borderwidth=1)
+            return button
         widget = getattr(ttk_plain, in_name)(master, **kwargs)
         style_name = NATIVE_STYLES.get(in_name)
         if style_name:
@@ -178,6 +194,8 @@ class SmartCardAPP:
             style.configure("TLabel", font=self.t_fonts['label_name'])
             style.configure("TCheckbutton", font=self.t_fonts['label_name'])
         if self.native:
+            # 原版主题也收紧表头内边距，两个主题的表格高度才接近
+            style.configure("Treeview.Heading", padding=HEAD_PADDING)
             # 原版主题：ttkbootstrap 会把美化主题的文字色残留在样式里
             # （浅色文字配系统默认的浅色底会看不见），统一改回系统文字色。
             # 弹窗（系统设置等）用的是各配色按钮，这里一并覆盖。
@@ -194,7 +212,7 @@ class SmartCardAPP:
             for style_name in self.button_style_names():
                 style.configure("%s.TButton" % style_name, foreground=text_color)
             return None
-        style.configure("Treeview.Heading", padding=(6, 4))
+        style.configure("Treeview.Heading", padding=HEAD_PADDING)
         if self.theme.get("flat_heading"):
             # 美化主题：表头固定为中性灰阶，避免主题自带的高饱和色块
             head_bg = self.theme.get("head_bg") or COLOR_HEAD_BG
@@ -247,6 +265,8 @@ class SmartCardAPP:
             "cert_user": self.view_labels("cert_user"),
             "cert_last": self.view_labels("cert_last"),
         }
+        # 按钮行在两块之间垂直居中，保证按钮上下间距一致
+        self.align_button_rows()
         # 详情区未选中卡片/证书时显示的居中提示
         self.hints = {
             "card_info": self.view_hint("card_info", "msg_hint_card"),
@@ -376,6 +396,51 @@ class SmartCardAPP:
                     self.data.certs[cert_now].sc_keys
                 ))
 
+    # 按钮行垂直居中 ==========================================================
+    # 按钮组, 上方块, 下方块（table: / frame: / end: 三种引用）
+    BUTTON_ROWS = (
+        ("card_main", "table:card_main", "frame:card_info"),
+        ("cert_main", "table:cert_main", "frame:cert_info"),
+        ("card_opts", "frame:card_info", "end:card_main"),
+    )
+
+    def align_button_rows(self):
+        """把按钮行垂直居中到上下两块之间，使按钮上下间距一致。
+
+        美化主题与原版主题的按钮高度不同（31 / 28），固定坐标无法两边都等距，
+        因此这里按控件实测高度重新定位（构建阶段 winfo_reqheight 已可用）。
+        """
+        self.root.update_idletasks()
+        for group, above, below in self.BUTTON_ROWS:
+            buttons = self.button.get(group)
+            if not buttons:
+                continue
+            row_height = list(buttons.values())[0].winfo_reqheight()
+            top = self.block_edge(above, bottom=True)
+            bottom = self.block_edge(below, bottom=False)
+            if top is None or bottom is None or bottom - top <= row_height:
+                continue
+            row_y = top + (bottom - top - row_height) // 2
+            for widget in buttons.values():
+                widget.place_configure(y=row_y)
+                widget.lift()
+        return None
+
+    def block_edge(self, in_name, bottom=True):
+        """取某个块的上下边界；``table:``/``frame:`` 对应已有控件，``end:`` 为框内底部。"""
+        head, _, name = in_name.partition(":")
+        if head == "table":
+            tree = (self.tables.get(name) or (None, None))[0]
+            if tree is None:
+                return None
+            return tree.winfo_y() + tree.winfo_height() if bottom else tree.winfo_y()
+        frame = self.frames.get(name)
+        if frame is None:
+            return None
+        if head == "end":
+            return frame.winfo_y() + frame.winfo_height() - FRAME_PAD
+        return frame.winfo_y() + frame.winfo_height() if bottom else frame.winfo_y()
+
     # 添加框架控件 ============================================================
     def view_frames(self, in_name):
         tb_conf = self.conf['frames']
@@ -412,21 +477,37 @@ class SmartCardAPP:
                               orient='vertical',
                               command=inf.yview)
         inf.configure(yscrollcommand=bar.set)
+        # 表头样式必须配置到控件实际使用的样式上（<主题样式>.Heading），
+        # 否则会被主题的专用样式覆盖：配色要与滚动条区分开，否则表头与滑块
+        # 颜色相同会连成一片，看上去滚动条贯穿整个表格
+        head_style = "%s.Heading" % (inf.cget("style") or "Treeview")
+        self.style.configure(head_style, padding=HEAD_PADDING)
+        if not self.native and self.theme.get("flat_heading"):
+            head_bg = self.theme.get("head_bg") or COLOR_HEAD_BG
+            head_fg = self.theme.get("head_fg") or COLOR_HEAD_FG
+            self.style.configure(head_style, background=head_bg, foreground=head_fg,
+                                 relief="flat", borderwidth=0)
+            self.style.map(head_style, background=[("active", head_bg)])
         # 表头高度/行高随主题不同，先探测再决定可视行数
         tb_head_h, tb_row_h = self.table_metrics(inf)
         tb_rows = max(3, int(tb_pack[2] / tb_row_h))
         inf.configure(height=tb_rows)
         inf.update_idletasks()
-        # 设置表格组件：滚动条与列表等高、紧贴右侧 =============================
-        bar_width = TABLE_BAR_WIDTH
-        inf.place(x=tb_pack[0], y=tb_pack[1], width=tb_area - bar_width - 2)
-        bar.place(x=tb_pack[0] + tb_area - bar_width,
-                  y=tb_pack[1],
-                  height=tb_head_h + tb_rows * tb_row_h)
+        # 设置表格组件：表格占满整个区域，滚动条叠在表体右侧 ===================
+        # （表头下沿起始、与表体等高，视觉上滚动条位于表格内部）
+        # 宽度取控件实际值：不同主题的滚动条宽度不同（原版主题更宽）
+        bar_width = bar.winfo_reqwidth() or TABLE_BAR_WIDTH
+        inf.place(x=tb_pack[0], y=tb_pack[1], width=tb_area)
+        bar.place(x=tb_pack[0] + tb_area - bar_width - 1,
+                  y=tb_pack[1] + tb_head_h,
+                  height=tb_rows * tb_row_h)
+        bar.lift()
         # 设置表列信息 ========================================================
         for th_name, th_width, th_text in zip(tb_name, tb_cols, tb_head):
             inf.heading(th_name, text=th_text)  # 标题
-            inf.column(th_name, anchor='w', width=th_width)
+            # 不让列随控件宽度拉伸：右侧多出的留白正好被滚动条盖住，
+            # 最后一列的内容不会被滚动条遮挡
+            inf.column(th_name, anchor='w', width=th_width, stretch=False)
         return inf, bar
 
     @staticmethod

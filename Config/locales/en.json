@@ -123,7 +123,7 @@
   "msg_cert_out_ft_none": "Certificate not found",
   "msg_cert_out_ft_path": "Please select a path!\n",
   "msg_about_title": "About This Tool",
-  "msg_about_about": "============================================\n              TPM Virtual Smart Card Manager\n============================================\n                   Version: V1.5.0 Jan1/2025\n                   Authors: Pikachu Ren     \n                   License: The MIT License \n============================================\n  Address: github.com/PIKACHUIM/TPMSmartCard\n============================================\n",
+  "msg_about_about": "============================================\n              TPM Virtual Smart Card Manager\n============================================\n                   Version: v1.6.0 Jan1/2025\n                   Authors: Pikachu Ren     \n                   License: The MIT License \n============================================\n  Address: github.com/PIKACHUIM/TPMSmartCard\n============================================\n",
   "msg_tpm_check_text": "TPM Status",
   "msg_tpm_check_done": "Your device has TPM and enabled, Details:\n%s",
   "msg_tpm_check_fail": "Your device may not enabled TPM, Details:\n%s",

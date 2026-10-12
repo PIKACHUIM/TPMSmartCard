@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""系统设置对话框：关于与更新 / 外观 / OpenSC / WinSSH 代理 / TPM 状态。
+"""系统设置对话框：外观 / OpenSC / WinSSH 代理 / TPM 状态 / 关于与更新。
+
+页签顺序：外观（主题 + 语言）在最前，关于与更新在最后。
+
 
 * 「关于与更新」把工具信息与版本更新检查合并在一页（原独立的「关于本工具」
   「项目主页」按钮已合并到这里，统一指向 GitHub 项目主页）；
@@ -129,14 +132,14 @@ class SystemSettings:
         if in_size is not None:
             self.page.geometry("+%d+%d" % (in_size[0], in_size[1]))
         self.page.protocol("WM_DELETE_WINDOW", self.close)
-        # 页签 ==================================================================
+        # 页签（外观在最前、关于与更新在最后）====================================
         self.notebook = ttk.Notebook(self.page)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=12, pady=(12, 6))
-        self.view_about(ttk.Frame(self.notebook, padding=16), self.t("msg_set_about_update"))
         self.view_appearance(ttk.Frame(self.notebook, padding=16), self.t("msg_set_appearance"))
         self.view_osc(ttk.Frame(self.notebook, padding=16), self.t("msg_set_osc"))
         self.view_ssh(ttk.Frame(self.notebook, padding=16), self.t("msg_set_ssh"))
         self.view_tpm(ttk.Frame(self.notebook, padding=16), self.t("msg_set_tpm"))
+        self.view_about(ttk.Frame(self.notebook, padding=16), self.t("msg_set_about_update"))
         # 关闭按钮 ==============================================================
         ttk.Button(self.page, bootstyle="secondary", text=self.t("msg_set_close"),
                    command=self.close).pack(side=tk.RIGHT, padx=12, pady=(0, 12))

@@ -2,5 +2,8 @@ build/
 build/*
 Caches/
 Caches/*
+# 打包中间产物与产物（install.iss / build.yml 生成）
+dist/
+staging/
 __pycache__
 .idea

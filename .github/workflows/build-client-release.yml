@@ -1,0 +1,340 @@
+name: Build Client Release
+
+# 一个文件覆盖两条发布路径：
+#   1) 推送到 main            → 自动构建并覆盖发布到 beta（滚动预发布版）
+#   2) 手动 workflow_dispatch → 填写版本号，发布正式 Release（可选草稿）
+#
+# 构建内容（Windows x64）：
+#   - cx_Freeze 绿色版 zip
+#   - Inno Setup 安装包（自动安装 OpenSC、VC++ 运行库、SSH 密钥代理）
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: '发布目标：beta = 滚动预发布版；release = 正式版'
+        type: choice
+        options: [ beta, release ]
+        default: beta
+      version:
+        description: '版本号（channel=release 时必填，例如 1.6 或 v1.6.2026.1012）'
+        required: false
+        type: string
+      draft:
+        description: 'channel=release 时以草稿方式创建（稍后手动公开）'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  # 推送触发的 beta 构建只保留最新一次；手动发布单独分组，避免被取消
+  group: ${{ github.event_name == 'push' && 'client-beta-build' || 'client-release-build' }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  # 解析发布目标与版本号（release 时顺带校验版本唯一性）
+  prepare:
+    name: Resolve target
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.resolve.outputs.channel }}
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Resolve
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          channel="$INPUT_CHANNEL"
+          if [[ "$EVENT" == "push" ]]; then
+            channel="beta"
+          fi
+
+          if [[ "$channel" != "release" ]]; then
+            echo "channel=beta" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+            echo "target: beta"
+            exit 0
+          fi
+
+          version="${INPUT_VERSION#v}"
+          version="${version#V}"
+          if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error::版本号格式不正确：${INPUT_VERSION}（应形如 1.6 或 1.6.2026.1012）"
+            exit 1
+          fi
+          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release v$version 已存在，请更换版本号或先删除旧 Release"
+            exit 1
+          fi
+
+          echo "channel=release" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "target: release v$version"
+
+  # 构建：cx_Freeze 绿色版 + Inno Setup 安装包
+  build:
+    name: Build Windows x64
+    needs: prepare
+    runs-on: windows-latest
+    outputs:
+      artifact: ${{ steps.pack.outputs.artifact }}
+      package: ${{ steps.pack.outputs.package }}
+      setup: ${{ steps.iscc.outputs.setup }}
+    env:
+      # 与 install.aip 中引用的 build/exe.win-amd64-3.11 保持一致，方便把 CI 产物继续用于本地打安装包
+      PYTHON_VERSION: '3.11'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x64
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Resolve package name
+        id: naming
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          $version = "$env:INPUT_VERSION".Trim() -replace '^[vV]', ''
+
+          # exe 版本资源必须是 4 段数字，缺位补 0
+          $version4 = '1.5.0.0'
+          if (-not [string]::IsNullOrWhiteSpace($version)) {
+            $parts = @($version -split '\.')
+            while ($parts.Count -lt 4) { $parts += '0' }
+            $version4 = ($parts[0..3] -join '.')
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "version4=$version4" >> $env:GITHUB_OUTPUT
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            "name=TPMSmartCard-beta-win64" >> $env:GITHUB_OUTPUT
+          } else {
+            "name=TPMSmartCard-$version-win64" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Build with cx_Freeze
+        env:
+          TPMSMART_VERSION: ${{ steps.naming.outputs.version }}
+        run: python BuildPackage.py build
+
+      - name: Package (portable zip)
+        id: pack
+        shell: pwsh
+        env:
+          NAME: ${{ steps.naming.outputs.name }}
+        run: |
+          $name = $env:NAME
+          $stage = Join-Path 'staging' $name
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          $buildDir = Get-ChildItem -Path 'build' -Directory -ErrorAction SilentlyContinue |
+                      Where-Object { $_.Name -like 'exe.*' } | Select-Object -First 1
+          if (-not $buildDir) { throw 'cx_Freeze output directory (build/exe.*) not found; build failed' }
+
+          Copy-Item -Path (Join-Path $buildDir.FullName '*') -Destination $stage -Recurse -Force
+
+          # The app calls Import/TPMImport.exe with a relative path (Module/TPMSmartCard.py).
+          # Only top level runtime files are needed (Import/TPMImport is the C# sources).
+          if (Test-Path 'Import') {
+            $importStage = Join-Path $stage 'Import'
+            New-Item -ItemType Directory -Force -Path $importStage | Out-Null
+            Get-ChildItem -Path 'Import' -File | Copy-Item -Destination $importStage -Force
+          }
+
+          @(
+            "version=${{ needs.prepare.outputs.version }}",
+            "commit=$env:GITHUB_SHA",
+            "ref=$env:GITHUB_REF_NAME",
+            "run=$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID",
+            "built_at=$((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) UTC"
+          ) | Set-Content -Path (Join-Path $stage 'BUILD_INFO.txt') -Encoding UTF8
+
+          New-Item -ItemType Directory -Force -Path 'dist' | Out-Null
+          # absolute path: 7-Zip runs with the staging directory as working directory
+          $zip = Join-Path $PWD "dist/$name.zip"
+
+          $sevenZip = 'C:\Program Files\7-Zip\7z.exe'
+          if (Test-Path $sevenZip) {
+            Push-Location 'staging'
+            & $sevenZip a -tzip -mx=9 $zip $name
+            $code = $LASTEXITCODE
+            Pop-Location
+            if ($code -ne 0) { throw "7-Zip failed with exit code $code" }
+          } else {
+            Compress-Archive -Path $stage -DestinationPath $zip -CompressionLevel Optimal
+          }
+
+          $size = [math]::Round((Get-Item $zip).Length / 1MB, 1)
+          Write-Host "created $name.zip ($size MB)"
+
+          "artifact=$name" >> $env:GITHUB_OUTPUT
+          "package=$name.zip" >> $env:GITHUB_OUTPUT
+          "builddir=$($buildDir.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Build installer (Inno Setup)
+        id: iscc
+        shell: pwsh
+        env:
+          TPMSMART_VERSION: ${{ steps.naming.outputs.version }}
+          TPMSMART_VERSION4: ${{ steps.naming.outputs.version4 }}
+          TPMSMART_PACKAGENAME: ${{ steps.naming.outputs.name }}
+          TPMSMART_BUILDDIR: ${{ steps.pack.outputs.builddir }}
+        run: |
+          # ISCC is normally preinstalled on the Windows runner; install it through
+          # Chocolatey when missing. Inno Setup 6.3+ is required by install.iss
+          # (UTF-8 script without BOM + x64compatible).
+          function Find-Iscc {
+            $found = @()
+            $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+            if ($cmd) { $found += $cmd.Source }
+            foreach ($root in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, "$env:LOCALAPPDATA\Programs")) {
+              if ([string]::IsNullOrWhiteSpace($root) -or -not (Test-Path $root)) { continue }
+              Get-ChildItem -Path $root -Directory -Filter 'Inno Setup*' -ErrorAction SilentlyContinue |
+                ForEach-Object { $found += (Join-Path $_.FullName 'ISCC.exe') }
+            }
+            $found | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+
+          $iscc = Find-Iscc
+          if (-not $iscc) {
+            Write-Host 'ISCC.exe not found, installing Inno Setup via Chocolatey...'
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -notin @(0, 1641, 3010)) { throw "choco install innosetup failed ($LASTEXITCODE)" }
+            $iscc = Find-Iscc
+          }
+          if (-not $iscc) { throw 'ISCC.exe not found' }
+          Write-Host "using $iscc"
+
+          & $iscc 'install.iss'
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed ($LASTEXITCODE)" }
+
+          $setup = Get-ChildItem 'dist' -Filter '*-setup.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $setup) { throw 'installer executable was not produced' }
+          Write-Host ("created {0} ({1:N1} MB)" -f $setup.Name, ($setup.Length / 1MB))
+          "setup=$($setup.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.artifact }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  # 发布：本作业没有 checkout，工作目录不是 git 仓库，
+  # 因此所有 gh release 命令都必须显式带 --repo（否则 gh 会调用 git 而失败），
+  # 也不能用 --cleanup-tag（它需要删除本地标签）。
+  publish:
+    name: Publish
+    needs: [ prepare, build ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: dist
+
+      - name: Publish beta release
+        if: needs.prepare.outputs.channel == 'beta'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE: ${{ needs.build.outputs.package }}
+          SETUP: ${{ needs.build.outputs.setup }}
+        run: |
+          set -euo pipefail
+          REPO="$GITHUB_REPOSITORY"
+          TAG="beta"
+          TITLE="Beta Build #${{ github.run_number }}"
+
+          cat > notes.md <<EOF
+          自动构建的 Beta 测试版，每次推送到 \`main\` 分支都会覆盖更新。
+
+          - 安装包：\`$SETUP\`（自动安装 OpenSC 与 SSH 密钥代理）
+          - 免安装绿色版：\`$PACKAGE\`
+          - 提交：\`$GITHUB_SHA\`
+          - 触发方式：${{ github.event_name }}
+          - 构建流水线：[#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          > 该版本为预览版本，可能不稳定，请勿用于生产环境。
+          EOF
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            # 已有 beta：把滚动标签移到本次提交并刷新说明，不删除 release，
+            # 这样即使后续步骤失败，旧的 beta 产物也仍然可用。
+            if gh api -X PATCH "repos/$REPO/git/refs/tags/$TAG" -f sha="$GITHUB_SHA" -F force=true >/dev/null 2>&1; then
+              gh release edit "$TAG" --repo "$REPO" --title "$TITLE" --notes-file notes.md --prerelease
+            else
+              # 标签无法移动时退回删除重建
+              gh release delete "$TAG" --repo "$REPO" --yes
+              gh api -X DELETE "repos/$REPO/git/refs/tags/$TAG" >/dev/null 2>&1 || true
+              gh release create "$TAG" --repo "$REPO" --prerelease --target "$GITHUB_SHA" \
+                --title "$TITLE" --notes-file notes.md
+            fi
+          else
+            gh release create "$TAG" --repo "$REPO" --prerelease --target "$GITHUB_SHA" \
+              --title "$TITLE" --notes-file notes.md
+          fi
+
+          # 资产名固定，--clobber 直接替换上一版
+          gh release upload "$TAG" dist/* --repo "$REPO" --clobber
+
+      - name: Publish release
+        if: needs.prepare.outputs.channel == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          DRAFT: ${{ inputs.draft }}
+          PACKAGE: ${{ needs.build.outputs.package }}
+          SETUP: ${{ needs.build.outputs.setup }}
+        run: |
+          set -euo pipefail
+
+          cat > notes.md <<EOF
+          ## TPM 虚拟智能卡管理工具 V${VERSION}
+
+          - 安装包：\`$SETUP\`（安装过程中自动安装 OpenSC 与 SSH 密钥代理，推荐）
+          - 免安装绿色版：\`$PACKAGE\`（解压后运行 \`SmartCardAPP.exe\`）
+          - 使用前请先安装 [OpenSC](https://github.com/OpenSC/OpenSC/releases)
+          - 构建提交：\`$GITHUB_SHA\`
+          - 构建流水线：[#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          EOF
+
+          draft_flag=""
+          if [[ "$DRAFT" == "true" ]]; then
+            draft_flag="--draft"
+          fi
+
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "V${VERSION} Release" \
+            --target "$GITHUB_SHA" \
+            --notes-file notes.md \
+            $draft_flag

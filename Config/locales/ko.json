@@ -124,7 +124,7 @@
   "msg_cert_out_ft_none": "인증서를 찾을 수 없습니다",
   "msg_cert_out_ft_path": "먼저 경로를 선택하세요!\n",
   "msg_about_title": "도구 정보",
-  "msg_about_about": "============================================\n              TPM Virtual Smart Card Manager\n============================================\n                   버전: V1.5.0 Jan 01. 2025\n                   작성자: Pikachu Ren      \n                   라이선스: The MIT License\n============================================\n 프로젝트: github.com/PIKACHUIM/TPMSmartCard\n============================================\n",
+  "msg_about_about": "============================================\n              TPM Virtual Smart Card Manager\n============================================\n                   버전: v1.6.0 Jan 01. 2025\n                   작성자: Pikachu Ren      \n                   라이선스: The MIT License\n============================================\n 프로젝트: github.com/PIKACHUIM/TPMSmartCard\n============================================\n",
   "msg_tpm_check_text": "TPM 상태",
   "msg_tpm_check_done": "장치에서 TPM이 활성화되어 있습니다. 상세 정보:\n%s",
   "msg_tpm_check_fail": "장치에서 TPM이 활성화되어 있지 않습니다. 상세 정보:\n%s",
