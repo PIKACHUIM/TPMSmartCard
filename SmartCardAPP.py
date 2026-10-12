@@ -285,6 +285,15 @@ class SmartCardAPP:
         """界面文案翻译；多级回退顺序由 Module.I18n 决定，缺词条时返回键名。"""
         return self.i18n_data.t(in_name)
 
+    @property
+    def wide(self):
+        """当前语言是否需要更宽的行控件（子窗口按此调整窗口宽度）。
+
+        与 Module.AppConfigure.wide 同一语义：CertImport 等子窗口既可由主程序
+        打开（传入 self），也可单独运行（自带 AppConfigure），两边都要有这个属性。
+        """
+        return self.i18n_data.is_wide()
+
     def card_settings(self):
         """系统设置：关于本工具 / 版本更新 / 界面语言 / TPM 状态。
 
