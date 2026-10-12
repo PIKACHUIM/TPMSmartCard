@@ -15,6 +15,29 @@ import os
 import sys
 from importlib import metadata, util
 
+
+def setup_output():
+    """保证中文提示能打印出来。
+
+    CI 的 Windows runner 控制台编码是 cp1252，直接 print 中文会抛
+    UnicodeEncodeError（本地中文系统是 cp936，所以本地看不出来）。
+    只有在当前编码装不下这些文字时才切到 UTF-8（GitHub 日志按 UTF-8 渲染）。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None:
+            continue
+        encoding = getattr(stream, "encoding", None) or "utf-8"
+        try:
+            "检查中文".encode(encoding)
+        except (UnicodeEncodeError, LookupError):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (AttributeError, ValueError):
+                pass
+
+
+setup_output()
+
 SKIP_DIRS = {
     ".git", ".github", ".idea", ".vscode", "__pycache__", "Caches",
     "build", "dist", "staging",

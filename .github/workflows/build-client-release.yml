@@ -150,6 +150,9 @@ jobs:
       # cx_Freeze 对缺失模块只告警，产物要到运行那一行才报 ModuleNotFoundError，
       # 所以先确认 requirements.txt 覆盖了项目里 import 的所有第三方模块
       - name: Check declared dependencies
+        env:
+          # runner 控制台编码是 cp1252，显式 UTF-8 输出，避免脚本打印中文时报错
+          PYTHONIOENCODING: utf-8
         run: python Builds/check_imports.py
 
       - name: Resolve package name
