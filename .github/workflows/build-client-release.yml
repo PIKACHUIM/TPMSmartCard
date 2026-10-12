@@ -18,7 +18,7 @@ on:
         options: [ beta, release ]
         default: beta
       version:
-        description: '版本号（channel=release 时必填，例如 1.6 或 v1.6.2026.1012）'
+        description: '版本号（channel=release 时必填，例如 1.6.0 或 v1.6.2026.1012）'
         required: false
         type: string
       draft:
@@ -71,7 +71,7 @@ jobs:
           version="${INPUT_VERSION#v}"
           version="${version#V}"
           if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
-            echo "::error::版本号格式不正确：${INPUT_VERSION}（应形如 1.6 或 1.6.2026.1012）"
+            echo "::error::版本号格式不正确：${INPUT_VERSION}（应形如 1.6.0 或 1.6.2026.1012）"
             exit 1
           fi
           if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -147,6 +147,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
+      # cx_Freeze 对缺失模块只告警，产物要到运行那一行才报 ModuleNotFoundError，
+      # 所以先确认 requirements.txt 覆盖了项目里 import 的所有第三方模块
+      - name: Check declared dependencies
+        run: python Builds/check_imports.py
+
       - name: Resolve package name
         id: naming
         shell: pwsh
@@ -156,7 +161,7 @@ jobs:
           $version = "$env:INPUT_VERSION".Trim() -replace '^[vV]', ''
 
           # exe 版本资源必须是 4 段数字，缺位补 0
-          $version4 = '1.5.0.0'
+          $version4 = '1.6.0.0'
           if (-not [string]::IsNullOrWhiteSpace($version)) {
             $parts = @($version -split '\.')
             while ($parts.Count -lt 4) { $parts += '0' }
@@ -239,9 +244,10 @@ jobs:
           TPMSMART_PACKAGENAME: ${{ steps.naming.outputs.name }}
           TPMSMART_BUILDDIR: ${{ steps.pack.outputs.builddir }}
         run: |
-          # ISCC is normally preinstalled on the Windows runner; install it through
-          # Chocolatey when missing. Inno Setup 6.3+ is required by install.iss
-          # (UTF-8 script without BOM + x64compatible).
+          # ISCC is normally preinstalled on the Windows runner; install or upgrade it
+          # through Chocolatey when missing or too old. install.iss needs Inno Setup
+          # 6.5+ (UTF-8 script without BOM, x64compatible and the Chinese language
+          # file, all at the "6.5.0+" language file level).
           function Find-Iscc {
             $found = @()
             $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
@@ -254,15 +260,31 @@ jobs:
             $found | Where-Object { Test-Path $_ } | Select-Object -First 1
           }
 
+          # The version marker in the compiler's own Default.isl is its language file level
+          function Get-InnoLevel($isccPath) {
+            $isl = Join-Path (Split-Path $isccPath) 'Default.isl'
+            if (-not (Test-Path $isl)) { return $null }
+            $match = Select-String -Path $isl -Pattern 'Inno Setup version ([0-9]+\.[0-9]+)' -List
+            if (-not $match) { return $null }
+            return [version]$match.Matches[0].Groups[1].Value
+          }
+
+          $required = [version]'6.5'
           $iscc = Find-Iscc
-          if (-not $iscc) {
-            Write-Host 'ISCC.exe not found, installing Inno Setup via Chocolatey...'
+          $level = if ($iscc) { Get-InnoLevel $iscc } else { $null }
+          if ((-not $iscc) -or (-not $level) -or ($level -lt $required)) {
+            if ($iscc) {
+              Write-Host "found $iscc (language level $level < $required), upgrading via Chocolatey..."
+            } else {
+              Write-Host 'ISCC.exe not found, installing Inno Setup via Chocolatey...'
+            }
             choco install innosetup --no-progress -y
             if ($LASTEXITCODE -notin @(0, 1641, 3010)) { throw "choco install innosetup failed ($LASTEXITCODE)" }
             $iscc = Find-Iscc
+            $level = if ($iscc) { Get-InnoLevel $iscc } else { $null }
           }
           if (-not $iscc) { throw 'ISCC.exe not found' }
-          Write-Host "using $iscc"
+          Write-Host "using $iscc (language level $level)"
 
           & $iscc 'install.iss'
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed ($LASTEXITCODE)" }
