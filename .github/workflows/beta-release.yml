@@ -1,0 +1,55 @@
+name: Beta Release
+
+# 推送到 main 分支自动构建，并覆盖发布到 beta 预发布版
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: beta-release
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+
+  publish:
+    name: Publish beta
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: dist
+
+      - name: Publish beta release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # beta 是滚动标签：先删掉旧的 release 与标签，保证标签始终指向最新提交
+          gh release delete beta --cleanup-tag --yes || true
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/beta" || true
+
+          cat > notes.md <<EOF
+          自动构建的 Beta 测试版，每次推送到 \`main\` 分支都会覆盖更新。
+
+          - 提交：\`$GITHUB_SHA\`
+          - 触发方式：${{ github.event_name }}
+          - 构建流水线：[#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          > 该版本为预览版本，可能不稳定，请勿用于生产环境。
+          EOF
+
+          gh release create beta "dist/${{ needs.build.outputs.package }}" \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Beta Build #${{ github.run_number }}" \
+            --notes-file notes.md

@@ -1,3 +1,5 @@
+import traceback
+
 import OpenSSL.crypto
 from dateutil import parser
 from Module.Certificates import CER
@@ -42,31 +44,39 @@ class SmartCardCer:
             self.parseCert()
 
     def parseCert(self):
-        cert_content: OpenSSL.crypto.X509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, self.sc_cert)
-        cert_issuers = cert_content.get_issuer()
-        cert_subject = cert_content.get_subject()
-        cert_info_ls = {
-            "version": cert_content.get_version() + 1,
-            "serial_number": hex(cert_content.get_serial_number()),
-            "signature_algorithm": cert_content.get_signature_algorithm().decode("UTF-8"),
-            "common_name": cert_subject.commonName,
-            "start_time": parser.parse(cert_content.get_notBefore().decode("UTF-8")).strftime('%Y-%m-%d %H:%M'),
-            "end_time": parser.parse(cert_content.get_notAfter().decode("UTF-8")).strftime('%Y-%m-%d %H:%M'),
-            "has_expired": cert_content.has_expired(),
-            "pubkey": OpenSSL.crypto.dump_publickey(OpenSSL.crypto.FILETYPE_PEM, cert_content.get_pubkey()),
-            "pubkey_len": cert_content.get_pubkey().bits(),
-            "pubkey_type": cert_content.get_pubkey().type(),
-            "extension_count": cert_content.get_extension_count(),
-            "issuer_info": {i[0].decode(): i[1].decode() for i in cert_issuers.get_components()},
-            "subject_info": {i[0].decode(): i[1].decode() for i in cert_subject.get_components()},
-            "extension_data": {
-                cert_content.get_extension(i).get_short_name().decode(): cert_content.get_extension(i) \
-                for i in range(cert_content.get_extension_count())
-            },
-            "extension_text": [
-                cert_content.get_extension(i) for i in range(cert_content.get_extension_count())
-            ],
-            "cert_sha1": cert_content.digest("sha1").decode("utf-8"),
-        }
+        # 证书内容来自外部命令输出，解析失败时降级为 None（界面按“无证书”处理）
+        try:
+            cert_content: OpenSSL.crypto.X509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM,
+                                                                                self.sc_cert)
+            cert_issuers = cert_content.get_issuer()
+            cert_subject = cert_content.get_subject()
+            cert_info_ls = {
+                "version": cert_content.get_version() + 1,
+                "serial_number": hex(cert_content.get_serial_number()),
+                "signature_algorithm": cert_content.get_signature_algorithm().decode("UTF-8"),
+                "common_name": cert_subject.commonName,
+                "start_time": parser.parse(cert_content.get_notBefore().decode("UTF-8")).strftime('%Y-%m-%d %H:%M'),
+                "end_time": parser.parse(cert_content.get_notAfter().decode("UTF-8")).strftime('%Y-%m-%d %H:%M'),
+                "has_expired": cert_content.has_expired(),
+                "pubkey": OpenSSL.crypto.dump_publickey(OpenSSL.crypto.FILETYPE_PEM, cert_content.get_pubkey()),
+                "pubkey_len": cert_content.get_pubkey().bits(),
+                "pubkey_type": cert_content.get_pubkey().type(),
+                "extension_count": cert_content.get_extension_count(),
+                "issuer_info": {i[0].decode(): i[1].decode() for i in cert_issuers.get_components()},
+                "subject_info": {i[0].decode(): i[1].decode() for i in cert_subject.get_components()},
+                "extension_data": {
+                    cert_content.get_extension(i).get_short_name().decode(): cert_content.get_extension(i) \
+                    for i in range(cert_content.get_extension_count())
+                },
+                "extension_text": [
+                    cert_content.get_extension(i) for i in range(cert_content.get_extension_count())
+                ],
+                "cert_sha1": cert_content.digest("sha1").decode("utf-8"),
+            }
+        except Exception as err:
+            print("Parse Cert Error:", err)
+            traceback.print_exc()
+            self.sc_cert = None
+            return None
         # print(cert_info_ls)
         self.sc_cert = CER(cert_info_ls)

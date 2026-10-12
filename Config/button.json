@@ -2,151 +2,123 @@
   "main_main": [
     [
       28,
-      445
-    ],
-    {
-      "name": "inf",
-      "text": "b_inf",
-      "type": "success",
-      "w": 121
-    },
-    {
-      "name": "osc",
-      "text": "b_osc",
-      "type": "secondary",
-      "w": 121
-    },
-    {
-      "name": "git",
-      "text": "b_git",
-      "type": "dark",
-      "w": 121
-    }
-  ],
-  "main_line": [
-    [
-      28,
-      480
+      485,
+      8,
+      364
     ],
     {
       "name": "ing",
       "text": "b_ing",
-      "type": "info",
-      "w": 121
+      "type": "secondary-outline",
+      "w": 116
     },
     {
       "name": "tpm",
       "text": "b_tpm",
-      "type": "warning",
-      "w": 121
+      "type": "secondary-outline",
+      "w": 116
     },
     {
       "name": "set",
       "text": "b_set",
-      "type": "primary",
-      "w": 121
+      "type": "primary-outline",
+      "w": 116
     }
   ],
   "card_main": [
     [
       28,
-      232
+      177,
+      6,
+      364
     ],
     {
       "name": "add",
       "text": "b_add",
-      "type": "success",
-      "w": 65
+      "type": "primary",
+      "w": 117
     },
     {
       "name": "pin",
       "text": "b_pin",
-      "type": "info",
-      "w": 110
+      "type": "primary-outline",
+      "w": 117
     },
     {
       "name": "puk",
       "text": "b_puk",
-      "type": "warning",
-      "w": 103
-    },
-    {
-      "name": "del",
-      "text": "b_del",
-      "type": "danger",
-      "w": 80
+      "type": "primary-outline",
+      "w": 117
     }
   ],
   "card_opts": [
     [
       28,
-      390
+      399,
+      6,
+      364
     ],
     {
-      "name": "ssh",
-      "text": "b_ssh",
-      "type": "secondary",
-      "w": 100
-    },
-    {
-      "name": "key",
-      "text": "b_key",
-      "type": "success",
-      "w": 100
+      "name": "del",
+      "text": "b_del",
+      "type": "danger-outline",
+      "w": 117
     },
     {
       "name": "bak",
       "text": "b_bak",
-      "type": "info",
-      "w": 80
+      "type": "secondary-outline",
+      "w": 117
     },
     {
       "name": "rec",
       "text": "b_rec",
-      "type": "warning",
-      "w": 80
+      "type": "primary-outline",
+      "w": 117
     }
   ],
   "cert_main": [
     [
-      428,
-      232
+      430,
+      177,
+      6,
+      622
     ],
     {
       "name": "cer",
       "text": "b_cer",
-      "type": "success",
-      "w": 105
+      "type": "primary",
+      "w": 98
     },
     {
       "name": "csr",
       "text": "b_csr",
-      "type": "primary",
-      "w": 105
+      "type": "primary-outline",
+      "w": 98
     },
     {
       "name": "pem",
       "text": "b_pem",
-      "type": "success",
-      "w": 105
+      "type": "primary-outline",
+      "w": 98
     },
     {
       "name": "sys",
       "text": "b_sys",
-      "type": "info",
-      "w": 100
+      "type": "secondary-outline",
+      "w": 98
     },
     {
       "name": "out",
       "text": "b_out",
-      "type": "info",
-      "w": 100
+      "type": "secondary-outline",
+      "w": 98
     },
     {
       "name": "non",
       "text": "b_non",
-      "type": "danger",
-      "w": 100
+      "type": "danger-outline",
+      "w": 102
     }
   ]
 }

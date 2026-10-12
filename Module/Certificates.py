@@ -100,7 +100,14 @@ class CertDataInfo:
         self.TextExtend = self._certs_['extension_text'] if 'extension_text' in self._certs_ else []
 
         self.is_expired = self._certs_['has_expired'] if 'has_expired' in self._certs_ else "Unknown"
-        self.is_ca_cert = str(self.certExtend('basicConstraints')).split(":")[-1]
+        basic_ca = self.certExtend('basicConstraints')
+        if isinstance(basic_ca, bytes):
+            basic_ca = basic_ca.decode("utf-8", "ignore")
+        # 扩展缺失时不再把 "b''" 显示到界面上
+        self.is_ca_cert = "Unknown"
+        if basic_ca:
+            basic_ca = str(basic_ca).strip()
+            self.is_ca_cert = basic_ca.split(":")[-1].strip() if ":" in basic_ca else basic_ca
 
         self.CertPolicy = self.certExtend('certificatePolicies')
         self.MainUsages = self.certExtend('keyUsage') if len(str(self.certExtend('keyUsage'))) > 0 else ""

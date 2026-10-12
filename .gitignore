@@ -2,3 +2,5 @@ build/
 build/*
 Caches/
 Caches/*
+__pycache__
+.idea

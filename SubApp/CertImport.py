@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import json
 import os
 from random import randbytes
 from tkinter import filedialog, messagebox
@@ -37,8 +38,9 @@ class CertImport:
 
         # self.page.attributes('-topmost', True)
         self.page.geometry("%dx%d" % (
-            750 if self.main.lang == "en" else 630,
-            160 if self.flag == "pfx" else 120
+            # 拉丁/西里尔字母比汉字占位更宽，按语言调整窗口宽度
+            750 if self.main.wide else 630,
+            200 if self.flag == "pfx" else 120
         ))
         # self.page.geometry(f"+{self.main.size[0]}+{self.main.size[1]}")
         self.page.title(self.main.i18n("msg_import") + self.main.i18n("msg_cert"))
@@ -67,6 +69,15 @@ class CertImport:
             self.k_clouds = ttk.Checkbutton(self.page, bootstyle="success-round-toggle",
                                             text=self.main.i18n('msg_cert_cloud'),
                                             variable=self.v_clouds)
+            # 云端下发方式：勾选 = 使用密码（取件码，自协商）下发；不勾选 = 交换密钥（X25519）
+            # 说明：云端下发无法使用本地 CSP，因此这里直接复用「使用本地 CSP」复选框的位置，
+            #      进入云端下发时用「使用密码下发」替换它（见 apply_cloud）。
+            self.v_cloud_pass = tk.IntVar()
+            self.v_cloud_pass.set(0)
+            self.v_cloud_pass.trace('w', self.cloud_pass_switch)
+            self.k_cloud_pass = ttk.Checkbutton(self.page, bootstyle="success-round-toggle",
+                                                text=self.main.i18n('msg_cloud_pass'),
+                                                variable=self.v_cloud_pass)
             self.v_csp_ts = tk.IntVar()
             self.v_csp_ts.trace('w', self.csp_ts)
             self.csp_sets = ttk.Checkbutton(self.page, bootstyle="success-round-toggle",
@@ -114,7 +125,8 @@ class CertImport:
         else:
             self.submit_button.config(state=tk.NORMAL)
         if self.v_clouds.get():
-            if len(self.path_txt.get()) == 0:
+            # 云端下发：地址 + 下方文本框都必须填写（取件码 / 交换密钥）
+            if len(self.path_txt.get()) == 0 or len(self.pass_txt.get()) == 0:
                 self.submit_button.config(state=tk.DISABLED)
             else:
                 self.submit_button.config(state=tk.NORMAL)
@@ -145,24 +157,12 @@ class CertImport:
     def clouds(self, *args):
         # 云端下发 ====================================
         if self.v_clouds.get():
-            self.pass_tag.config(text=self.main.i18n("msg_keys_cloud"))
-            self.path_tip.grid_forget()
-            self.x25519()
-            self.pass_txt.delete(0, tk.END)
-            self.pass_txt.config(show="")
-            self.pass_txt.insert(0, self.pub_key)
-            self.path_tag.config(text=self.main.i18n("msg_urls_cloud"))
-            self.path_txt.delete(0, tk.END)
-            self.path_txt.insert(0, "https://cert.52pika.cn/card/get/cert")
-            if len(self.path_txt.get()) == 0:
-                self.submit_button.config(state=tk.DISABLED)
-            else:
-                self.submit_button.config(state=tk.NORMAL)
-            pyperclip.copy(self.pub_key)
-            self.page.attributes('-topmost', False)
-            messagebox.showinfo(self.main.i18n("msg_cert_cloud"), self.main.i18n("msg_tips_cloud"))
-            self.page.attributes('-topmost', True)
+            self.apply_cloud()
         else:
+            # 退出云端下发：恢复「使用本地 CSP」并按其勾选状态刷新
+            self.k_cloud_pass.grid_forget()
+            self.csp_sets.grid(column=1, row=3, pady=20, padx=5, sticky=W)
+            self.csp_ts()
             self.path_tip.grid(column=3, row=0, pady=10, padx=5)
             self.path_txt.delete(0, tk.END)
             self.pass_tag.config(text=self.main.i18n("msg_cert") + self.main.i18n("msg_pass"))
@@ -171,13 +171,54 @@ class CertImport:
             # path_tip.config(text=self.la("msg_open") + self.la("msg_file"))
             self.path_tag.config(text=self.main.i18n("msg_select_file_fp"))
 
+    def cloud_pass_switch(self, *args):
+        # 切换「使用密码下发 / 交换密钥」==================
+        if self.v_clouds.get():
+            self.apply_cloud()
+
+    def csp_provider(self):
+        """本地导入时返回所选 CSP 名称；云端下发不使用本地 CSP（固定 None）。"""
+        if self.v_clouds.get():
+            return None
+        return self.csp_data.get() if self.v_csp_ts.get() else None
+
+    def apply_cloud(self):
+        # 云端下发：本地 CSP 不可用，把它的复选框位置换成「使用密码下发」
+        self.csp_data.grid_forget()
+        self.csp_sets.grid_forget()
+        self.k_cloud_pass.grid(column=1, row=3, pady=20, padx=5, sticky=W)
+        self.page.attributes('-topmost', False)
+        if self.v_cloud_pass.get():
+            # ---- 使用密码（取件码，自协商）下发 ----
+            self.pass_tag.config(text=self.main.i18n("msg_cert_code"))
+            self.path_tip.grid_forget()
+            self.pass_txt.delete(0, tk.END)
+            self.pass_txt.config(show="")
+            tips = self.main.i18n("msg_tips_code")
+        else:
+            # ---- 交换密钥（X25519 预协商，原逻辑）----
+            self.pass_tag.config(text=self.main.i18n("msg_keys_cloud"))
+            self.path_tip.grid_forget()
+            self.x25519()
+            self.pass_txt.delete(0, tk.END)
+            self.pass_txt.config(show="")
+            self.pass_txt.insert(0, self.pub_key)
+            pyperclip.copy(self.pub_key)
+            tips = self.main.i18n("msg_tips_cloud")
+        self.path_tag.config(text=self.main.i18n("msg_urls_cloud"))
+        self.path_txt.delete(0, tk.END)
+        self.path_txt.insert(0, "https://testca.524228.xyz/card/get/cert")
+        self.change()
+        messagebox.showinfo(self.main.i18n("msg_cert_cloud"), tips)
+        self.page.attributes('-topmost', True)
+
     def search(self, ):
         self.page.attributes('-topmost', False)
         file_path = filedialog.askopenfilename(
             filetypes=[
-                ("PFX Files", "*.pfx;*.p12") if self.flag == "pfx" \
-                    else ("Cert Chains", "*.p7b")
-                # else ("Cert Files", "*.cer;*.crt;*.pem;*.der;*.p7b")
+                (self.main.i18n("msg_dlg_cert_files"), "*.pfx;*.p12")
+                if self.flag == "pfx" else
+                (self.main.i18n("msg_dlg_cert_files"), "*.p7b")
             ]
         )
         if file_path:
@@ -186,56 +227,145 @@ class CertImport:
             self.path_txt.insert(0, file_path)
         self.page.attributes('-topmost', True)
 
+    def import_decrypted(self, in_pfx, in_pass):
+        """把解密得到的 PFX 写入临时文件 → 导入卡片 → 覆写销毁临时文件。"""
+        tmp = hashlib.sha256(in_pfx).hexdigest()
+        cert_path = os.path.join(os.getenv('APPDATA') or os.path.expanduser("~"), tmp + ".pfx")
+        try:
+            with open(cert_path, 'wb') as save_file:
+                save_file.write(in_pfx)
+            try:
+                outcome = TPMSmartCard.initCerts(cert_path, in_pass, self.csp_provider())
+            except Exception as err:
+                print("Import Cert Error:", err)
+                outcome = "Error: %s" % err
+        finally:
+            # 无论导入成功与否都覆写销毁临时文件（内含私钥），避免残留
+            try:
+                with open(cert_path, 'wb') as save_file:
+                    for i in range(0, len(in_pfx) // 16 + 1):
+                        save_file.write(randbytes(16))
+            except Exception as err:
+                print("Clean Temp Cert Error:", err)
+        self.main.load_status()
+        return outcome
+
+    @staticmethod
+    def format_tips(in_template, in_data):
+        """文案模板缺失 %s（如该语言无对应词条）时直接拼接，避免二次异常。"""
+        try:
+            return in_template % in_data
+        except TypeError:
+            return "%s\n%s" % (in_template, in_data)
+
+    def fetch_cloud(self, in_url, in_data):
+        """请求证书平台：统一加超时与异常兜底，失败返回 None。"""
+        try:
+            responded = requests.get(in_url, data=in_data, timeout=15)
+        except Exception as err:
+            print("Cloud Request Error:", err)
+            messagebox.showwarning(self.main.i18n("fail"),
+                                   self.format_tips(self.main.i18n("msg_cloud_net"), err))
+            self.page.attributes('-topmost', True)
+            return None
+        if responded.status_code != 200:
+            messagebox.showwarning(self.main.i18n("fail"), self.main.i18n("msg_cloud_err_code"))
+            self.page.attributes('-topmost', True)
+            return None
+        try:
+            return responded.json()
+        except ValueError as err:
+            print("Cloud Respond Error:", err)
+            messagebox.showwarning(self.main.i18n("fail"), self.main.i18n("msg_cloud_data"))
+            self.page.attributes('-topmost', True)
+            return None
+
     def submit(self, ):
         self.page.attributes('-topmost', False)
         result = ""
         # 云端下发 =======================================================================
         if self.v_clouds.get():
             url = self.path_txt.get()
-            pub = self.pass_txt.get()
-            responded_apis = requests.get(
-                url, data={"pubkey": pub, },
-            )
-            if responded_apis.status_code == 200:
-                responded_json = responded_apis.json()
-                if "flag" in responded_json and responded_json["flag"]:
-                    responded_json = responded_json["data"]
-                    encrypted_data = responded_json['vaults']
-                    server_pub_pem = responded_json['pubkey']
-                    server_pub_key = X25519PublicKey.from_public_bytes(
-                        base64.b64decode(server_pub_pem)
-                    )
-                    encrypted_keys = self.pri_key.exchange(server_pub_key)
-                    decrypted_data = Crypto.aes_decrypt(
-                        encrypted_keys,
-                        base64.b64decode(
-                            encrypted_data.encode()
-                        )
-                    )
-                    # tmp = base64.b64encode(decrypted_data)
-                    # tmp = tmp.decode()
-                    # result = TPMSmartCard.baseCerts(tmp, responded_json['pfxkey'])
-                    tmp = hashlib.sha256(decrypted_data).hexdigest()
-                    cert_path = os.path.join(os.getenv('APPDATA'), tmp + ".pfx")
-                    with open(cert_path, 'wb') as save_file:
-                        save_file.write(decrypted_data)
-                    result = TPMSmartCard.initCerts(
-                        cert_path, responded_json['pfxkey'],
-                        self.csp_data.get() if self.v_csp_ts.get() else None)
-                    with open(cert_path, 'wb') as save_file:
-                        for i in range(0, int(len(decrypted_data) / 16 + 1)):
-                            save_file.write(randbytes(16))
-                    self.main.load_status()
-                else:
-                    messagebox.showwarning(self.main.i18n("fail"), "Error Responded Data")
+            # ---- 使用密码（取件码，自协商）：无需事先交换密钥 ----
+            if self.v_cloud_pass.get():
+                code = self.pass_txt.get().strip()
+                responded_json = self.fetch_cloud(url, {"code": code, })
+                if responded_json is None:
+                    if not self.apps:
+                        return False
+                elif not ("flag" in responded_json and responded_json["flag"]):
+                    messagebox.showwarning(
+                        self.main.i18n("fail"),
+                        responded_json.get("text") or self.main.i18n("msg_cloud_err_data"))
                     self.page.attributes('-topmost', True)
                     if not self.apps:
                         return False
+                else:
+                    try:
+                        payload = responded_json["data"]
+                        cipher_key = Crypto.code_key(
+                            code,
+                            base64.b64decode(payload["salt"]),
+                            int(payload["iterations"])
+                        )
+                        plain = Crypto.aes_decrypt(
+                            cipher_key,
+                            base64.b64decode(payload["vaults"])
+                        )
+                        body = json.loads(plain.decode("utf-8"))
+                        result = self.import_decrypted(
+                            base64.b64decode(body["pfx"]),
+                            body.get("pfxkey", "")
+                        )
+                    except Exception as import_err:
+                        print("取件码解密失败：", import_err)
+                        messagebox.showwarning(
+                            self.main.i18n("fail"),
+                            self.main.i18n("msg_code_invalid"))
+                        self.page.attributes('-topmost', True)
+                        if not self.apps:
+                            return False
+            # ---- 交换密钥（X25519 预协商）----
             else:
-                messagebox.showwarning(self.main.i18n("fail"),"Error Responded Code")
-                self.page.attributes('-topmost', True)
-                if not self.apps:
-                    return False
+                pub = self.pass_txt.get()
+                responded_json = self.fetch_cloud(url, {"pubkey": pub, })
+                if responded_json is None:
+                    if not self.apps:
+                        return False
+                elif not ("flag" in responded_json and responded_json["flag"]):
+                    messagebox.showwarning(self.main.i18n("fail"), self.main.i18n("msg_cloud_err_data"))
+                    self.page.attributes('-topmost', True)
+                    if not self.apps:
+                        return False
+                else:
+                    try:
+                        responded_json = responded_json["data"]
+                        encrypted_data = responded_json['vaults']
+                        server_pub_pem = responded_json['pubkey']
+                        server_pub_key = X25519PublicKey.from_public_bytes(
+                            base64.b64decode(server_pub_pem)
+                        )
+                        encrypted_keys = self.pri_key.exchange(server_pub_key)
+                        decrypted_data = Crypto.aes_decrypt(
+                            encrypted_keys,
+                            base64.b64decode(
+                                encrypted_data.encode()
+                            )
+                        )
+                        # tmp = base64.b64encode(decrypted_data)
+                        # tmp = tmp.decode()
+                        # result = TPMSmartCard.baseCerts(tmp, responded_json['pfxkey'])
+                        result = self.import_decrypted(
+                            decrypted_data,
+                            responded_json['pfxkey']
+                        )
+                    except Exception as import_err:
+                        print("交换密钥解密失败：", import_err)
+                        messagebox.showwarning(self.main.i18n("fail"),
+                                               self.main.i18n("msg_cloud_data"))
+                        self.page.attributes('-topmost', True)
+                        if not self.apps:
+                            return False
         # 本地导入 =======================================================================
         else:
             if not os.path.exists(self.path_txt.get()):
@@ -246,12 +376,16 @@ class CertImport:
                     return False
             else:
                 self.page.attributes('-topmost', False)
-                if self.flag == "pfx":
-                    result = TPMSmartCard.initCerts(
-                        self.path_txt.get(), self.pass_txt.get(),
-                        in_csp=self.csp_data.get() if self.v_csp_ts.get() else None)
-                else:
-                    result = TPMSmartCard.loadCerts(self.path_txt.get())
+                try:
+                    if self.flag == "pfx":
+                        result = TPMSmartCard.initCerts(
+                            self.path_txt.get(), self.pass_txt.get(),
+                            in_csp=self.csp_provider())
+                    else:
+                        result = TPMSmartCard.loadCerts(self.path_txt.get())
+                except Exception as import_err:
+                    print("Import Cert Error:", import_err)
+                    result = "Error: %s" % import_err
                 self.main.load_status()
                 self.page.destroy()
         messagebox.showinfo(

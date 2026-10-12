@@ -6,14 +6,14 @@ import sys
 import time
 import random
 import tkinter
+import traceback
 from random import randint
 
 import base64
 import pyglet
-import locale
-import platform
+
+from datetime import datetime, timedelta
 import subprocess
-import webbrowser
 import pyperclip
 import threading
 
@@ -24,12 +24,48 @@ from ttkbootstrap import *
 import ttkbootstrap as ttk
 from functools import partial
 from tkinter import messagebox, filedialog, font
+import tkinter.ttk as ttk_plain
 from Module.SmartCardAPI import SmartCardAPI
+from Module.I18n import get_i18n
 from Module.TPMSmartCard import TPMSmartCard
+from Module import Theme
+from Module import TPMBackup
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 
 from SubApp.CertImport import CertImport
 from SubApp.MoreConfig import MoreConfig
+from SubApp.SystemSettings import SystemSettings
+
+# 界面默认字体；语言包里的 _font 可为特定语言覆盖（如韩语需要 Hangul 字体）
+FONT_NAME_DEFAULT = "MapleMono SC NF"
+
+# 界面主题与配色来自 Config/themes.json（可在「系统设置 - 外观」里切换），
+# 下面的常量是配置缺省或读取失败时的兜底值
+THEME_NAME = os.environ.get("TPMSMART_THEME") or "yeti"
+COLOR_HEAD_BG = "#eef2f7"      # 表格表头背景
+COLOR_HEAD_FG = "#3c4a5a"      # 表格表头文字
+COLOR_MUTED = "#66788a"        # 分组框标题等次要文字
+TABLE_ROW_HEIGHT = 20          # 表格行高兜底值（正常由主题决定，此处仅探测失败时使用）
+TABLE_HEAD_HEIGHT = 29         # 表格表头高度兜底值
+TABLE_BAR_WIDTH = 12           # 表格滚动条宽度
+FRAME_STYLE = "secondary"      # 分组框风格兜底值
+TABLE_STYLE = "secondary"      # 表格风格兜底值
+MIN_BUTTON_WIDTH = 56          # 按钮最小宽度
+BUTTON_PADDING_FALLBACK = 30   # 量不出控件尺寸时，文案宽度需额外预留的内边距
+# 原版主题下各控件使用的 ttk 默认样式名（避免被 ttkbootstrap 接管配色）
+NATIVE_STYLES = {
+    "Button": "TButton",
+    "Label": "TLabel",
+    "LabelFrame": "TLabelframe",
+    "Treeview": "Treeview",
+    "Scrollbar": "Vertical.TScrollbar",
+    "Entry": "TEntry",
+    "Combobox": "TCombobox",
+    "Checkbutton": "TCheckbutton",
+}
+LABEL_WIDTH = 60               # 详情标签列宽度
+LABEL_GAP = 5                  # 标签与取值之间的间距
+LABEL_ROW_HEIGHT = 20          # 详情标签行高
 
 
 class SmartCardAPP:
@@ -37,20 +73,14 @@ class SmartCardAPP:
         self.root = tk.Tk()
         self.conf = dict()
         self.read_config()
-        # 获取当前系统的默认语言
-        default_locale, _ = locale.getlocale()
-        # 检查是否是中文环境
-        if 'Chinese' in default_locale:
-            self.lang = "zh"
-        else:
-            self.lang = "en"
-        # self.lang = "en"
+        # 界面语言：用户设置 > TPMSMART_LANG > 系统语言 > 默认（语言包见 Config/locales）
+        self.i18n_data = get_i18n()
+        self.lang = self.i18n_data.language
         # 设置主窗口宽度和高度
         self.root.geometry("1080x540")
         self.root.iconbitmap("Config/iconer/icon02.ico")
         self.size = self.get_screens()
         self.root.geometry(f"+{self.size[0]}+{self.size[1]}")
-        self.root.title(self.i18n("main_text"))
         self.data = SmartCardAPI()
         self.tpms = TPMSmartCard()
         pyglet.font.add_file("Config/myfont/MapleMono-SC-NF-Regular.ttf")
@@ -59,22 +89,133 @@ class SmartCardAPP:
             "card": "",
             "cert": ""
         }
-        # FONT_NAME = "Noto Serif CJK SC"
-        FONT_NAME = "MapleMono SC NF"
-        self.t_fonts = {
-            "label_data": font.Font(family=FONT_NAME,
-                                    size=-12),
-            "label_name": font.Font(family=FONT_NAME,
-                                    size=-12, weight="bold")
-        }
-        style_head = ttk.Style()
-        style_head.configure("Treeview.Heading", font=self.t_fonts['label_name'])
-        style_head.configure("Treeview", font=self.t_fonts['label_data'])
-        # style_head.configure("TButton", font=self.t_fonts['label_name'])
-        style_head.configure("TLabel", font=self.t_fonts['label_name'])
-        style_head.configure("TCheckbutton", font=self.t_fonts['label_name'])
-        style_head.configure("TCheckbutton", font=self.t_fonts['label_name'])
+        self.setup_fonts()
+        self.build_ui()
+        self.check_datas()
+        self.load_status()
+        self.root.mainloop()
 
+    def setup_fonts(self, in_create=True):
+        """按当前语言与主题准备字体/配色；切换语言或主题后重新调用即可生效。"""
+        font_name = self.i18n_data.font(FONT_NAME_DEFAULT)
+        if not in_create and self.t_fonts:
+            for tag in self.t_fonts.values():
+                tag.configure(family=font_name)
+        else:
+            self.t_fonts = {
+                "label_data": font.Font(family=font_name,
+                                        size=-12),
+                "label_name": font.Font(family=font_name,
+                                        size=-12, weight="bold")
+            }
+        self.setup_theme()
+        return None
+
+    def setup_theme(self):
+        """应用当前主题：「原版」（系统默认主题）或美化配色（见 Config/themes.json）。"""
+        self.theme = Theme.current()
+        self.frame_style = self.theme.get("frame") or ""
+        self.table_style = self.theme.get("table") or ""
+        self.style = ttk.Style()
+        if self.native:
+            # 原版主题：直接切到系统默认的 ttk 主题（Windows 下即默认蓝灰）
+            plain = ttk_plain.Style()
+            for theme_name in (self.theme.get("theme"), "vista", "winnative", "default"):
+                if not theme_name:
+                    continue
+                try:
+                    plain.theme_use(theme_name)
+                    break
+                except Exception:
+                    continue
+        else:
+            # ttkbootstrap 的 Style 是单例，构造参数只在首次生效，
+            # 切换主题必须显式调用 theme_use
+            theme_now = self.theme.get("theme") or THEME_NAME
+            try:
+                self.style.theme_use(theme_now)
+            except Exception as err:
+                # theme_use 会刷新所有已创建控件；若其中某个控件（如刚关闭的
+                # 对话框里的下拉框）已销毁就会抛 TclError，此时主题已切换成功，
+                # 且界面马上就要重建，忽略即可
+                print("Theme: 忽略刷新已销毁控件时的异常:", err)
+        self.apply_style()
+        return self.style
+
+    @property
+    def native(self):
+        """当前是否为「原版」主题（系统默认主题，控件不做任何美化）。"""
+        return bool(self.theme.get("native"))
+
+    def new_widget(self, in_name, in_bootstyle=None, in_master=None, **kwargs):
+        """创建控件。
+
+        原版主题使用系统默认外观：ttkbootstrap 会接管所有 ttk 控件并套用
+        自己的配色，因此这里把控件样式直接指回 ttk 的默认样式
+        （走 Tcl 层，绕过 ttkbootstrap 的接管）。
+        """
+        master = self.root if in_master is None else in_master
+        if not self.native:
+            widget_cls = getattr(ttk, in_name)
+            if not in_bootstyle:
+                return widget_cls(master, **kwargs)
+            return widget_cls(master, bootstyle=in_bootstyle, **kwargs)
+        widget = getattr(ttk_plain, in_name)(master, **kwargs)
+        style_name = NATIVE_STYLES.get(in_name)
+        if style_name:
+            try:
+                widget.tk.call(str(widget), "configure", "-style", style_name)
+            except Exception as err:
+                print("Theme: 设置系统默认样式失败:", err)
+        return widget
+
+    def apply_style(self):
+        """统一字体；配色只由主题决定（原版主题完全交给系统默认样式）。"""
+        style = self.style
+        if not self.native:
+            style.configure("Treeview.Heading", font=self.t_fonts['label_name'])
+            style.configure("Treeview", font=self.t_fonts['label_data'])
+            style.configure("TLabel", font=self.t_fonts['label_name'])
+            style.configure("TCheckbutton", font=self.t_fonts['label_name'])
+        if self.native:
+            # 原版主题：ttkbootstrap 会把美化主题的文字色残留在样式里
+            # （浅色文字配系统默认的浅色底会看不见），统一改回系统文字色。
+            # 弹窗（系统设置等）用的是各配色按钮，这里一并覆盖。
+            text_color = "SystemWindowText"
+            for style_name in ("TButton", "TLabel", "TCheckbutton", "TRadiobutton",
+                               "Treeview", "Treeview.Heading", "TLabelframe.Label",
+                               "TEntry", "TCombobox", "TNotebook.Tab"):
+                style.configure(style_name, foreground=text_color)
+            for color in ("primary", "secondary", "success", "info", "warning",
+                          "danger", "light", "dark"):
+                for suffix in ("", "-outline", "-link"):
+                    style.configure("%s%s.TButton" % (color, suffix),
+                                    foreground=text_color)
+            for style_name in self.button_style_names():
+                style.configure("%s.TButton" % style_name, foreground=text_color)
+            return None
+        style.configure("Treeview.Heading", padding=(6, 4))
+        if self.theme.get("flat_heading"):
+            # 美化主题：表头固定为中性灰阶，避免主题自带的高饱和色块
+            head_bg = self.theme.get("head_bg") or COLOR_HEAD_BG
+            head_fg = self.theme.get("head_fg") or COLOR_HEAD_FG
+            style.configure("Treeview.Heading",
+                            background=head_bg,
+                            foreground=head_fg,
+                            relief="flat",
+                            borderwidth=0)
+            style.map("Treeview.Heading",
+                      background=[("active", head_bg)])
+            style.configure("TLabelframe.Label",
+                            foreground=self.theme.get("muted") or COLOR_MUTED)
+        style.configure("TLabelframe.Label", font=self.t_fonts['label_name'])
+        return None
+
+
+
+    def build_ui(self):
+        """构建主界面控件；切换语言后重新调用即可按新语言重建全部文案。"""
+        self.root.title(self.i18n("main_text"))
         self.frames = {
             "card_main": self.view_frames("card_main"),
             "card_info": self.view_frames("card_info"),
@@ -97,7 +238,6 @@ class SmartCardAPP:
             "card_main": self.view_button("card_main"),
             "cert_main": self.view_button("cert_main"),
             "main_main": self.view_button("main_main"),
-            "main_line": self.view_button("main_line"),
             "card_opts": self.view_button("card_opts"),
         }
 
@@ -107,45 +247,64 @@ class SmartCardAPP:
             "cert_user": self.view_labels("cert_user"),
             "cert_last": self.view_labels("cert_last"),
         }
+        # 详情区未选中卡片/证书时显示的居中提示
+        self.hints = {
+            "card_info": self.view_hint("card_info", "msg_hint_card"),
+            "cert_info": self.view_hint("cert_info", "msg_hint_cert"),
+        }
 
         self.button["card_main"]["pin"].config(state=tk.DISABLED)
         self.button["card_main"]["puk"].config(state=tk.DISABLED)
-        self.button["card_main"]["del"].config(state=tk.DISABLED)
+        self.button["card_opts"]["del"].config(state=tk.DISABLED)
+        self.button["card_opts"]["bak"].config(state=tk.DISABLED)
         self.button["cert_main"]["sys"].config(state=tk.DISABLED)
         self.button["cert_main"]["out"].config(state=tk.DISABLED)
         self.button["cert_main"]["non"].config(state=tk.DISABLED)
-        self.button["main_line"]["set"].config(state=tk.DISABLED)
-
-        self.check_datas()
-        self.load_status()
-        self.root.mainloop()
 
     def i18n(self, in_name):
-        if "global" not in self.conf:
-            return in_name
-        temp_data = self.conf["global"]
-        if self.lang not in temp_data:
-            return in_name
-        temp_data = temp_data[self.lang]
-        if in_name not in temp_data:
-            return in_name
-        if type(temp_data[in_name]) is list:
-            return "".join(temp_data[in_name])
-        return temp_data[in_name]
+        """界面文案翻译；多级回退顺序由 Module.I18n 决定，缺词条时返回键名。"""
+        return self.i18n_data.t(in_name)
+
+    def card_settings(self):
+        """系统设置：关于本工具 / 版本更新 / 界面语言 / TPM 状态。
+
+        其中切换界面语言后需要重建主界面（其余设置项不影响主界面）。
+        """
+        dialog = SystemSettings(self.root, self.i18n_data, self.size)
+        self.root.wait_window(dialog.page)
+        if dialog.changed:
+            # 当前回调所在的按钮即将被销毁，等事件循环转一圈再重建
+            self.root.after(0, self.rebuild_ui)
+
+    def rebuild_ui(self):
+        """切换语言后重建全部控件（数据与选中状态由 load_status 重新加载）。"""
+        for child in list(self.root.winfo_children()):
+            child.destroy()
+        self.lang = self.i18n_data.language
+        self.pick = {
+            "card": "",
+            "cert": ""
+        }
+        self.setup_fonts(in_create=False)
+        self.build_ui()
+        self.load_status()
 
     def check_datas(self):
         # TPM --------------------------------------------------------------------------------
         tpm_status = self.check_tpm_h(out=False)
-        if tpm_status != 0:
+        if tpm_status == 1:
             messagebox.showerror(
                 self.i18n("msg_cert_out_ft_item"),
-                (self.i18n("msg_tpm_check_fail") % "None Activated TPM") if tpm_status == 1 \
-                    else (self.i18n("msg_tpm_check_none") % "Unknown TPM Status")
+                self.i18n("msg_tpm_check_fail") % self.i18n("msg_tpm_none_act")
+            )
+        elif tpm_status != 0:
+            # 状态未知（如未以管理员权限运行）时用警告提示，不再是红色报错
+            messagebox.showwarning(
+                self.i18n("msg_cert_out_ft_item"),
+                self.i18n("msg_tpm_check_none") % self.i18n("msg_tpm_unknown")
             )
         # OpenSC -----------------------------------------------------------------------------
-        opensc_path_x64 = r"C:\Program Files\OpenSC Project\OpenSC"
-        opensc_path_x86 = r"C:\Program Files (x86)\OpenSC Project\OpenSC"
-        if not os.path.exists(opensc_path_x64) and not os.path.exists(opensc_path_x86):
+        if not MoreConfig.openscPath():
             if messagebox.askquestion(self.i18n("sc_title"), self.i18n("sc_datas")) == 'yes':
                 self.install_osc()
                 os.startfile(sys.executable)
@@ -166,8 +325,9 @@ class SmartCardAPP:
         return x, y
 
     def read_config(self):
+        # 界面文案已独立到 Config/locales，这里的配置只负责布局与表格列
         for conf_name in ["tables", "frames", "button",
-                          "labels", "global", "cncode"]:
+                          "labels", "cncode"]:
             with open("Config/%s.json" % conf_name, "r",
                       encoding="utf8") as conf_file:
                 conf_data = conf_file.read()
@@ -175,19 +335,23 @@ class SmartCardAPP:
 
     def load_status(self):
         self.data.readInfo()
-        self.button["card_main"]["del"].config(state=tk.DISABLED)
+        self.button["card_opts"]["del"].config(state=tk.DISABLED)
         self.button["cert_main"]["non"].config(state=tk.DISABLED)
         self.button["card_main"]["pin"].config(state=tk.DISABLED)
         self.button["card_main"]["puk"].config(state=tk.DISABLED)
         self.button["cert_main"]["sys"].config(state=tk.DISABLED)
         self.button["cert_main"]["out"].config(state=tk.DISABLED)
         self.button["card_opts"]["bak"].config(state=tk.DISABLED)
-        self.button["card_opts"]["rec"].config(state=tk.DISABLED)
         self.tables["card_main"][0].delete(*self.tables["card_main"][0].get_children())
         self.tables["cert_main"][0].delete(*self.tables["cert_main"][0].get_children())
         for item_name in ["card_info", "cert_info", "cert_user", "cert_last"]:
             for fill_name in self.labels[item_name]:
                 self.labels[item_name][fill_name][1].config(text="")
+        # 还没选卡片/证书：详情区只留一行提示，标签整体不显示
+        for hint_name in ["card_info", "cert_info", "cert_user", "cert_last"]:
+            self.toggle_labels(hint_name, False)
+        self.toggle_frame("cert_user", False)
+        self.toggle_frame("cert_last", False)
         for card_now in self.data.cards:
             if "card_main" in self.tables:
                 self.tables["card_main"][0].insert("", tk.END, values=(
@@ -199,10 +363,12 @@ class SmartCardAPP:
             if "cert_main" in self.tables:
                 if len(cert_now.split(' ')) > 1:
                     cert_name = " ".join(cert_now.split(' ')[:-1])
-                elif self.data.certs[cert_now].sc_cert is not None:
-                    cert_name = self.data.certs[cert_now].sc_cert.OwnersInfo['CN']
                 else:
                     cert_name = self.i18n("msg_no_cert")
+                    # 证书解析失败(sc_cert 为 None)或无 CN(SAN 证书)时保持默认文案
+                    owners = getattr(self.data.certs[cert_now].sc_cert, "OwnersInfo", None)
+                    if owners and owners.get("CN"):
+                        cert_name = owners["CN"]
                 self.tables["cert_main"][0].insert("", tk.END, values=(
                     cert_now.split(' ')[-1],
                     cert_name,
@@ -214,91 +380,162 @@ class SmartCardAPP:
     def view_frames(self, in_name):
         tb_conf = self.conf['frames']
         if in_name in tb_conf:
-            tag = ttk.LabelFrame(bootstyle="info",
-                                 width=tb_conf[in_name][0],
-                                 height=tb_conf[in_name][1],
-                                 text=self.i18n(in_name))
+            tag = self.new_widget("LabelFrame", self.frame_style,
+                                  width=tb_conf[in_name][0],
+                                  height=tb_conf[in_name][1],
+                                  text=self.i18n(in_name))
             tag.place(x=tb_conf[in_name][2], y=tb_conf[in_name][3])
             return tag
         return None
 
     # 添加表格控件 ============================================================
     #                     表格名称 表格的样式风格
-    def view_tables(self, in_name, t_style='info'):
+    def view_tables(self, in_name, t_style=None):
         tb_conf = self.conf['tables']
-        if in_name in tb_conf:
-            # 处理基本信息 ====================================================
-            tb_pack = tb_conf[in_name]['pack']
-            tb_data = tb_conf[in_name]['data']
-            tb_name = list(i for i in tb_data)
-            tb_lens = sum([tb_data[i][0] for i in tb_data])
-            # 添加表格组件 ====================================================
-            inf = ttk.Treeview(self.root,
-                               bootstyle=t_style,
-                               show="headings",
-                               columns=tb_name,
-                               )
-            bar = ttk.Scrollbar(self.root,
-                                bootstyle=t_style,
-                                orient='vertical',
-                                command=inf.yview)
-            inf.configure(yscrollcommand=bar.set)
-            # 设置表格组件 ====================================================
-            inf.place(x=tb_pack[0], y=tb_pack[1], width=tb_lens + 25)
-            bar.place(x=tb_pack[0] + tb_lens + 13,
-                      y=tb_pack[1] + 29, height=tb_pack[2])
-            # 设置表列信息 ====================================================
-            for th_name in tb_data:
-                inf.heading(th_name, text=self.i18n(tb_data[th_name][1]))  # 标题
-                inf.column(th_name, anchor='w', width=tb_data[th_name][0])
-            return inf, bar
-        return None, None
+        if in_name not in tb_conf:
+            return None, None
+        # 处理基本信息 ========================================================
+        tb_pack = tb_conf[in_name]['pack']
+        tb_data = tb_conf[in_name]['data']
+        tb_name = list(i for i in tb_data)
+        tb_head = [self.i18n(tb_data[i][1]) for i in tb_name]
+        tb_lens = sum([tb_data[i][0] for i in tb_data])
+        # 列宽直接使用布局配置（固定排布，便于各列宽窄一致）
+        tb_cols = [tb_data[i][0] for i in tb_name]
+        # 表格 + 滚动条可用的总宽度（配置缺省时按列宽推算，兼容旧配置）
+        tb_area = tb_pack[3] if len(tb_pack) > 3 else tb_lens + 25
+        # 添加表格组件 ========================================================
+        inf = self.new_widget("Treeview", t_style or self.table_style,
+                              show="headings",
+                              columns=tb_name)
+        bar = self.new_widget("Scrollbar", t_style or self.table_style,
+                              orient='vertical',
+                              command=inf.yview)
+        inf.configure(yscrollcommand=bar.set)
+        # 表头高度/行高随主题不同，先探测再决定可视行数
+        tb_head_h, tb_row_h = self.table_metrics(inf)
+        tb_rows = max(3, int(tb_pack[2] / tb_row_h))
+        inf.configure(height=tb_rows)
+        inf.update_idletasks()
+        # 设置表格组件：滚动条与列表等高、紧贴右侧 =============================
+        bar_width = TABLE_BAR_WIDTH
+        inf.place(x=tb_pack[0], y=tb_pack[1], width=tb_area - bar_width - 2)
+        bar.place(x=tb_pack[0] + tb_area - bar_width,
+                  y=tb_pack[1],
+                  height=tb_head_h + tb_rows * tb_row_h)
+        # 设置表列信息 ========================================================
+        for th_name, th_width, th_text in zip(tb_name, tb_cols, tb_head):
+            inf.heading(th_name, text=th_text)  # 标题
+            inf.column(th_name, anchor='w', width=th_width)
+        return inf, bar
 
-    # 添加框架控件 ============================================================
+    @staticmethod
+    def table_metrics(tree):
+        """探测表格的表头高度与行高（不同主题数值不同，用于对齐滚动条）。"""
+        try:
+            tree.configure(height=2)
+            tree.update_idletasks()
+            small = tree.winfo_reqheight()
+            tree.configure(height=4)
+            tree.update_idletasks()
+            large = tree.winfo_reqheight()
+        except Exception:
+            return TABLE_HEAD_HEIGHT, TABLE_ROW_HEIGHT
+        row_h = max(1, (large - small) // 2)
+        head_h = small - 2 * row_h
+        if row_h <= 1 or head_h <= 0:
+            return TABLE_HEAD_HEIGHT, TABLE_ROW_HEIGHT
+        return head_h, row_h
+
+    # 添加按钮控件 ============================================================
     def view_button(self, in_name):
         tb_conf = self.conf['button']
-        if in_name in tb_conf:
-            bt_dict = dict()
-            # 处理基本信息 ====================================================
-            bt_cfg = tb_conf[in_name][0]
-            bt_btx = bt_cfg[0]
-            bt_bty = bt_cfg[1]
-            bt_all = tb_conf[in_name][1:]
-            bt_map = {
-                "add": (self.card_create, None),
-                "del": (self.data_delete, "card"),
-                "puk": (self.card_change, "puk"),
-                "pin": (self.card_change, "pin"),
-                "cer": (self.cert_import, "pfx"),
-                "csr": (self.reqs_create, None),
-                "pem": (self.cert_import, "cer"),
-                "sys": (self.cert_system, None),
-                "out": (self.cert_out_to, None),
-                "non": (self.data_delete, "cert"),
+        if in_name not in tb_conf:
+            return None
+        bt_dict = dict()
+        # 处理基本信息 ========================================================
+        # [起始 X, 起始 Y, 按钮间距(可选), 整排总宽度(可选，用于自适应按钮宽度)]
+        bt_cfg = tb_conf[in_name][0]
+        bt_btx = bt_cfg[0]
+        bt_bty = bt_cfg[1]
+        bt_gap = bt_cfg[2] if len(bt_cfg) > 2 else 2
+        bt_total = bt_cfg[3] if len(bt_cfg) > 3 else 0
+        bt_all = tb_conf[in_name][1:]
+        bt_map = {
+            "add": (self.card_create, None),
+            "del": (self.data_delete, "card"),
+            "puk": (self.card_change, "puk"),
+            "pin": (self.card_change, "pin"),
+            "cer": (self.cert_import, "pfx"),
+            "csr": (self.reqs_create, None),
+            "pem": (self.cert_import, "cer"),
+            "sys": (self.cert_system, None),
+            "out": (self.cert_out_to, None),
+            "non": (self.data_delete, "cert"),
 
-                "inf": (self.about_pages, None),
-                "osc": (self.install_osc, None),
-                "git": (self.open_github, None),
-                "ing": (self.load_status, None),
-                "tpm": (self.check_tpm_h, None),
-                "set": (None, None),
-                "ssh": (MoreConfig.setupSSH, None),
-                "key": (MoreConfig.startSSH, None),
-            }
-            # bt_fun = {}
-            for now in bt_all:
-                bt_fun = bt_map[now['name']] if now['name'] in bt_map else (None, None)
-                if bt_fun[1] is None:
-                    bta = ttk.Button(self.root, text=self.i18n(now['text']),
-                                     bootstyle=now['type'], command=bt_fun[0])
-                else:
-                    bta = ttk.Button(self.root, text=self.i18n(now['text']),
-                                     bootstyle=now['type'], command=partial(bt_fun[0], bt_fun[1]))
-                bta.place(x=bt_btx, y=bt_bty, width=now['w'])
-                bt_btx = bt_btx + now['w'] + 2
-                bt_dict[now['name']] = bta
-            return bt_dict
-        return None
+            "ing": (self.load_status, None),
+            "tpm": (self.check_tpm_h, None),
+            "set": (self.card_settings, None),
+            "bak": (self.card_backup, None),
+            "rec": (self.card_restore, None),
+        }
+        # 按钮宽度按当前语言文案的实测宽度分配，长文案语言（俄语等）不会被截断
+        bt_texts = [self.i18n(now['text']) for now in bt_all]
+        bt_styles = [self.button_style(now) for now in bt_all]
+        bt_sizes = self.fit_buttons(bt_texts, bt_styles, bt_total, bt_gap, bt_all)
+        for now, bta_text, bta_style, bta_size in zip(bt_all, bt_texts, bt_styles, bt_sizes):
+            bt_fun = bt_map[now['name']] if now['name'] in bt_map else (None, None)
+            bta = self.new_widget("Button", bta_style, text=bta_text,
+                                  command=bt_fun[0] if bt_fun[1] is None
+                                  else partial(bt_fun[0], bt_fun[1]))
+            bta.place(x=bt_btx, y=bt_bty, width=bta_size)
+            bt_btx = bt_btx + bta_size + bt_gap
+            bt_dict[now['name']] = bta
+        return bt_dict
+
+    def button_style(self, item):
+        """按钮配色：主题可整体覆盖（配置里没写就用 button.json 的 type）。"""
+        override = (self.theme.get("button") or {}).get(item['name'])
+        return override or item['type']
+
+    def button_style_names(self):
+        """界面用到的全部按钮配色名（原版主题下用于统一文字颜色）。"""
+        styles = set((self.theme.get("button") or {}).values())
+        for group in (self.conf.get('button') or {}).values():
+            for item in group[1:]:
+                if item.get("type"):
+                    styles.add(item["type"])
+        return sorted(styles)
+
+    def fit_buttons(self, texts, styles, total, gap, conf):
+        """确定一排按钮各自的宽度。
+
+        以布局配置里的 ``w`` 为基准（保证间距均匀、可预期）；
+        某个按钮的文案比配置更宽时按需加宽，整排放不下时再等比压缩。
+        """
+        if not total:
+            return [item['w'] for item in conf]
+        count = len(texts)
+        avail = total - gap * (count - 1)
+        if count <= 0 or avail <= 0:
+            return [item['w'] for item in conf]
+        needs = [self.measure_button(text, style) for text, style in zip(texts, styles)]
+        sizes = [max(conf[index]['w'], needs[index]) for index in range(count)]
+        total_now = sum(sizes)
+        if total_now > avail:
+            sizes = [max(MIN_BUTTON_WIDTH, int(size * avail / total_now)) for size in sizes]
+        sizes[-1] = max(MIN_BUTTON_WIDTH, avail - sum(sizes[:-1]))
+        return sizes
+
+    def measure_button(self, text, style_name):
+        """量出按钮文案实际需要的宽度（含主题的内边距与边框）。"""
+        probe = self.new_widget("Button", style_name, text=text)
+        width = probe.winfo_reqwidth()
+        probe.destroy()
+        if width <= 1:
+            # 控件尺寸尚未计算时用字体测量兜底
+            width = self.t_fonts['label_data'].measure(text) + BUTTON_PADDING_FALLBACK
+        return width
 
     def view_labels(self, in_name):
         # 卡片信息 ======
@@ -308,36 +545,85 @@ class SmartCardAPP:
             tb_conf = tb_conf[in_name]
             tb_ln_x = tb_conf['conf'][0]
             tb_it_y = tb_conf['conf'][1]
+            # 行高可选（缺省 20）：详情框越高的分组可以排得松一些
+            tb_row = tb_conf['conf'][2] if len(tb_conf['conf']) > 2 else LABEL_ROW_HEIGHT
             for tb_line in tb_conf['data']:
                 tb_it_x = tb_ln_x
                 for tb_item in tb_line:
-                    tag = ttk.Label(bootstyle="default", text=self.i18n(tb_item) + ": "
-                                    , font=self.t_fonts['label_name'])
+                    tag = self.new_widget("Label", "default",
+                                          text=self.i18n(tb_item) + ": ",
+                                          font=self.t_fonts['label_name'])
                     tag.place(x=tb_it_x, y=tb_it_y)
-                    inf = ttk.Label(bootstyle="default", text="", font=self.t_fonts['label_data'])
-                    # inf.place(x=tb_it_x + tag.winfo_reqwidth() + 5, y=tb_it_y)
-                    inf.place(x=tb_it_x + 60 + 5, y=tb_it_y)
-                    tb_data[tb_item] = [tag, inf]
-                    # tb_it_x += tag.winfo_reqwidth() + 5 + tb_line[tb_item]
-                    tb_it_x += 60 + 5 + tb_line[tb_item]
-                tb_it_y += 20
+                    inf = self.new_widget("Label", "default", text="",
+                                          font=self.t_fonts['label_data'])
+                    inf.place(x=tb_it_x + LABEL_WIDTH + LABEL_GAP, y=tb_it_y)
+                    # 同时记下坐标，未选中卡片/证书时要整组隐藏
+                    tb_data[tb_item] = [tag, inf,
+                                        (tb_it_x, tb_it_y),
+                                        (tb_it_x + LABEL_WIDTH + LABEL_GAP, tb_it_y)]
+                    tb_it_x += LABEL_WIDTH + LABEL_GAP + tb_line[tb_item]
+                tb_it_y += tb_row
         return tb_data
+
+    # 详情区：未选中卡片/证书时只显示一行居中提示 ==============================
+    def view_hint(self, in_name, in_text_key):
+        frame_now = self.frames.get(in_name)
+        if frame_now is None:
+            return None
+        hint = self.new_widget("Label", "secondary", in_master=frame_now,
+                               font=self.t_fonts['label_data'],
+                               text=self.i18n(in_text_key))
+        hint.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        return hint
+
+    def toggle_labels(self, in_group, in_visible):
+        """显示/隐藏一组详情标签：隐藏时改为显示该区域的居中提示。"""
+        for item in (self.labels.get(in_group) or {}).values():
+            for widget, pos in ((item[0], item[2]), (item[1], item[3])):
+                if in_visible:
+                    widget.place(x=pos[0], y=pos[1])
+                else:
+                    widget.place_forget()
+        hint = self.hints.get(in_group)
+        if hint is None:
+            return None
+        if in_visible:
+            hint.place_forget()
+        else:
+            hint.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        return None
+
+    def toggle_frame(self, in_name, in_visible):
+        """显示/隐藏某个分组框（未选中证书时「使用者/颁发者」整体不显示）。"""
+        frame_now = self.frames.get(in_name)
+        conf_now = (self.conf.get('frames') or {}).get(in_name)
+        if frame_now is None or not conf_now:
+            return None
+        if in_visible:
+            frame_now.place(x=conf_now[2], y=conf_now[3])
+        else:
+            frame_now.place_forget()
+        return None
 
     def card_select(self, event):
         treeview = event.widget
         selected_item = treeview.selection()
+        # 有选中卡片才显示详情标签，否则只留一行提示
+        self.toggle_labels("card_info", len(selected_item) > 0)
         if len(selected_item) > 0:
             selected_name = treeview.set(selected_item[0], '#2')
             self.pick["card"] = selected_name
-            self.button["card_main"]["del"].config(state=tk.NORMAL)
+            self.button["card_opts"]["del"].config(state=tk.NORMAL)
             self.button["card_main"]["pin"].config(state=tk.NORMAL)
             self.button["card_main"]["puk"].config(state=tk.NORMAL)
+            self.button["card_opts"]["bak"].config(state=tk.NORMAL)
             if selected_name in self.data.cards:
                 card_now = self.data.cards[selected_name]
                 card_map = {
                     "card_name": selected_name,
                     "card_uuid": card_now.sc_uuid,
                     "card_path": card_now.sc_path,
+                    "card_list": card_now.card_id,
                     "sc_status": card_now.sc_sha1,
                     "sc_length": card_now.sc_sha2
                 }
@@ -345,6 +631,96 @@ class SmartCardAPP:
                     if fill_name in self.labels["card_info"]:
                         self.labels["card_info"][fill_name][1].config(text=card_map[fill_name])
             print(selected_name)
+
+    def card_backup(self):
+        """备份选中的 TPM 虚拟智能卡（卡片数据目录 + 卡片设备注册表）。
+
+        卡片数据目录位于 LocalService 服务账户配置下::
+
+            %SystemRoot%\\ServiceProfiles\\LocalService\\AppData\\Local\\
+            Microsoft\\Windows\\SmartCard\\Tpm
+
+        该目录默认 ACL 只允许 SYSTEM/管理员访问，因此备份需要管理员权限；
+        打包配置里 uac_admin=True，安装后运行即满足。
+        """
+        if not TPMBackup.is_admin():
+            messagebox.showwarning(self.i18n("warn"), self.i18n("msg_bak_admin"))
+            return None
+        if self.pick["card"] not in self.data.cards:
+            messagebox.showwarning(self.i18n("warn"), self.i18n("msg_bak_select"))
+            return None
+        card_now = self.data.cards[self.pick["card"]]
+        out_dir = filedialog.askdirectory(title=self.i18n("msg_bak_dir"),
+                                          initialdir=os.path.expanduser("~"))
+        if not out_dir:
+            return None
+        try:
+            report = TPMBackup.create_backup(out_dir,
+                                             name=card_now.sc_name,
+                                             uid=card_now.card_id)
+        except TPMBackup.BackupError as err:
+            messagebox.showerror(self.i18n("fail"), self.i18n("msg_bak_fail") % err)
+            return None
+        except Exception as err:
+            print("Backup Card Error:", err)
+            traceback.print_exc()
+            messagebox.showerror(self.i18n("fail"), self.i18n("msg_bak_fail") % err)
+            return None
+        result = self.i18n("msg_bak_ok") % (report["dir"],
+                                           str(report["file_count"]),
+                                           TPMBackup.human_size(report["size"]),
+                                           str(report["reg_count"]))
+        if report.get("warning"):
+            result += "\n\n" + report["warning"]
+        messagebox.showinfo(self.i18n("msg_bak_title"), result)
+        return None
+
+    def card_restore(self):
+        """从备份目录还原虚拟智能卡（回写卡片数据目录并导入注册表）。
+
+        注意：卡片私钥由 TPM 保护，备份只在同一台电脑且同一 TPM（未清除）上可还原。
+        """
+        if not TPMBackup.is_admin():
+            messagebox.showwarning(self.i18n("warn"), self.i18n("msg_bak_admin"))
+            return None
+        package = filedialog.askdirectory(title=self.i18n("msg_rec_dir"),
+                                          initialdir=os.path.expanduser("~"))
+        if not package:
+            return None
+        try:
+            manifest = TPMBackup.read_manifest(package)
+        except TPMBackup.BackupError as err:
+            messagebox.showerror(self.i18n("fail"),
+                                 "%s\n%s" % (self.i18n("msg_rec_bad"), err))
+            return None
+        card_now = manifest.get("card") or {}
+        uid = str(card_now.get("instance") or "")
+        tips = ""
+        # 同名卡片已存在时提醒覆盖风险（建议先删除卡片，避免文件被占用）
+        if TPMBackup.find_card(uid=uid) is not None:
+            tips += (self.i18n("msg_rec_exist") % uid) + "\n\n"
+        tips += self.i18n("msg_rec_confirm") % (card_now.get("name") or self.i18n("msg_na"),
+                                                uid or self.i18n("msg_na"),
+                                                manifest.get("created_at") or self.i18n("msg_na"))
+        if not messagebox.askokcancel(self.i18n("msg_rec_title"), tips):
+            return None
+        try:
+            report = TPMBackup.restore_backup(package)
+        except TPMBackup.BackupError as err:
+            messagebox.showerror(self.i18n("fail"), self.i18n("msg_rec_fail") % err)
+            return None
+        except Exception as err:
+            print("Restore Card Error:", err)
+            traceback.print_exc()
+            messagebox.showerror(self.i18n("fail"), self.i18n("msg_rec_fail") % err)
+            return None
+        result = self.i18n("msg_rec_ok") % (str(report["file_count"]),
+                                            str(report["reg_count"]))
+        if report.get("stale"):
+            result += "\n" + self.i18n("msg_rec_stale") % str(len(report["stale"]))
+        messagebox.showinfo(self.i18n("msg_rec_title"), result)
+        self.load_status()
+        return None
 
     def cert_out_to(self, in_path=None):
         la_path = in_path
@@ -354,10 +730,12 @@ class SmartCardAPP:
                 if in_path is None:
                     in_path = filedialog.asksaveasfilename(
                         defaultextension=".crt",  # 默认文件扩展名
-                        filetypes=[("Cert files", "*.crt"), ("All files", "*.*")],  # 文件类型过滤器
+                        # 文件类型过滤器
+                        filetypes=[(self.i18n("msg_dlg_cert_files"), "*.crt"),
+                                   (self.i18n("msg_dlg_all_files"), "*.*")],
                         initialdir="~",  # 初始目录，对于Windows系统，你可能想要设置为os.path.expanduser('~')
                         initialfile="%s.crt" % str(now_cert.sc_cert.SerialNums),  # 初始文件名
-                        title="Save as"  # 对话框标题
+                        title=self.i18n("msg_dlg_save_as")  # 对话框标题
                     )
                 else:
                     in_path = "%s\\%s.crt" % (in_path, str(now_cert.sc_cert.SerialNums))
@@ -389,6 +767,12 @@ class SmartCardAPP:
         for item_name in ["cert_info", "cert_user", "cert_last"]:
             for fill_name in self.labels[item_name]:
                 self.labels[item_name][fill_name][1].config(text="")
+        # 有选中证书才显示详情，否则只留一行提示（使用者/颁发者整体不显示）
+        has_cert = len(selected_item) > 0
+        for toggle_name in ["cert_info", "cert_user", "cert_last"]:
+            self.toggle_labels(toggle_name, has_cert)
+        self.toggle_frame("cert_user", has_cert)
+        self.toggle_frame("cert_last", has_cert)
         if len(selected_item) > 0:
             selected_name = treeview.set(selected_item[0], '#2')
             selected_uuid = treeview.set(selected_item[0], '#1')
@@ -413,11 +797,13 @@ class SmartCardAPP:
                     self.button["cert_main"]["out"].config(state=tk.NORMAL)
                     cert_now = cert_now.sc_cert
                     Algorithms = str(cert_now.Algorithms).split("With")[0]
-                    user_name = cert_now.OwnersInfo["CN"] if "CN" in cert_now.OwnersInfo else "(Empty)"
+                    empty_tag = self.i18n("msg_empty")
+                    none_tag = self.i18n("msg_na")
+                    user_name = cert_now.OwnersInfo["CN"] if "CN" in cert_now.OwnersInfo else empty_tag
                     user_name = user_name[:35] + ".." if len(user_name) > 35 else user_name
-                    last_name = cert_now.IssuerInfo["CN"] if "CN" in cert_now.IssuerInfo else "(Empty)"
+                    last_name = cert_now.IssuerInfo["CN"] if "CN" in cert_now.IssuerInfo else empty_tag
                     last_name = last_name[:35] + ".." if len(last_name) > 35 else last_name
-                    cer_policy = "(Empty)"
+                    cer_policy = empty_tag
                     if 'certificatePolicies' in cert_now.CertExtend:
                         cer_policy = ""
                         tmp_counts = 0
@@ -437,7 +823,7 @@ class SmartCardAPP:
                         "cert_type": Algorithms.upper(),
                         "cert_open": cert_now.IssuedDate,
                         "cert_stop": cert_now.ExpireDate,
-                        "cert_sha1": "HEX " + str(cert_now.CertSHA160).replace(":", ""),
+                        "cert_sha1": self.i18n("msg_hex_prefix") + str(cert_now.CertSHA160).replace(":", ""),
                         "is_ca_cert": cert_now.is_ca_cert,
                         "is_expired": cert_now.is_expired,
 
@@ -448,21 +834,21 @@ class SmartCardAPP:
                         "key_identy": str(cert_now.MainHashID).replace(":", ""),
                         "sub_identy": str(cert_now.SubsHashID).replace(":", ""),
                         "uid_serial": cert_now.OwnersInfo["UID"] if "UID" in cert_now.OwnersInfo else \
-                            cert_now.OwnersInfo["SERIALNUMBER"] if "SERIALNUMBER" in cert_now.OwnersInfo else "(Empty)",
+                            cert_now.OwnersInfo["SERIALNUMBER"] if "SERIALNUMBER" in cert_now.OwnersInfo else empty_tag,
                         "cer_policy": cer_policy,
                         "user_name": user_name,
-                        "user_code": cert_now.OwnersInfo["C"] if "C" in cert_now.OwnersInfo else "N/A",
-                        "user_area": cert_now.OwnersInfo["S"][:7] if "S" in cert_now.OwnersInfo else "N/A",
-                        "user_city": cert_now.OwnersInfo["L"][:7] if "L" in cert_now.OwnersInfo else "N/A",
-                        "user_on_t": cert_now.OwnersInfo["O"][:39] if "O" in cert_now.OwnersInfo else "(Empty)",
-                        "user_ou_t": cert_now.OwnersInfo["OU"][:39] if "OU" in cert_now.OwnersInfo else "(Empty)",
+                        "user_code": cert_now.OwnersInfo["C"] if "C" in cert_now.OwnersInfo else none_tag,
+                        "user_area": cert_now.OwnersInfo["S"][:7] if "S" in cert_now.OwnersInfo else none_tag,
+                        "user_city": cert_now.OwnersInfo["L"][:7] if "L" in cert_now.OwnersInfo else none_tag,
+                        "user_on_t": cert_now.OwnersInfo["O"][:39] if "O" in cert_now.OwnersInfo else empty_tag,
+                        "user_ou_t": cert_now.OwnersInfo["OU"][:39] if "OU" in cert_now.OwnersInfo else empty_tag,
 
                         "last_name": last_name,
-                        "last_code": cert_now.IssuerInfo["C"] if "C" in cert_now.IssuerInfo else "N/A",
-                        "last_area": cert_now.IssuerInfo["S"][:7] if "S" in cert_now.IssuerInfo else "N/A",
-                        "last_city": cert_now.IssuerInfo["L"][:7] if "L" in cert_now.IssuerInfo else "N/A",
-                        "last_on_t": cert_now.IssuerInfo["O"][:39] if "O" in cert_now.IssuerInfo else "(Empty)",
-                        "last_ou_t": cert_now.IssuerInfo["OU"][:39] if "OU" in cert_now.IssuerInfo else "(Empty)",
+                        "last_code": cert_now.IssuerInfo["C"] if "C" in cert_now.IssuerInfo else none_tag,
+                        "last_area": cert_now.IssuerInfo["S"][:7] if "S" in cert_now.IssuerInfo else none_tag,
+                        "last_city": cert_now.IssuerInfo["L"][:7] if "L" in cert_now.IssuerInfo else none_tag,
+                        "last_on_t": cert_now.IssuerInfo["O"][:39] if "O" in cert_now.IssuerInfo else empty_tag,
+                        "last_ou_t": cert_now.IssuerInfo["OU"][:39] if "OU" in cert_now.IssuerInfo else empty_tag,
                     }
                     for fill_name in cert_map:
                         for label in ["cert_info", "cert_user", "cert_last"]:
@@ -474,40 +860,27 @@ class SmartCardAPP:
                     self.button["cert_main"]["out"].config(state=tk.DISABLED)
             print(selected_name)
 
-    def about_pages(self):
-        messagebox.showinfo(self.i18n("msg_about_title"),
-                            self.i18n("msg_about_about"))
-
     def check_tpm_h(self, out=True):
-        process = subprocess.run("powershell Get-TPM", text=True, capture_output=True, shell=True)
-        results = process.stdout.replace(" ", "")
-        results = [i for i in ''.join(x for x in results if x.isprintable() or x == "\n").split("\n") if len(i)]
-        results = ["%-25s\t: %s" % (i.split(":")[0] + "\t" * int(16 / len(i.split(":")[0])), i.split(":")[1]) for i in
-                   results]
-        results = "\n".join(results).replace("TpmOwned\t\t", "TpmOwned\t")
-        for line in results.split("\n"):
-            if line.find("TpmActivated") >= 0:
-                if line.find("True") >= 0:
-                    if out:
-                        messagebox.showinfo(self.i18n("msg_tpm_check_text"),
-                                            self.i18n("msg_tpm_check_done") % results)
-                    return 0
-                else:
-                    if out:
-                        messagebox.showerror(self.i18n("msg_tpm_check_text"),
-                                             self.i18n("msg_tpm_check_fail") % results)
-                    return 1
-        if out:
-            messagebox.showwarning(self.i18n("msg_tpm_check_text"),
-                                   self.i18n("msg_tpm_check_none") % results)
-        return -1
+        """检测 TPM 状态（解析见 Module.TPMSmartCard.tpmStatus）。
 
-    def open_github(self):
-        webbrowser.open('https://github.com/PIKACHUIM/TPMSmartCard')
+        状态码：0 已激活、1 未激活、-1 状态未知（如未以管理员权限运行）。
+        """
+        status, _, results = TPMSmartCard.tpmStatus()
+        if out:
+            if status == 0:
+                messagebox.showinfo(self.i18n("msg_tpm_check_text"),
+                                    self.i18n("msg_tpm_check_done") % results)
+            elif status == 1:
+                messagebox.showerror(self.i18n("msg_tpm_check_text"),
+                                     self.i18n("msg_tpm_check_fail") % results)
+            else:
+                messagebox.showwarning(self.i18n("msg_tpm_check_text"),
+                                       self.i18n("msg_tpm_check_none") % results)
+        return status
 
     def install_osc(self):
-        os.system("msiexec /i OpenSC\\OpenSC-0.25.1_win%s-Light.msi "
-                  "/passive /norestart" % platform.architecture()[0][:2])
+        """安装随程序分发的 OpenSC（安装逻辑统一放在 MoreConfig 中）。"""
+        return MoreConfig.installOpenSC()
 
     def card_change(self, in_type="pin"):
         if not self.pick["card"] or self.pick["card"] not in self.data.cards:
@@ -632,7 +1005,13 @@ class SmartCardAPP:
                 adks_txt.config(state=tk.NORMAL)
 
         def submit():
-            if name_txt.get() == "":
+            if not TPMSmartCard.isElevated():
+                # 建卡必须提权，未提权时 tpmvscmgr 只会给出误导性的
+                # "(0x80070002) 系统找不到指定的文件"
+                make.attributes('-topmost', False)
+                messagebox.showwarning(self.i18n("fail"), self.i18n("msg_need_admin"))
+                make.attributes('-topmost', True)
+            elif name_txt.get() == "":
                 make.attributes('-topmost', True)
                 messagebox.showwarning(self.i18n("fail"), self.i18n("msg_new_card_txt_e"))
             elif not 8 <= len(pins_txt.get()) <= 15:
@@ -646,35 +1025,37 @@ class SmartCardAPP:
                 messagebox.showwarning(self.i18n("fail"), self.i18n("msg_new_card_key_e"))
             else:
                 deals_process['value'] = 0
-                global deals_destroy
                 deals_destroy = False
+                # Tk 控件只能在主线程访问：先取值，工作线程只做耗时操作
+                pin = pins_txt.get()
+                puk = puks_txt.get()
+                adk = adks_txt.get()
+                name = name_txt.get()
 
-                def create():
-                    global deals_destroy
-                    result = TPMSmartCard.makeCards(
-                        pins_txt.get(),
-                        puks_txt.get(),
-                        adks_txt.get(),
-                        name_txt.get()
-                    )
-                    deals_process['value'] = 95
-                    result = result.split("\n")[-12:]
-                    result = "\n".join(result)
-                    deals_process['value'] = 100
-                    self.load_status()
-                    deals_destroy = True
-                    pin = pins_txt.get()
-                    puk = puks_txt.get()
-                    adk = adks_txt.get()
+                def create(in_pin, in_puk, in_adk, in_name):
+                    try:
+                        result = TPMSmartCard.makeCards(in_pin, in_puk, in_adk, in_name)
+                    except Exception as err:
+                        print("Create Card Error:", err)
+                        traceback.print_exc()
+                        result = "Error: %s" % err
+                    result = "\n".join(result.split("\n")[-12:])
                     out = "%s PIN: %s\n%s PUK: %s\n%s: %s" % (
-                        self.i18n("msg_user"), pin,
-                        self.i18n("msg_user"), puk,
-                        self.i18n("mag_admin_key"), adk
+                        self.i18n("msg_user"), in_pin,
+                        self.i18n("msg_user"), in_puk,
+                        self.i18n("mag_admin_key"), in_adk
                     )
                     # cid = result.find("ROOT")
                     # if cid >= 0:
                     #     out = result[cid:cid + 25] + "\n" + out
-                    if deals_destroy:
+                    self.root.after(0, done, result, out)
+
+                def done(result, out):
+                    nonlocal deals_destroy
+                    deals_destroy = True
+                    deals_process['value'] = 100
+                    self.load_status()
+                    if make.winfo_exists():
                         make.destroy()
                         messagebox.showinfo(self.i18n("msg_create") + self.i18n("msg_result"), result)
                         pyperclip.copy(out)
@@ -682,19 +1063,18 @@ class SmartCardAPP:
                                             out + self.i18n("msg_new_card_dones"))
 
                 def update():
-                    global deals_destroy
-                    count = 100
-                    while count > 0 and not deals_destroy:
+                    # 进度条动画用 after 回到主线程，避免跨线程操作 Tk
+                    if deals_destroy or not make.winfo_exists():
+                        return None
+                    if deals_process['value'] < 95:
                         deals_process['value'] += 0.9
-                        time.sleep(0.15)
-                        count -= 1
+                    self.root.after(150, update)
 
                 cancel_button.config(state=tk.DISABLED)
                 submit_button.config(state=tk.DISABLED)
-                process = threading.Thread(target=create)
+                process = threading.Thread(target=create, args=(pin, puk, adk, name), daemon=True)
                 process.start()
-                updates = threading.Thread(target=update)
-                updates.start()
+                update()
 
         def cancel():
             make.destroy()
@@ -718,7 +1098,7 @@ class SmartCardAPP:
         name_tag = ttk.Label(make, text=self.i18n("card_name") + ": ", bootstyle="info")
         name_tag.grid(column=0, row=0, pady=10, padx=15)
         name_txt = ttk.Entry(make, bootstyle="info", width=60, textvariable=name_var)
-        name_txt.insert(0, "Personal TPM Virtual Smart Card")
+        name_txt.insert(0, self.i18n("msg_card_def_name"))
         name_txt.grid(column=1, row=0, pady=10, padx=5)
         name_tip = ttk.Label(make, text="(1~63%s)" % self.i18n("msg_char"), bootstyle="info")
         name_tip.grid(column=2, row=0, pady=10, padx=5)
@@ -781,6 +1161,12 @@ class SmartCardAPP:
             make.title(self.i18n("msg_remove") + self.i18n("msg_" + in_name))
 
             def submit():
+                if in_name == "card" and not TPMSmartCard.isElevated():
+                    # 删除卡同样需要管理员权限
+                    make.attributes('-topmost', False)
+                    messagebox.showwarning(self.i18n("fail"), self.i18n("msg_need_admin"))
+                    make.attributes('-topmost', True)
+                    return None
                 if in_name == "card":
                     result = TPMSmartCard.dropCards(self.data.cards[self.pick[in_name]].sc_path)
                 elif in_name == "cert":
@@ -925,9 +1311,14 @@ class SmartCardAPP:
             # 自签证书和拓展 ===============================================================
             if va_self.get():
                 # 类型和时间 ===============================================================
+                date_now = open_dt.entry.get().strip().split(" ")[0]
+                date_end = stop_dt.entry.get().strip().split(" ")[0]
                 full_text += 'RequestType = Cert\n'
-                full_text += 'NotBefore = "%s 00:00"\n' % open_dt.entry.get().split(" ")[0]
-                full_text += 'NotAfter = "%s 00:00"\n' % stop_dt.entry.get().split(" ")[0]
+                full_text += 'NotBefore = "%s 00:00"\n' % (date_now or
+                                                           datetime.today().strftime("%Y/%m/%d"))
+                full_text += 'NotAfter = "%s 00:00"\n' % (date_end or
+                                                          (datetime.today() + timedelta(days=365)).strftime(
+                                                              "%Y/%m/%d"))
             else:
                 full_text += 'RequestType = PKCS10\n'
             # 拓展用途 =====================================================================
@@ -973,10 +1364,12 @@ class SmartCardAPP:
                 file_file.write(full_text)
             save_path = filedialog.asksaveasfilename(
                 defaultextension=".csr",  # 默认文件扩展名
-                filetypes=[("Cert Request", "*.csr"), ("All files", "*.*")],  # 文件类型过滤器
+                # 文件类型过滤器
+                filetypes=[(self.i18n("msg_dlg_csr_files"), "*.csr"),
+                           (self.i18n("msg_dlg_all_files"), "*.*")],
                 initialdir="~",  # 初始目录
                 initialfile="%s.csr" % cn,  # 初始文件名
-                title="Save as"  # 对话框标题
+                title=self.i18n("msg_dlg_save_as")  # 对话框标题
             )
             result = TPMSmartCard.createCSR(file_path, save_path)
             messagebox.showinfo(self.i18n("b_csr") + self.i18n("msg_create"), result)
@@ -1151,16 +1544,22 @@ class SmartCardAPP:
 
         open_pt = ttk.Label(make, text=self.i18n("cert_open") + ": ")
         open_pt.grid(column=2, row=8, pady=10, padx=15)
-        open_dt = ttk.DateEntry(make, style='success.TCalendar', width=15)
+        # 固定 %Y/%m/%d：ttkbootstrap.DateEntry 默认用 %x，
+        # 在 C locale 下是 "10/12/26"，既无法做年份运算，也不能直接写进 INF
+        open_dt = ttk.DateEntry(make, dateformat="%Y/%m/%d", style='success.TCalendar', width=15)
         open_dt.grid(column=3, row=8, pady=10, padx=15, columnspan=2)
         open_dt.entry.config(state=tk.DISABLED)
         open_dt.button.config(state=tk.DISABLED)
         stop_pt = ttk.Label(make, text=self.i18n("cert_stop") + ": ")
         stop_pt.grid(column=5, row=8, pady=10, padx=15)
-        stop_dt = ttk.DateEntry(make, style='success.TCalendar', width=15)
+        stop_dt = ttk.DateEntry(make, dateformat="%Y/%m/%d", style='success.TCalendar', width=15)
         stop_dt.grid(column=6, row=8, pady=10, padx=15, columnspan=2)
-        date_tp = open_dt.entry.get()
-        date_tp = str(int(date_tp[:4]) + 1) + date_tp[4:]
+        date_tp = open_dt.entry.get().strip().split(" ")[0]
+        try:
+            date_tp = datetime.strptime(date_tp, "%Y/%m/%d") + timedelta(days=365)
+        except ValueError:
+            date_tp = datetime.today() + timedelta(days=365)
+        date_tp = date_tp.strftime("%Y/%m/%d")
         stop_dt.entry.delete(0, tk.END)
         stop_dt.entry.insert(0, date_tp)
         stop_dt.entry.config(state=tk.DISABLED)

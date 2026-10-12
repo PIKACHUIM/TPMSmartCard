@@ -1,3 +1,4 @@
+import os
 import subprocess
 import time
 from winpty import PtyProcess
@@ -8,13 +9,39 @@ class TPMSmartCard:
         pass
 
     @staticmethod
+    # 系统虚拟智能卡管理程序路径 ================================================
+    #   必须用系统目录里的官方版本：项目目录下若存在同名副本，
+    #   cmd.exe 会优先命中当前目录的那一份（未签名、错误信息被吞、行为不一致）。
+    def tpmVscMgr():
+        return os.path.join(os.environ.get("SystemRoot") or r"C:\Windows",
+                            "System32", "tpmvscmgr.exe")
+
+    @staticmethod
+    # 当前进程是否以管理员身份运行 ==============================================
+    #   建卡/删卡都需要管理员权限，未提权时 tpmvscmgr 会抛出误导性的
+    #   "(0x80070002) 系统找不到指定的文件"，所以调用前先判断。
+    def isElevated():
+        try:
+            import ctypes
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception as err:
+            print("Check Admin Error:", err)
+            return False
+
+    @staticmethod
     # 制作一张新的虚拟智能卡 =======================================================
     def makeCards(in_pin,  # 卡密码，必要
                   in_puk="",  # 可选PUK码
                   in_adk="",  # Admin Key
                   in_tag="PikaSmartCard"):
+        # 前置检查 =================================================================
+        mgr_path = TPMSmartCard.tpmVscMgr()
+        if not os.path.exists(mgr_path):
+            return "Error: %s not found." % mgr_path
+        if not TPMSmartCard.isElevated():
+            return "Error: Administrator privileges are required to create a TPM virtual smart card."
         # 根据参数设置命令 =========================================================
-        command = 'tpmvscmgr.exe create /name "%s"' % in_tag
+        command = '"%s" create /name "%s"' % (mgr_path, in_tag)
         command += " /AdminKey PROMPT" if len(in_adk) == 48 else " /AdminKey RANDOM"
         command += " /PUK PROMPT" if len(in_puk) == 8 else ""
         command += " /PIN PROMPT /generate\r"
@@ -26,6 +53,8 @@ class TPMSmartCard:
         proc.write(command)
         time.sleep(1)
         # 写入各项密码 =========================
+        # 每个 PROMPT 参数各问两次（输入 + 确认）；多写的字会被 cmd.exe 当命令执行，
+        # 刷出一堆 "'xxx' 不是内部或外部命令"，把真正的报错盖掉。
         if len(in_adk) == 48:
             for _ in range(0, 2):
                 proc.write(str(in_adk) + "\r")
@@ -33,27 +62,87 @@ class TPMSmartCard:
             for _ in range(0, 2):
                 proc.write(str(in_puk) + "\r")
         for _ in range(0, 2):
-            for _ in range(0, 2):
-                proc.write(str(in_pin) + "\r")
+            proc.write(str(in_pin) + "\r")
         proc.write("\rexit\r")
         # 判断注册状态 =========================
-        while proc.isalive():
+        # 加超时保护：tpmvscmgr 若卡在交互提示，避免主程序永久挂起
+        count = 0
+        while proc.isalive() and count < 300:
             time.sleep(1)
+            count += 1
             print("Creating Smart Card...")
-        result = proc.read()
+        result = ""
+        if proc.isalive():
+            print("Creating Smart Card: timeout, force exit")
+            try:
+                proc.close(force=True)
+            except Exception as err:
+                print("Close Card Process Error:", err)
+        else:
+            try:
+                result = proc.read()
+            except Exception as err:
+                print("Read Card Process Error:", err)
+        result = "" if result is None else str(result)
         print(result)
         return result
 
     @staticmethod
+    # 查询 TPM 状态 ==============================================================
+    #   返回 (状态码, 字段字典, 展示文本)
+    #   状态码：0 已激活可用、1 未激活、-1 状态未知（如未以管理员权限运行）
+    def tpmStatus():
+        try:
+            process = subprocess.run("powershell Get-TPM", text=True,
+                                     capture_output=True, shell=True,
+                                     timeout=60)
+        except Exception as err:
+            print("Get-TPM Error:", err)
+            return -1, {}, "Get-TPM Error: %s" % err
+        raw_text = process.stdout if process.stdout else ""
+        raw_text = raw_text.replace(" ", "")
+        raw_text = ''.join(x for x in raw_text if x.isprintable() or x == "\n")
+        fields = dict()
+        results = []
+        for item in raw_text.split("\n"):
+            # 只处理形如 "Key: Value" 的行，避免命令报错等无冒号文本导致索引越界
+            if ":" not in item:
+                continue
+            name, _, value = item.partition(":")
+            if not name:
+                continue
+            fields[name] = value
+            results.append("%-25s\t: %s" % (name + "\t" * int(16 / len(name)), value))
+        results = "\n".join(results).replace("TpmOwned\t\t", "TpmOwned\t")
+        if not results.strip():
+            # 未解析到任何键值对（如未以管理员权限运行），使用原始输出/错误信息作为提示
+            results = raw_text.strip() or (process.stderr.strip() if process.stderr else "") \
+                      or "None TPM Info"
+        status = -1
+        for name in ("TpmActivated", "TpmReady"):
+            if name in fields:
+                status = 0 if fields[name].strip().lower().startswith("true") else 1
+                break
+        return status, fields, results
+
+    @staticmethod
     def dropCards(in_name):
+        # 前置检查 =================================================================
+        mgr_path = TPMSmartCard.tpmVscMgr()
+        if not os.path.exists(mgr_path):
+            return "Error: %s not found." % mgr_path
+        if not TPMSmartCard.isElevated():
+            return "Error: Administrator privileges are required to delete a TPM virtual smart card."
         proc = PtyProcess.spawn('cmd.exe')
         proc.write("@echo off && cls\r")
         time.sleep(1)
         proc.read()
-        proc.write("tpmvscmgr.exe destroy /instance %s\r\r" % in_name)
+        proc.write('"%s" destroy /instance %s\r\r' % (mgr_path, in_name))
         proc.write("\rexit\r")
         time.sleep(1)
-        result = proc.read().split("\r\n")
+        result = proc.read()
+        result = "" if result is None else str(result)
+        result = result.split("\r\n")
         print(result)
         return "\n".join(result[2:8])
 
@@ -63,9 +152,10 @@ class TPMSmartCard:
                   in_csp=None):
         if in_csp is None:
             in_csp = "Microsoft Base Smart Card Crypto Provider"
-        command = ('certutil -csp "%s"  -p "%s" -importpfx "%s"' % (in_csp, in_pass, in_path))
+        command = ["certutil", "-csp", in_csp, "-p", in_pass, "-importpfx", in_path]
         print(command)
-        process = subprocess.run(command, shell=True, text=True, capture_output=True)
+        # 用参数列表调用：密码/路径含引号、& 等字符时不会被 shell 解析破坏
+        process = subprocess.run(command, text=True, capture_output=True)
         result = process.stdout
         print(result)
         return result
@@ -73,9 +163,9 @@ class TPMSmartCard:
     @staticmethod
     def baseCerts(in_data,
                   in_pass=""):
-        command = ('Import/TPMImport.exe -user -b %s "%s"' % (in_data, in_pass))
+        command = ["Import/TPMImport.exe", "-user", "-b", in_data, in_pass]
         print(command)
-        process = subprocess.run(command, shell=True, text=True, capture_output=True)
+        process = subprocess.run(command, text=True, capture_output=True)
         result = process.stdout
         print(result)
         return result
@@ -96,7 +186,8 @@ class TPMSmartCard:
                 continue
             if tmp_str is None:
                 line = line.split(": ")
-                if len(line) < 1:
+                # 无冒号的行（本地化/异常输出）直接跳过，避免索引越界
+                if len(line) < 2:
                     continue
                 line = line[1]
                 tmp_str = line
@@ -105,9 +196,9 @@ class TPMSmartCard:
 
     @staticmethod
     def dropCerts(in_name):
-        command = ('certutil -delkey '
-                   '-csp "Microsoft Base Smart Card Crypto Provider" "%s"' % in_name)
-        process = subprocess.run(command, shell=True, text=True, capture_output=True)
+        command = ["certutil", "-delkey",
+                   "-csp", "Microsoft Base Smart Card Crypto Provider", "%s" % in_name]
+        process = subprocess.run(command, text=True, capture_output=True)
         result = process.stdout
         print(result)
         # command = ('certutil -delkey '
@@ -130,6 +221,7 @@ class TPMSmartCard:
         # proc.write("\rexit\r")
         time.sleep(1)
         result = proc.read()
+        result = "" if result is None else str(result)
         result = result.split(": ")[-1]
         if len(result) == 0:
             result = "OK"
@@ -138,20 +230,20 @@ class TPMSmartCard:
 
     @staticmethod
     def createCSR(in_file, in_path):
-        command = 'certreq -new -f "%s" "%s"' % (in_file, in_path)
+        command = ["certreq", "-new", "-f", in_file, in_path]
         print(command)
-        process = subprocess.run(command, shell=True, text=True, capture_output=True)
+        process = subprocess.run(command, text=True, capture_output=True)
         result = process.stdout
         print(result)
         return result
 
     @staticmethod
     def loadCerts(in_path):
-        command = ('CertReq -Accept -machine "%s"' % in_path)
+        command = ["CertReq", "-Accept", "-machine", in_path]
         # command = ('certutil -csp "Microsoft Base Smart Card Crypto Provider" '
         #            ' -importcert "%s"' % in_path)
         print(command)
-        process = subprocess.run(command, shell=True, text=True, capture_output=True)
+        process = subprocess.run(command, text=True, capture_output=True)
         result = process.stdout
         print(result)
         return result

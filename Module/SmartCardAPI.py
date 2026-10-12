@@ -5,6 +5,8 @@ class SmartCardAPI:
         if use_opensc:
             from Module.OpenSCDealer import OpenSCDealer as Deal
         else:
+            # 旧版 certutil 解析路径：字段随系统语言/版本变化，可能取不到卡片信息
+            print("WARN: 使用 CertutilDeal（旧解析路径），仅作兜底")
             from Module.CertutilDeal import CertutilDeal as Deal
         self.deals = Deal()
 

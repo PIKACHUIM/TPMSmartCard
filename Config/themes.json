@@ -1,0 +1,74 @@
+{
+  "示例": {
+    "name": "主题名文案键（见 Config/locales）",
+    "native": "是否为原版主题（用系统默认 ttk 主题，不做美化）",
+    "theme": "ttkbootstrap 主题名（原版主题填系统主题名，如 vista）",
+    "frame": "分组框风格",
+    "table": "表格风格",
+    "row_height": "表格行高（0 表示用主题默认行高）",
+    "flat_heading": "表头是否使用自定义中性配色",
+    "head_bg": "表头背景色",
+    "head_fg": "表头文字色",
+    "muted": "次要文字颜色",
+    "button": "按钮配色覆盖（键为按钮 name，缺省用 Config/button.json 的 type）"
+  },
+  "order": [
+    "classic",
+    "yeti",
+    "flatly",
+    "cosmo",
+    "darkly"
+  ],
+  "default": "yeti",
+  "profiles": {
+    "classic": {
+      "name": "theme_classic",
+      "native": true,
+      "theme": "vista"
+    },
+    "yeti": {
+      "name": "theme_yeti",
+      "theme": "yeti",
+      "frame": "secondary",
+      "table": "secondary",
+      "row_height": 22,
+      "flat_heading": true,
+      "head_bg": "#eef2f7",
+      "head_fg": "#3c4a5a",
+      "muted": "#66788a"
+    },
+    "flatly": {
+      "name": "theme_flatly",
+      "theme": "flatly",
+      "frame": "secondary",
+      "table": "secondary",
+      "row_height": 22,
+      "flat_heading": true,
+      "head_bg": "#edf0f2",
+      "head_fg": "#2c3e50",
+      "muted": "#6b7c8c"
+    },
+    "cosmo": {
+      "name": "theme_cosmo",
+      "theme": "cosmo",
+      "frame": "secondary",
+      "table": "secondary",
+      "row_height": 22,
+      "flat_heading": true,
+      "head_bg": "#eef1f6",
+      "head_fg": "#333f50",
+      "muted": "#66788a"
+    },
+    "darkly": {
+      "name": "theme_darkly",
+      "theme": "darkly",
+      "frame": "secondary",
+      "table": "secondary",
+      "row_height": 22,
+      "flat_heading": true,
+      "head_bg": "#303844",
+      "head_fg": "#d7e0ea",
+      "muted": "#9aa9ba"
+    }
+  }
+}
