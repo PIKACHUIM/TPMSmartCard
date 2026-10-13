@@ -171,7 +171,7 @@
   "delete_cert_reboot": "\nRemarque : après la suppression, le système ne rafraîchit pas immédiatement l'état du certificat\nVous devez redémarrer le système pour actualiser l'état (la clé est supprimée immédiatement)",
   "delete_cert_titles": "Supprimer %s :\n\n%s ?",
   "delete_cert_detail": "Déchiffrement ou droits d''accès perdus possibles !\nDanger : irréversible, données non récupérables\n",
-  "delete_card_backup": "Remarque : la sauvegarde ne contient pas les clés du TPM ; après suppression de la carte, la restauration peut être impossible. Vérifiez que le nom de la carte, le PIN, le PUK et la clé d'administration sont conservés.",
+  "delete_card_backup": "Les clés privées du TPM ne peuvent pas être sauvegardées : après suppression de la carte, la sauvegarde ne pourra plus la restaurer.",
   "delete_cert_checks": " Je confirme supprimer %s",
   "msg_file_not_found": "Fichier introuvable",
   "msg_file_not_exist": "Le fichier n'existe pas",

@@ -171,7 +171,7 @@
   "delete_cert_reboot": "\n注意：证书删除后，系统不会立即刷新证书状态\n您需要重启系统来刷新状态(密钥已经立即删除)",
   "delete_cert_titles": "您确认要删除%s: \n\n%s ?",
   "delete_cert_detail": "您可能会无法解密文件或丢失访问权限\n危险：此操作不可逆！且无法恢复数据",
-  "delete_card_backup": "注意：备份不包含 TPM 内部的密钥，删除卡片后备份可能无法再还原；请确认已保存卡片名称、PIN、PUK 与管理密码。",
+  "delete_card_backup": "无法备份TPM上的私钥，删除卡片后即使有备份也无法还原！",
   "delete_cert_checks": " 我已确认待删除的%s并知晓后果",
   "msg_file_not_found": "文件未找到",
   "msg_file_not_exist": "文件不存在",

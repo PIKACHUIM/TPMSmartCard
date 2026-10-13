@@ -171,7 +171,7 @@
   "delete_cert_reboot": "\nNota: dopo l'eliminazione il sistema non aggiorna subito lo stato del certificato\nÈ necessario riavviare il sistema per aggiornare lo stato (la chiave è già stata eliminata)",
   "delete_cert_titles": "Eliminare %s:\n\n%s ?",
   "delete_cert_detail": "Potresti perdere decifratura o permessi!\nPericolo: irreversibile, dati non recuperabili\n",
-  "delete_card_backup": "Nota: il backup non contiene le chiavi nel TPM; dopo aver eliminato la carta il ripristino potrebbe non essere più possibile. Verifica di aver conservato nome carta, PIN, PUK e chiave di amministrazione.",
+  "delete_card_backup": "Le chiavi private del TPM non possono essere salvate: dopo aver eliminato la carta il backup non potrà più ripristinarla.",
   "delete_cert_checks": " Confermo di eliminare %s",
   "msg_file_not_found": "File non trovato",
   "msg_file_not_exist": "Il file non esiste",

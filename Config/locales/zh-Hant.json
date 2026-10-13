@@ -171,7 +171,7 @@
   "delete_cert_reboot": "\n注意：憑證刪除後，系統不會立即重新整理憑證狀態\n您需要重新啟動系統來重新整理狀態（金鑰已立即刪除）",
   "delete_cert_titles": "您確認要刪除%s: \n\n%s ?",
   "delete_cert_detail": "您可能會無法解密檔案或遺失存取權限\n危險：此操作不可逆！且無法復原資料",
-  "delete_card_backup": "注意：備份不包含 TPM 內部的金鑰，刪除卡片後備份可能無法再還原；請確認已保存卡片名稱、PIN、PUK 與管理密碼。",
+  "delete_card_backup": "無法備份TPM上的私鑰，刪除卡片後即使有備份也無法還原！",
   "delete_cert_checks": " 我已確認待刪除的%s並知曉後果",
   "msg_file_not_found": "檔案未找到",
   "msg_file_not_exist": "檔案不存在",

@@ -171,7 +171,7 @@
   "delete_cert_reboot": "\nNote: After the certificate is deleted, the system will not immediately refresh the certificate status\nYou need to restart the system to refresh the status (the key has been deleted immediately)",
   "delete_cert_titles": "Delete %s:\n\n%s ?",
   "delete_cert_detail": "You may lose file decryption or access rights!\nDanger: irreversible, data cannot be recovered\n",
-  "delete_card_backup": "Note: the backup does not contain the keys inside the TPM; after deleting the card the backup may no longer be restorable. Make sure the card name, PIN, PUK and admin key are saved.",
+  "delete_card_backup": "TPM private keys cannot be backed up: once the card is deleted, the backup can no longer restore it!",
   "delete_cert_checks": " I confirm deleting %s",
   "msg_file_not_found": "File not found",
   "msg_file_not_exist": "File does not exist",

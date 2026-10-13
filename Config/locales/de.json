@@ -171,7 +171,7 @@
   "delete_cert_reboot": "\nHinweis: Nach dem Löschen aktualisiert das System den Zertifikatsstatus nicht sofort\nSie müssen das System neu starten, um den Status zu aktualisieren (der Schlüssel wurde sofort gelöscht)",
   "delete_cert_titles": "%s löschen:\n\n%s ?",
   "delete_cert_detail": "Entschlüsselung/Zugriffsrechte können verloren gehen!\nGefahr: unwiderruflich, Daten nicht wiederherstellbar\n",
-  "delete_card_backup": "Hinweis: Die Sicherung enthält keine Schlüssel aus dem TPM; nach dem Löschen der Karte ist eine Wiederherstellung möglicherweise nicht mehr möglich. Bitte Kartenname, PIN, PUK und Admin-Schlüssel aufbewahren.",
+  "delete_card_backup": "TPM-private Schlüssel können nicht gesichert werden: nach dem Löschen der Karte lässt sich die Sicherung nicht mehr wiederherstellen!",
   "delete_cert_checks": " Ich bestätige das Löschen von %s",
   "msg_file_not_found": "Datei nicht gefunden",
   "msg_file_not_exist": "Datei existiert nicht",
