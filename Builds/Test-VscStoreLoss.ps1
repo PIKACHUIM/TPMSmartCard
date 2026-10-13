@@ -6,23 +6,28 @@
 
  做法（可逆）：
    1) 用本工具对目标卡做一份新的 .tsb 备份（快照就是当前状态，不会回退数据）；
-   2) 停 SCardSvr，把卡片数据目录 Tpm 整体改名为 Tpm.bak-<时间戳>（模拟"文件丢失"）；
+   2) 停 SCardSvr，只把【本卡】的 store 子目录改名（Tpm\<本卡GUID> -> <本卡GUID>.bak-<时间戳>）；
    3) 让设备重新加载（pnputil /restart-device）——必须做这一步：改名对已经加载的驱动
       没有影响（它把卡片数据放在内存里并持有句柄），只有驱动重新打开 store 才会真的没卡；
    4) 起服务，看读卡器（① 预期该卡消失或 Card=No）；
    5) 用 .tsb 还原（调用工具自身的还原流程，含 TPM 校验 / 设备重新枚举 / 服务刷新）；
    6) 再重载设备 + 起服务，看读卡器（② 预期回来且 Card=Yes），可选做一次真实签名（需 PIN）。
 
- -SimulateOsReinstall：在 B 的基础上再删掉设备节点与读卡器注册项（等价于"新系统、
+ 重要（别动别的卡）：Tpm 是【所有卡片共用】的 store 根目录，里面一个 GUID 子目录 = 一张卡。
+ 早期版本改名整个 Tpm 根目录，会把同机其它卡的数据一起搬走，而还原只写回本卡条目，
+ 结果其它卡"丢失"。现在只改名本卡 GUID 子目录；结束时还会检查有没有条目滞留在 .bak 里
+ 并打印补回命令（见 Show-StoreHealHint）。
+
+ -SimulateOsReinstall：在 B 的基础上再删掉本卡的设备节点与读卡器注册项（等价于"新系统、
  无设备残留"），最接近「系统重装、TPM 未清除」。只动 -Instance 指定的那张卡。
 
  证据强度：① 阶段该卡确实不可见（驱动重新加载过）时，② 阶段的签名成功才算
  「磁盘数据足以重建卡片并解封 TPM 私钥」的强证据；否则只是弱证据。
 
  安全性：B 只改名、不删数据；出错时 finally 一定会把 SCardSvr 起回来。
-   · 回滚（B）: Stop-Service SCardSvr; Move-Item '<Tpm.bak-*>' '<...\Tpm>'; Start-Service SCardSvr
+   · 回滚（B）: Stop-Service SCardSvr; Move-Item '<本卡GUID>.bak-*' '<Tpm>\<本卡GUID>'; Start-Service SCardSvr
    · 回滚（C）: 再跑一次还原（幂等）即可把 store + 注册表 + 设备都建回来
- 断点续跑：若发现 Tpm 目录已不存在（上次中断留下的状态），会自动跳过改名，直接做还原校验。
+ 断点续跑：若发现本卡子目录已不存在（上次中断），会自动跳过改名，直接做还原校验。
 
  用法（必须管理员 PowerShell，在程序目录下执行）：
      .\Builds\Test-VscStoreLoss.ps1 -Instance 0002 -Pin 12345678
@@ -125,8 +130,35 @@ import sys, os
 root, uid = sys.argv[1], sys.argv[2]
 sys.path.insert(0, root); os.chdir(root)
 from Module import TPMBackup as T
-print("GUID=%s" % (T.card_store_guid(uid) or "(空)"))
+print("GUID=%s" % (T.card_store_guid(uid) or ""))
 '@ @($root, $uid)
+    return (($out | Where-Object { $_ -match "^GUID=" } | Select-Object -First 1) -replace "^GUID=", "")
+}
+
+# 设备节点读不到时（例如 node 还没建出来），从 .tsb 清单里取该卡的 store 目录名
+function Get-BackupGuid([string]$package) {
+    $out = Invoke-Python @'
+import sys, os, re
+root, tsb = sys.argv[1], sys.argv[2]
+sys.path.insert(0, root); os.chdir(root)
+from Module import TPMBackup as T
+guid = ""
+try:
+    man = T.read_manifest(tsb)
+    for item in (man.get("store") or {}).get("entries") or []:
+        if re.match(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-", str(item)):
+            guid = str(item)
+            break
+    if not guid:
+        for item in man.get("files") or []:
+            parts = str(item.get("path") or "").split("/")
+            if len(parts) > 1 and re.match(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-", parts[1]):
+                guid = parts[1]
+                break
+except Exception as err:
+    print("GUIDERR=%s" % err)
+print("GUID=%s" % guid)
+'@ @($root, $package)
     return (($out | Where-Object { $_ -match "^GUID=" } | Select-Object -First 1) -replace "^GUID=", "")
 }
 
@@ -159,7 +191,7 @@ print("DEVNODE=%s" % kind)
 }
 
 function Show-TpmKey([string]$guid) {
-    if (-not $guid -or $guid -eq "(空)") { "----- TPM 私钥状态: 拿不到 GUID，跳过 -----"; return }
+    if (-not $guid) { "----- TPM 私钥状态: 拿不到 GUID，跳过 -----"; return }
     "----- TPM 内私钥状态（按 store GUID 判定，仅供参考） -----"
     Invoke-Python @'
 import sys, os
@@ -179,6 +211,31 @@ function Stop-CardService {
 function Start-CardService {
     Start-Service SCardSvr -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
+}
+
+# 安全检查：.bak 目录里是否还有条目没回到 $store（历史上"整目录改名"留下的坑）。
+# 有的话打印一条可直接粘贴的补回命令，避免同机其它卡片莫名"丢失"。
+function Show-StoreHealHint([string]$storeDir, [string]$parentDir) {
+    $bakDirs = @()
+    $bakDirs += @(Get-ChildItem -LiteralPath $storeDir -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.PSIsContainer -and $_.Name -like "*.bak-*" })
+    $bakDirs += @(Get-ChildItem -LiteralPath $parentDir -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.PSIsContainer -and $_.Name -like "Tpm.bak-*" })
+    if (-not $bakDirs.Count) { return }
+    $live = @(Get-ChildItem -LiteralPath $storeDir -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+    $missing = @()
+    foreach ($d in $bakDirs) {
+        foreach ($e in (Get-ChildItem -LiteralPath $d.FullName -Force -ErrorAction SilentlyContinue)) {
+            if ($live -notcontains $e.Name) { $missing += $e }
+        }
+    }
+    if (-not $missing.Count) { return }
+    "[注意] 有 $($missing.Count) 个条目只存在于 .bak 目录、没回到 '$storeDir'（同机其它卡可能因此不可用）："
+    foreach ($m in $missing) { "      " + $m.FullName }
+    "  补回命令（管理员）："
+    "      Stop-Service SCardSvr -Force"
+    foreach ($m in $missing) { "      Copy-Item -LiteralPath '$($m.FullName)' -Destination '$storeDir' -Recurse -Force" }
+    "      Start-Service SCardSvr"
 }
 
 Assert-Admin
@@ -232,20 +289,28 @@ if rep.get("warning"):
 }
 if (-not (Test-Path -LiteralPath $Backup)) { throw "备份文件不存在: $Backup" }
 
-# ---- 2) 模拟"文件丢失"：把 Tpm 改名 -------------------------------------- #
-$storePresent = Test-Path -LiteralPath $store
-$bak = "$store.bak-" + (Get-Date -Format "yyyyMMdd-HHmmss")
-$bakParent = Split-Path -Parent $store
-$existingBak = @(Get-ChildItem -LiteralPath $bakParent -Force -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -like "Tpm.bak-*" } | Sort-Object Name -Descending)
+# ---- 2) 模拟"文件丢失"：只改名【本卡】的 store 子目录 ---------------------- #
+# Tpm 是所有卡片共用的 store 根，里面每个 GUID 子目录 = 一张卡；
+# 改名整个 Tpm 会把其它卡的数据一起搬走（还原只写回本卡条目，其它卡就"丢失"了）。
+if (-not $guid) { $guid = Get-BackupGuid $Backup }
+if (-not $guid) {
+    throw ("拿不到本卡的 store 目录名（GUID）。为避免误动同机其它卡片，脚本不会改名整个数据目录；" +
+           "请先让这张卡正常出现，或改用包含该卡条目的 .tsb 备份（-Backup）。")
+}
+$cardStore = Join-Path $store $guid
+$storePresent = Test-Path -LiteralPath $cardStore
+$bak = "$cardStore.bak-" + (Get-Date -Format "yyyyMMdd-HHmmss")
+$existingBak = @(Get-ChildItem -LiteralPath $store -Force -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like "*.bak-*" } | Sort-Object Name -Descending)
 $pnputilHelp = (Invoke-Native pnputil @("/?")).Out
+"本卡数据目录: $cardStore"
 
 "`n即将执行（可回滚）:"
 if ($storePresent) {
-    "  · 停止 SCardSvr；把 '$store'"
-    "    改名为 '$bak'"
+    "  · 停止 SCardSvr；把 '$cardStore'"
+    "    改名为 '$bak'（只动这张卡，其它卡的子目录不动）"
 } else {
-    "  · 卡片数据目录已缺失（断点续跑）：跳过改名，直接用备份还原"
+    "  · 本卡数据目录已缺失（断点续跑）：跳过改名，直接用备份还原"
 }
 "  · 让设备重新加载（pnputil /restart-device），使『丢失』真正生效"
 if ($SimulateOsReinstall) { "  · 再删掉设备节点 '$devId' 与读卡器注册项（模拟新系统）" }
@@ -259,10 +324,12 @@ $lostVisible = $false
 try {
     if ($storePresent) {
         Stop-CardService
+        "数据目录现有条目（只会改名本卡那条）: " +
+            (@(Get-ChildItem -LiteralPath $store -Force | ForEach-Object { $_.Name }) -join ", ")
         try {
-            Move-Item -LiteralPath $store -Destination $bak -ErrorAction Stop
+            Move-Item -LiteralPath $cardStore -Destination $bak -ErrorAction Stop
         } catch {
-            throw ("无法改名卡片数据目录（通常是被 SmartcardSimulator/WUDFRd 驱动占用）：{0}`n" -f $_.Exception.Message) +
+            throw ("无法改名本卡数据目录（通常是被 SmartcardSimulator/WUDFRd 驱动占用）：{0}`n" -f $_.Exception.Message) +
                   "请先关闭本工具与设备管理器后重试；或用 -Backup 指定已有备份，手工改名后再跑本脚本。"
         }
         "已改名 -> $bak"
@@ -337,7 +404,7 @@ print("RESTORE files=%s reg=%s tpm=%s stale=%s" % (rep["file_count"], rep["reg_c
     $verdict = "无法判定"
     $afterLine = $after | Where-Object { $_ -match [regex]::Escape($readerName) } | Select-Object -First 1
     if (-not $afterLine) {
-        $verdict = "[FAIL] 读卡器没有回来：B/C 场景在这个环境下未通过（B 可用 Tpm.bak-* 回滚，或重启系统后再看）"
+        $verdict = "[FAIL] 读卡器没有回来：B/C 场景在这个环境下未通过（可用 <本卡GUID>.bak-* 回滚，或重启系统后再看）"
     } elseif ($afterLine -match "Yes") {
         $verdict = "[OK] 读卡器回来且卡片可识别：B/C 场景通过（私钥是否可用见下面 PIN 校验）"
     } else {
@@ -373,15 +440,15 @@ print("RESTORE files=%s reg=%s tpm=%s stale=%s" % (rep["file_count"], rep["reg_c
     $verdict
 } catch {
     "[出错] " + $_.Exception.Message
-    "当前状态: 设备节点=$(Get-DevNode $instance)，store 目录存在=$(Test-Path -LiteralPath $store)"
-    "回滚（B）: Stop-Service SCardSvr; Move-Item '<Tpm.bak-*>' '$store'; Start-Service SCardSvr"
+    "当前状态: 设备节点=$(Get-DevNode $instance)，本卡数据目录存在=$(Test-Path -LiteralPath $cardStore)"
+    "回滚（B）: Stop-Service SCardSvr; Move-Item '$bak' '$cardStore'; Start-Service SCardSvr"
     "回滚（C）: 再跑一次本脚本（会自动跳过改名，用同一个 -Backup 还原即可，幂等）"
     throw
 } finally {
     Start-Service SCardSvr -ErrorAction SilentlyContinue
     "（收尾）SCardSvr: $((Get-Service SCardSvr).Status)"
     if ($existingBak.Count) {
-        "磁盘上保留的原始目录: " + (($existingBak | ForEach-Object { $_.FullName }) -join " | ")
+        "本卡在磁盘上保留的目录: " + (($existingBak | ForEach-Object { $_.FullName }) -join " | ")
     }
-    if ($SimulateOsReinstall -and $bak) { "本次改名的目录（如未改名则不存在）: $bak" }
+    Show-StoreHealHint $store (Split-Path -Parent $store)
 }
