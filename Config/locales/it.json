@@ -174,6 +174,7 @@
   "delete_card_backup": "Le chiavi private del TPM non possono essere salvate: dopo aver eliminato la carta il backup non potrà più ripristinarla.",
   "delete_cert_checks": " Confermo di eliminare %s",
   "msg_file_not_found": "File non trovato",
+  "msg_reader_not_found": "Lettore non trovato: aggiorna l'elenco delle carte con Ricarica e riprova.",
   "msg_file_not_exist": "Il file non esiste",
   "msg_select_file_fp": "Percorso del certificato",
   "msg_import_results": "\nNota: dopo l'importazione la chiave privata non può più essere esportata né salvata dal TPM in alcun modo\nPer un backup conserva il file PFX originale e la password, altrimenti potresti perdere i dati",

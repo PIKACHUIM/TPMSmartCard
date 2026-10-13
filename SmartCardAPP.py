@@ -1167,7 +1167,14 @@ class SmartCardAPP:
                 submit_button.config(state=tk.DISABLED)
 
         def submit():
-            card_uid = self.pick["card"].split(" ")[-1]
+            # 读卡器编号必须用实际编号：卡片编号(如 0002) ≠ pcsc 编号（删过卡后会错位），
+            # 旧实现按卡名末位数字当编号，会报 reader "2" not found。
+            card_uid = self.data.readerIndexFor(self.pick["card"])
+            if card_uid is None:
+                make.attributes('-topmost', False)
+                messagebox.showwarning(self.i18n("warn"), self.i18n("msg_reader_not_found"))
+                make.attributes('-topmost', True)
+                return
             pass_key = pass_txt.get()
             pass_new = next_txt.get()
             same_new = same_txt.get()

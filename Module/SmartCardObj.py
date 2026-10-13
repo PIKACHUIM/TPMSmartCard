@@ -14,6 +14,7 @@ class SmartCardDev:
                  sc_cert: (CER, None),  # 卡
                  sc_uuid: str = "00",  # UID
                  sc_type: str = None,  # KEY
+                 sc_reader_idx: int = None,  # 读卡器(pcsc)列表中的编号，--reader N 的 N
                  ):
         self.sc_name = sc_name  # 智能卡名称/智能卡名称
         self.sc_sha1 = sc_sha1  # 智能卡SHA1/智能卡Flag
@@ -22,6 +23,9 @@ class SmartCardDev:
         self.sc_uuid = sc_uuid  # 智能卡UUID(OpenSC专属)
         self.card_id = card_id
         self.sc_type = sc_type  # 支持的算法(OpenSC专属)
+        # 读卡器编号：--reader N 用的 N。它与卡片编号 card_id 不是一回事，
+        # 卡片增删后 pcsc 编号会错位，所以必须由扫描时记录、不能靠卡名去猜。
+        self.sc_reader_idx = sc_reader_idx
         self.sc_path = "ROOT\\SMARTCARDREADER\\%04d" % int(self.card_id)
 
 

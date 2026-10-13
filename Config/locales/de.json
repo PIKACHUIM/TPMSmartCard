@@ -174,6 +174,7 @@
   "delete_card_backup": "TPM-private Schlüssel können nicht gesichert werden: nach dem Löschen der Karte lässt sich die Sicherung nicht mehr wiederherstellen!",
   "delete_cert_checks": " Ich bestätige das Löschen von %s",
   "msg_file_not_found": "Datei nicht gefunden",
+  "msg_reader_not_found": "Leser nicht gefunden: Kartenliste über Neu laden aktualisieren und erneut versuchen.",
   "msg_file_not_exist": "Datei existiert nicht",
   "msg_select_file_fp": "Zertifikatspfad",
   "msg_import_results": "\nHinweis: Nach dem Import kann der private Schlüssel auf keine Weise mehr aus dem TPM exportiert oder gesichert werden\nBewahren Sie für eine Sicherung die ursprüngliche PFX-Datei samt Kennwort auf, sonst können Daten verloren gehen",

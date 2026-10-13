@@ -174,6 +174,7 @@
   "delete_card_backup": "Las claves privadas del TPM no se pueden copiar: una vez eliminada la tarjeta, la copia ya no podrá restaurarla.",
   "delete_cert_checks": " Confirmo eliminar %s",
   "msg_file_not_found": "Archivo no encontrado",
+  "msg_reader_not_found": "Lector no encontrado: actualice la lista de tarjetas con Recargar e inténtelo de nuevo.",
   "msg_file_not_exist": "El archivo no existe",
   "msg_select_file_fp": "Ruta del certificado",
   "msg_import_results": "\nNota: después de importar, la clave privada ya no se puede exportar ni respaldar desde el TPM de ninguna forma\nPara hacer una copia, conserve el archivo PFX original y su contraseña; de lo contrario podría perder datos",

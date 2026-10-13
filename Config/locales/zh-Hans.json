@@ -174,6 +174,7 @@
   "delete_card_backup": "无法备份TPM上的私钥，删除卡片后即使有备份也无法还原！",
   "delete_cert_checks": " 我已确认待删除的%s并知晓后果",
   "msg_file_not_found": "文件未找到",
+  "msg_reader_not_found": "读卡器未找到：请点「重新加载」刷新卡片列表后重试。",
   "msg_file_not_exist": "文件不存在",
   "msg_select_file_fp": "证书路径",
   "msg_import_results": "\n注意：证书导入后，私钥无法再通过任何方式从TPM导出或者备份\n如需备份，请保留原始的PFX文件以及密码，否则可能会丢失数据",

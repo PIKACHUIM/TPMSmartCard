@@ -174,6 +174,7 @@
   "delete_card_backup": "Les clés privées du TPM ne peuvent pas être sauvegardées : après suppression de la carte, la sauvegarde ne pourra plus la restaurer.",
   "delete_cert_checks": " Je confirme supprimer %s",
   "msg_file_not_found": "Fichier introuvable",
+  "msg_reader_not_found": "Lecteur introuvable : actualisez la liste des cartes via Recharger, puis réessayez.",
   "msg_file_not_exist": "Le fichier n'existe pas",
   "msg_select_file_fp": "Chemin du certificat",
   "msg_import_results": "\nRemarque : après l'importation, la clé privée ne peut plus être exportée ni sauvegardée depuis le TPM d'aucune manière\nPour sauvegarder, conservez le fichier PFX d'origine et son mot de passe, sinon vous risquez de perdre des données",

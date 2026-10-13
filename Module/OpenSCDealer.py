@@ -1,3 +1,4 @@
+import re
 import subprocess
 import traceback
 
@@ -6,6 +7,12 @@ from Module.SmartCardObj import SmartCardCer
 
 
 class OpenSCDealer:
+    # opensc-tool --serial 成功时输出「十六进制字节 + ASCII 预览」，例如
+    #   93 38 FB 1C ... 54 .8.....C.sm}..&T
+    # 失败时第一行是报错文本（如 Reader "2" not found (2 reader(s) detected)），
+    # 所以只认开头连续的十六进制字节，绝不把报错当序列号。
+    SERIAL_RE = re.compile(r"^\s*((?:[0-9A-Fa-f]{2}\s+)+)")
+
     def __init__(self):
         self.cards = {}
         self.certs = {}
@@ -52,7 +59,14 @@ class OpenSCDealer:
             traceback.print_exc()
         # print(results)
 
-    def readCard(self, results, card_name):
+    def readCard(self, results, card_name, reader_idx=None):
+        """解析一张卡的详情并登记到 self.cards。
+
+        ``reader_idx`` 是这张卡在读卡器列表中的位置（``--reader N`` 用的 N），
+        由 :meth:`readList` 传入。它**不等于**卡片编号（卡 0002 可能排在 1 号位），
+        所以不能从读卡器名末尾的数字去猜——卡片增删之后那样猜会报
+        ``reader "2" not found``。
+        """
         results = OpenSCDealer.readFields(results, 1, 10)
         if card_name in self.cards:
             return
@@ -63,24 +77,55 @@ class OpenSCDealer:
         card_id = card_name.split(" ")[-1]
         if not card_id.isdigit():
             return
-        card_uuid = int(card_id)
-        serials = ""
-        try:
-            outputs = OpenSCDealer.openText("--reader %d --serial" % card_uuid, "OpenSC-tool")
-            serials = outputs[0] if len(outputs) > 0 else ""
-        except Exception as err:
-            print("Read Serial Error:", err)
-        serials = str(serials).replace(" ", "")[:32]
+        if reader_idx is None:
+            reader_idx = OpenSCDealer.readerIndex(card_name)
         self.cards[card_name] = SmartCardDev(
-            "%04d" % card_uuid,
+            "%04d" % int(card_id),
             card_name,
             results['Flags'],
             results['Length'],
             None,
             # results['ID'],
-            serials.lower(),
+            OpenSCDealer.readSerial(reader_idx),
+            None,
+            reader_idx,
         )
         # print(results)
+
+    @staticmethod
+    def readSerial(reader_idx):
+        """读卡序列号：只取输出开头的十六进制字节，取不到返回空串。
+
+        旧实现直接取第一行去掉空格，一旦 ``--reader`` 编号不对，就会把
+        ``Reader "2" not found`` 这类报错原样显示在「卡片编号」里。
+        """
+        if reader_idx is None:
+            return ""
+        try:
+            outputs = OpenSCDealer.openText("--reader %d --serial" % reader_idx, "OpenSC-tool")
+        except Exception as err:
+            print("Read Serial Error:", err)
+            return ""
+        for line in outputs:
+            matched = OpenSCDealer.SERIAL_RE.match(str(line))
+            if matched:
+                return matched.group(1).replace(" ", "")[:32].lower()
+        return ""
+
+    @staticmethod
+    def readerIndex(card_name):
+        """按读卡器名取它在 pcsc 列表中的编号（``--reader N`` 的 N）；找不到返回 None。"""
+        try:
+            for line in OpenSCDealer.openText("--list-readers", "OpenSC-tool"):
+                parts = str(line).split()
+                # 形如：0    Yes    Microsoft Virtual Smart Card 2
+                if len(parts) < 3 or not parts[0].isdigit():
+                    continue
+                if " ".join(parts[2:]) == card_name:
+                    return int(parts[0])
+        except Exception as err:
+            print("Read Reader Index Error:", err)
+        return None
 
     def readFile(self, in_data):
         pass
@@ -105,8 +150,10 @@ class OpenSCDealer:
                             "--reader %d" % int(card_uuid)))
                     for nums in range(0, len(results)):
                         if results[nums].find("PIN [UserPIN]") >= 0:
+                            # card_uuid 就是读卡器在列表中的编号，必须传下去：
+                            # 卡片编号与 pcsc 编号并不相等（删过卡后会错位）
                             self.readCard(results[nums + 1:nums + 10],
-                                          card_all[card_uuid])
+                                          card_all[card_uuid], int(card_uuid))
                     results = OpenSCDealer.openText("--list-keys %s" % (
                             "--reader %d" % int(card_uuid)))
                     count = -1
