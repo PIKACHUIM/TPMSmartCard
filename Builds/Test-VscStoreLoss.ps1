@@ -184,7 +184,7 @@ if ($SimulateOsReinstall) {
 }
 Start-Service SCardSvr -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
-Show-Readers "① 模拟文件丢失后（预期：该卡的读卡器消失）"
+Show-Readers "① 模拟文件丢失后（实测：改名后读卡器通常仍在——驱动已把卡片数据加载进内存并持有句柄；要观察真正丢失请加 -SimulateOsReinstall）"
 
 # ---- 3) 还原 -------------------------------------------------------------- #
 "----- 用 .tsb 还原 -----"
@@ -215,6 +215,12 @@ if (-not $line) {
     $verdict = "[OK] 读卡器回来且卡片可识别：B/C 场景通过（私钥是否可用见下面 PIN 校验）"
 } else {
     $verdict = "[WARN] 读卡器回来了但没有卡片（Card=No）：数据未正确加载"
+}
+
+if (-not $SimulateOsReinstall) {
+    "[提示] 本次未删除设备节点：改名 store 后读卡器通常也不会消失（驱动仍持有已加载状态），"
+    "       所以「回到 Card=Yes」只是弱证据。要证明「磁盘上的数据足以重建卡片并解封 TPM 私钥」，"
+    "       请加 -SimulateOsReinstall 重跑，或重启系统后只做 PIN + 签名校验。"
 }
 
 if ($Pin -and $readerIdx -ge 0) {
