@@ -10,3 +10,5 @@ staging/
 !OpenSC/*.msi
 __pycache__
 .idea
+# 智能体工作区数据（不随代码分发）
+.workbuddy/
