@@ -37,6 +37,27 @@
 
 ``tpmvscmgr`` 本身不提供任何备份 / 还原命令（仅有 ``create`` / ``destroy``），
 本模块即在上述文件与注册表位置之上实现等价能力。
+
+备份文件格式（``.tsb``）
+========================
+备份是**一个 zip 压缩包**，只改后缀为 ``.tsb``（便于在资源管理器里双击识别），
+内部结构::
+
+    tpmvsc-backup.json      清单：卡片信息、文件 sha256、注册表项、TPM 指纹、注意事项
+    store-index.txt         备份时的数据目录清单（诊断用）
+    files/<Tpm 数据目录内相对结构>    卡片数据文件
+    registry/<SMARTCARDREADER-xxxx>.reg  设备节点注册表导出
+    registry/<CalaisReader-xxxx>.reg     读卡器注册表导出
+
+还原时只需选中这个 ``.tsb`` 文件。
+
+还原后的设备重新枚举（重要）
+============================
+``reg import`` 只是把 ``Enum\\ROOT\\SMARTCARDREADER\\<uid>`` 写回了磁盘，
+PnP 的**内存设备树**里并没有这个节点，因此卡片不会自己出现。还原流程写完
+注册表后会再调用 ``CM_Reenumerate_DevNode``（等价于设备管理器里的
+「扫描检测硬件改动」）让 PnP 重新枚举 ROOT 总线上的设备并启动驱动，从而无需
+重启即可看到卡片；若系统拒绝重新枚举，则只能重启系统后才可见。
 """
 
 from __future__ import annotations
@@ -48,7 +69,12 @@ import os
 import re
 import shutil
 import socket
+import stat
 import subprocess
+import tempfile
+import time
+import uuid
+import zipfile
 
 from Module.Version import VERSION
 
@@ -59,6 +85,20 @@ MANIFEST_NAME = "tpmvsc-backup.json"
 # 备份包内子目录
 FILES_DIR = "files"
 REGISTRY_DIR = "registry"
+# 备份文件后缀（zip 压缩包，注册为智能卡备份文件）
+BACKUP_SUFFIX = ".tsb"
+
+# tpmvsc.dll 自己的设备属性集；PID=2 是卡片 store 目录路径（含 store GUID）。
+# 这是「设备实例 ↔ store 目录」的唯一绑定，位于 Enum 下受 ACL 保护的 Properties
+# 子键里（管理员用 reg export 也读不到），但可以通过 PnP 属性接口读到。
+VSC_DEVPROP_SET = "{2065F23D-D989-4F8F-B769-4A3D779FAF0B}"
+VSC_DEVPROP_STORE_PID = 2
+# 卡片私钥所在的 TPM 密钥存储提供程序（KSP）
+_PCP_NAME = "Microsoft Platform Crypto Provider"
+# DEVPROP_TYPE_STRING
+DEVPROP_TYPE_STRING = 0x00000012
+# CONFIGRET: 缓冲区太小（先问长度）
+CR_BUFFER_SMALL = 0x1A
 
 SYSTEM_ROOT = os.environ.get("SystemRoot") or r"C:\Windows"
 
@@ -96,6 +136,102 @@ def is_admin():
     except Exception as err:
         print("IsAdmin Check Error:", err)
         return False
+
+
+# 取本机 TPM 身份的 PowerShell：EK 公钥的 SHA-256（十六进制）+ 厂商证书信息
+_TPM_QUERY = (
+    "$ErrorActionPreference='SilentlyContinue';"
+    "$ek=Get-TpmEndorsementKeyInfo -HashAlgorithm Sha256;"
+    "if($ek -and $ek.PublicKey -and $ek.PublicKey.RawData -and $ek.PublicKey.RawData.Length -gt 0){"
+    "$sha=[System.Security.Cryptography.SHA256]::Create().ComputeHash([byte[]]$ek.PublicKey.RawData);"
+    "Write-Output ('EK=' + [System.BitConverter]::ToString($sha).Replace('-',''))}"
+    "elseif($ek -and $ek.PublicKeyHash -and $ek.PublicKeyHash.Length -gt 0){"
+    "Write-Output ('EK=' + [System.BitConverter]::ToString([byte[]]$ek.PublicKeyHash).Replace('-',''))};"
+    "if($ek -and $ek.ManufacturerCertificates -and $ek.ManufacturerCertificates.Count -gt 0){"
+    "$c=$ek.ManufacturerCertificates[0];"
+    "Write-Output ('INFO=' + $c.Subject + ' | ' + $c.Thumbprint)}"
+)
+
+
+def tpm_identity():
+    """取本机 TPM 身份：``{"ek": EK 公钥 SHA-256, "info": 厂商/型号信息}``。
+
+    用途：判断一份备份是不是本机产生的。换机、清除 TPM（Clear-Tpm）、更换 TPM
+    固件都会让指纹变化，而 VSC 的密钥只认原来那颗 TPM。
+    读取指纹需要管理员权限，失败时两个字段为空字符串（不影响备份 / 还原本身）。
+    """
+    identity = {"ek": "", "info": ""}
+    code, output = run_command(["powershell", "-NoProfile", "-NonInteractive",
+                                "-Command", _TPM_QUERY], timeout=120)
+    for line in output.splitlines():
+        line = line.strip()
+        if line.startswith("EK="):
+            identity["ek"] = line[3:].strip()
+        elif line.startswith("INFO="):
+            identity["info"] = line[5:].strip()
+    if not identity["ek"]:
+        print("读取 TPM 指纹失败（需管理员权限）: %s"
+              % (output.splitlines()[0] if output else code))
+    return identity
+
+
+def check_tpm(manifest):
+    """校验备份里记录的 TPM 指纹与本机是否一致。
+
+    :return: ``(state, text)``，state 取值：
+
+        ``match``    指纹一致（同一台机器的同一颗 TPM）
+        ``mismatch`` 指纹不同（换机 / 清除过 TPM / 更换了 TPM 固件）
+        ``unknown``  备份里没有指纹（旧版备份）或本机读不到指纹
+    """
+    saved = manifest.get("tpm") or {}
+    saved_ek = str(saved.get("ek") or "").strip().lower()
+    if not saved_ek:
+        return "unknown", "备份里没有 TPM 指纹（旧版备份无法校验）"
+    now = tpm_identity()
+    if not now["ek"]:
+        return "unknown", "本机 TPM 指纹读取失败（需要管理员权限）"
+    if now["ek"].lower() != saved_ek:
+        return "mismatch", "备份来自其它 TPM：%s；本机 TPM：%s" % (
+            str(saved.get("info") or "型号未知"), now["info"] or "型号未知")
+    return "match", "TPM 指纹一致（%s）" % (now["info"] or "型号未知")
+
+
+def tpm_key_state(guid):
+    """检查 TPM 里这张卡的 KSP 持久密钥是否还在（还原后私钥能否使用的前提）。
+
+    card 的私钥是 TPM（Microsoft Platform Crypto Provider）里一颗以 store GUID
+    命名的机器级持久密钥；删卡（``tpmvscmgr destroy``）或清除 TPM 之后它就不在了，
+    此时 store 数据还原得再完整，私钥也无法使用。
+
+    :return: ``"exists"`` 还在 / ``"missing"`` 已不存在 / ``"unknown"`` 无法判定
+    """
+    guid = str(guid or "").strip()
+    if not guid:
+        return "unknown"
+    script = (
+        "$ErrorActionPreference='Stop';"
+        "try{"
+        "$p=New-Object System.Security.Cryptography.CngProvider('%s');"
+        "$k=[System.Security.Cryptography.CngKey]::Open('%s',$p,"
+        "[System.Security.Cryptography.CngKeyOpenOptions]::MachineKey);"
+        "$k.Dispose();Write-Output 'KEY=exists'"
+        "}catch{"
+        "$m=$_.Exception.Message+' hr=0x'+('{0:X8}' -f $_.Exception.HResult);"
+        "if($m -match '80090016|Keyset does not exist|keyset does not exist')"
+        "{Write-Output 'KEY=missing'}else{Write-Output ('KEY=unknown '+$m)}"
+        "}"
+    ) % (_PCP_NAME, guid)
+    code, output = run_command(["powershell", "-NoProfile", "-NonInteractive",
+                                "-Command", script], timeout=90)
+    for line in output.splitlines():
+        line = line.strip()
+        if line.startswith("KEY=exists"):
+            return "exists"
+        if line.startswith("KEY=missing"):
+            return "missing"
+    print("检查 TPM 私钥失败: %s" % (output.splitlines()[0] if output else code))
+    return "unknown"
 
 
 def run_command(command, timeout=120):
@@ -173,6 +309,93 @@ def read_card_name(uid):
     return info["name"] if info else ""
 
 
+def device_store_path(uid=""):
+    """读取该卡片设备属性里的 store 目录路径（``...\\SmartCard\\Tpm\\<GUID>\\``）。
+
+    这是「设备实例 ↔ store 目录」的唯一绑定，由 ``tpmvsc.dll`` 写入设备属性
+    ``{2065F23D-D989-4F8F-B769-4A3D779FAF0B},2``。该属性存在 ``Enum`` 下受 ACL
+    保护的 ``Properties`` 子键里，直接读注册表（包括管理员 ``reg export``）都拿不到，
+    但可以通过 PnP 属性接口读到。读不到时返回空字符串。
+    """
+    uid = instance_id(uid)
+    if not uid:
+        return ""
+    try:
+        import ctypes
+        cfgmgr32 = ctypes.WinDLL("cfgmgr32.dll")
+    except Exception as err:
+        print("Get Device Property Error:", err)
+        return ""
+    node = ctypes.c_uint32(0)
+    if cfgmgr32.CM_Locate_DevNodeW(ctypes.byref(node),
+                                   "ROOT\\SMARTCARDREADER\\%s" % uid, 0) != 0:
+        return ""
+    # DEVPROPKEY = { GUID fmtid; ULONG pid; }
+    raw = uuid.UUID(VSC_DEVPROP_SET).bytes_le + VSC_DEVPROP_STORE_PID.to_bytes(4, "little")
+    prop = (ctypes.c_ubyte * len(raw)).from_buffer_copy(raw)
+    prop_type = ctypes.c_uint32(0)
+    size = ctypes.c_uint32(0)
+    code = cfgmgr32.CM_Get_DevNode_PropertyW(node, ctypes.byref(prop),
+                                             ctypes.byref(prop_type), None,
+                                             ctypes.byref(size), 0)
+    if code not in (0, CR_BUFFER_SMALL) or size.value <= 0:
+        return ""
+    buffer = ctypes.create_string_buffer(size.value)
+    code = cfgmgr32.CM_Get_DevNode_PropertyW(node, ctypes.byref(prop),
+                                             ctypes.byref(prop_type), buffer,
+                                             ctypes.byref(size), 0)
+    if code != 0:
+        return ""
+    if prop_type.value != DEVPROP_TYPE_STRING:
+        print("设备属性类型不是字符串: 0x%X" % prop_type.value)
+    return buffer.raw[:size.value].decode("utf-16-le", "replace").rstrip("\x00").strip()
+
+
+def card_store_guid(uid=""):
+    """取该卡 store 目录名（GUID）；读不到（如设备节点还没建出来）返回空字符串。"""
+    tail = device_store_path(uid).replace("/", "\\").rstrip("\\").split("\\")[-1]
+    return tail if re.match(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-", tail) else ""
+
+
+def set_device_store_path(uid="", store_path=""):
+    """把卡片的 store 路径写回设备属性，修复「设备实例 → store 目录」的绑定。
+
+    走 PnP 属性接口（``CM_Set_DevNode_PropertyW``），无需改动 ``Enum`` 下受 ACL
+    保护的 ``Properties`` 子键。设备节点不存在时（例如系统重装后尚未重启）写不进去，
+    调用方应提示用户重启系统后再执行一次还原。
+
+    :return: True 表示写入成功
+    """
+    uid = instance_id(uid)
+    store_path = str(store_path or "")
+    if not uid or not store_path:
+        return False
+    try:
+        import ctypes
+        cfgmgr32 = ctypes.WinDLL("cfgmgr32.dll")
+    except Exception as err:
+        print("Set Device Property Error:", err)
+        return False
+    node = ctypes.c_uint32(0)
+    if cfgmgr32.CM_Locate_DevNodeW(ctypes.byref(node),
+                                   "ROOT\\SMARTCARDREADER\\%s" % uid, 0) != 0:
+        print("设备节点不存在，无法写回 store 路径")
+        return False
+    if not store_path.endswith("\\"):
+        store_path += "\\"
+    raw = uuid.UUID(VSC_DEVPROP_SET).bytes_le + VSC_DEVPROP_STORE_PID.to_bytes(4, "little")
+    prop = (ctypes.c_ubyte * len(raw)).from_buffer_copy(raw)
+    encoded = store_path.encode("utf-16-le")
+    buffer = ctypes.create_string_buffer(encoded + b"\x00\x00")
+    code = cfgmgr32.CM_Set_DevNode_PropertyW(node, ctypes.byref(prop),
+                                             DEVPROP_TYPE_STRING, buffer,
+                                             ctypes.c_uint32(len(encoded)), 0)
+    if code != 0:
+        print("写回设备属性失败: code=%s" % code)
+        return False
+    return True
+
+
 def list_cards():
     """读取注册表中已存在的 TPM 虚拟智能卡（已过滤掉物理读卡器设备）。
 
@@ -230,10 +453,11 @@ def store_state():
 
 
 def locate_card_entries(name="", uid=""):
-    """在卡片数据目录中定位属于某张卡的条目（文件或目录名）。
+    """在卡片数据目录中定位属于某张卡的条目（通常是 ``<GUID>`` 目录）。
 
-    目录内部布局未在公开资料中定义，因此这里按「条目名包含实例编号或卡片名称」
-    做自适应匹配；匹配不到时返回空列表，由调用方决定退化为整目录备份。
+    优先用设备属性里的 store 路径精确定位（``device_store_path``，即
+    ``Tpm\\<GUID>``）；拿不到时退化为「条目名包含实例编号或卡片名称」的模糊匹配，
+    再匹配不到就返回空列表，由调用方决定整目录备份。
     需要管理员权限，权限不足时抛 BackupError。
     """
     try:
@@ -243,6 +467,11 @@ def locate_card_entries(name="", uid=""):
     except OSError as err:
         raise BackupError("读取卡片数据目录失败: %s" % err)
     target_uid = instance_id(uid)
+    guid = card_store_guid(target_uid)
+    if guid:
+        for entry in entries:
+            if entry.lower() == guid.lower():
+                return [entry]
     target_name = str(name or "").strip().lower()
     hits = []
     for entry in entries:
@@ -292,31 +521,67 @@ def _sha256(path):
     return digest.hexdigest()
 
 
-def _collect_files(source_root):
-    """遍历 source_root，返回 [(相对路径, 绝对路径, 大小, sha256)]。"""
+def _collect_files(source_root, prefix=""):
+    """遍历 source_root，返回 [(包内相对路径, 绝对路径, 大小, sha256)]。
+
+    ``prefix`` 会拼到相对路径前面（如 ``files/<条目名>/x.dat``），
+    为空时按备份包根目录计。
+    """
     results = []
     for root, dirs, files in os.walk(source_root):
         dirs.sort()
         for name in sorted(files):
             full = os.path.join(root, name)
-            rel = os.path.relpath(full, source_root)
-            try:
-                size = os.path.getsize(full)
-                sha = _sha256(full)
-            except OSError as err:
-                raise BackupError("读取文件失败: %s (%s)" % (full, err))
-            results.append((rel.replace("\\", "/"), full, size, sha))
+            rel = os.path.relpath(full, source_root).replace("\\", "/")
+            if prefix:
+                rel = "%s/%s" % (prefix.strip("/"), rel)
+            results.append(_file_entry(full, rel))
     return results
 
 
-def create_backup(dest_dir, name="", uid=""):
-    """把一张 TPM 虚拟智能卡的「文件 + 注册表」备份到 ``dest_dir``。
+def _file_entry(path, arcname):
+    """把单个文件收集成备份条目 (包内相对路径, 绝对路径, 大小, sha256)。"""
+    try:
+        size = os.path.getsize(path)
+        sha = _sha256(path)
+    except OSError as err:
+        raise BackupError("读取文件失败: %s (%s)" % (path, err))
+    return arcname.replace("\\", "/"), path, size, sha
 
-    :param dest_dir: 备份保存目录（不存在会自动创建）
+
+def _backup_path(dest_path, card_name, instance):
+    """按用户选择的路径给出 ``.tsb`` 备份文件路径（给目录时自动命名）。"""
+    raw = str(dest_path or "").strip()
+    if not raw:
+        raise BackupError("未指定备份文件的保存路径")
+    dir_like = raw.endswith(("\\", "/")) or os.path.isdir(raw)
+    dest = os.path.abspath(raw)
+    if dir_like:
+        return os.path.join(dest, "%s-%s%s" % (normalize_name(card_name), instance, BACKUP_SUFFIX))
+    if not dest.lower().endswith(BACKUP_SUFFIX):
+        dest += BACKUP_SUFFIX
+    return dest
+
+
+def _discard(path):
+    """删除写失败留下的半成品文件（不存在或删不掉时忽略）。"""
+    try:
+        if os.path.lexists(path):
+            os.remove(path)
+    except OSError:
+        pass
+
+
+def create_backup(dest_path, name="", uid=""):
+    """把一张 TPM 虚拟智能卡的「文件 + 注册表」备份成 ``.tsb`` 压缩包。
+
+    :param dest_path: 备份文件保存路径（``.tsb``）；给目录时按
+        ``卡片名-实例编号.tsb`` 自动命名
     :param name: 卡片名称（界面选中的名称）
     :param uid: 卡片实例编号（如 ``0000``），为空时按名称匹配
-    :return: 报告字典 ``{"dir", "card", "scope", "file_count", "size", "reg_count", "log"}``
-    :raises BackupError: 权限不足 / 卡片未找到 / 目录不可写等
+    :return: 报告字典 ``{"file", "card", "instance", "scope", "warning",
+             "file_count", "size", "reg_count", "log"}``
+    :raises BackupError: 权限不足 / 卡片未找到 / 文件不可写等
     """
     if not is_admin():
         raise BackupError("需要管理员权限：请以管理员身份运行本工具后再备份")
@@ -325,28 +590,24 @@ def create_backup(dest_dir, name="", uid=""):
     if card is None:
         raise BackupError("未在注册表中找到该虚拟智能卡，请确认卡片名称或实例编号")
     card_name = card["name"] or name or ("卡 %s" % card["instance"])
-
-    dest_dir = os.path.abspath(dest_dir)
-    package = os.path.join(dest_dir, "%s-%s" % (normalize_name(card_name), card["instance"]))
-    files_root = os.path.join(package, FILES_DIR)
-    reg_root = os.path.join(package, REGISTRY_DIR)
+    tsb_path = _backup_path(dest_path, card_name, card["instance"])
     log = []
 
-    try:
-        os.makedirs(files_root, exist_ok=True)
-        os.makedirs(reg_root, exist_ok=True)
-    except OSError as err:
-        raise BackupError("创建备份目录失败: %s" % err)
-
-    # ---- 1. 卡片数据目录 -------------------------------------------------- #
+    # ---- 1. 收集卡片数据文件（只读取，压缩时再写进包） -------------------- #
     scope = "none"
     entries = []
     warning = ""
     copied = []
+    guid = ""
     state = store_state()
     if state == "denied":
         raise BackupError("无权访问卡片数据目录，请以管理员身份运行本工具: %s" % VSC_STORE_DIR)
     if state == "ok":
+        guid = card_store_guid(card["instance"])
+        if guid:
+            log.append("卡片 store 目录: %s" % guid)
+        else:
+            log.append("未读到卡片 store 目录（设备属性不可用），按名称/实例模糊匹配")
         entries = locate_card_entries(card_name, card["instance"])
         try:
             if entries:
@@ -354,94 +615,111 @@ def create_backup(dest_dir, name="", uid=""):
                 scope = "card"
                 for entry in entries:
                     source = os.path.join(VSC_STORE_DIR, entry)
-                    target = os.path.join(files_root, entry)
+                    arcname = "%s/%s" % (FILES_DIR, entry)
                     if os.path.isdir(source):
-                        shutil.copytree(source, target, dirs_exist_ok=True)
+                        copied.extend(_collect_files(source, arcname))
                     else:
-                        shutil.copy2(source, target)
+                        copied.append(_file_entry(source, arcname))
                     log.append("已备份卡片数据条目: %s" % entry)
             else:
                 # 无法定位到具体条目：退化为整目录备份（还原时会覆盖整个数据目录）
                 scope = "store"
-                shutil.copytree(VSC_STORE_DIR, files_root, dirs_exist_ok=True)
+                copied = _collect_files(VSC_STORE_DIR, FILES_DIR)
                 warning = ("未能在数据目录中按名称定位到本卡条目，已整目录备份；"
                            "还原时会覆盖整个卡片数据目录，请仅在本机所有卡片均来自"
                            "同一份备份时还原")
                 log.append("未能按名称定位到具体条目，已整目录备份: %s" % VSC_STORE_DIR)
         except PermissionError as err:
-            raise BackupError("复制卡片数据失败（需要管理员权限）: %s" % err)
+            raise BackupError("读取卡片数据失败（需要管理员权限）: %s" % err)
         except OSError as err:
-            raise BackupError("复制卡片数据失败: %s" % err)
-        copied = _collect_files(files_root)
+            raise BackupError("读取卡片数据失败: %s" % err)
     else:
         log.append("卡片数据目录不存在，跳过文件备份: %s" % VSC_STORE_DIR)
 
     # 数据目录清单（诊断用，便于确认目录内部布局）
     index_lines = store_index()
-    try:
-        with open(os.path.join(package, "store-index.txt"), "w", encoding="utf-8") as handle:
-            handle.write("\n".join(index_lines))
-    except OSError as err:
-        log.append("写入数据目录清单失败（已跳过）: %s" % err)
 
-    # ---- 2. 注册表 -------------------------------------------------------- #
+    # ---- 2. 写进 .tsb 压缩包 ---------------------------------------------- #
+    # 先写 .part 再改名：中途失败不会留下一个损坏的备份文件
+    part_path = "%s.part" % tsb_path
     registry = []
-    keys = [("SMARTCARDREADER-%s" % card["instance"], "%s\\%s" % (VSC_ENUM_KEY, card["instance"]))]
-    reader_key = "%s\\Microsoft Virtual Smart Card %d" % (VSC_READER_KEY, int(card["instance"]))
-    code, _ = run_command(["reg", "query", reader_key])
-    if code == 0:
-        keys.append(("CalaisReader-%s" % card["instance"], reader_key))
-    for tag, key in keys:
-        reg_file = os.path.join(reg_root, "%s.reg" % tag)
-        code, output = run_command(["reg", "export", key, reg_file, "/y"])
-        if code != 0:
-            log.append("导出注册表失败（已跳过）: %s" % key)
-            if os.path.isfile(reg_file):
-                os.remove(reg_file)
-            continue
-        registry.append({"key": key, "file": "%s/%s.reg" % (REGISTRY_DIR, tag)})
-        log.append("已导出注册表: %s" % key)
-    if not registry:
-        raise BackupError("注册表导出失败：未拿到任何卡片设备节点，请确认卡片存在且以管理员运行")
-
-    # ---- 3. 清单 ---------------------------------------------------------- #
-    total = sum(item[2] for item in copied)
-    manifest = {
-        "format": BACKUP_FORMAT,
-        "tool": "TPMSmartCard",
-        "tool_version": VERSION,
-        "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "computer": socket.gethostname(),
-        "card": {
-            "name": card_name,
-            "instance": card["instance"],
-            "enum_key": "%s\\%s" % (VSC_ENUM_KEY, card["instance"]),
-        },
-        "store": {
-            "dir": VSC_STORE_DIR,
-            "scope": scope,
-            "entries": entries,
-            "index": "store-index.txt",
-        },
-        "registry": registry,
-        "files": [{"path": "%s/%s" % (FILES_DIR, rel), "size": size, "sha256": sha}
-                  for rel, _, size, sha in copied],
-        "notes": [
-            "卡片私钥由 TPM 保护，磁盘上只有 TPM 封装后的数据，本备份仅在"
-            "同一台电脑且同一 TPM（未清除）上可以还原。",
-            "换机或清除 TPM 后无法还原，请同时保留卡片名称、PIN、PUK 与管理密码。",
-        ] + ([warning] if warning else []),
-    }
-    manifest_path = os.path.join(package, MANIFEST_NAME)
     try:
-        with open(manifest_path, "w", encoding="utf-8") as handle:
-            handle.write(json.dumps(manifest, ensure_ascii=False, indent=2))
-    except OSError as err:
-        raise BackupError("写入备份清单失败: %s" % err)
+        with zipfile.ZipFile(part_path, "w", zipfile.ZIP_DEFLATED) as archive:
+            for rel, full, _, _ in copied:
+                try:
+                    archive.write(full, rel)
+                except OSError as err:
+                    raise BackupError("写入备份文件失败: %s (%s)" % (rel, err))
+            archive.writestr("store-index.txt", "\n".join(index_lines))
 
+            # ---- 3. 注册表：导出到临时文件后收进压缩包 -------------------- #
+            keys = [("SMARTCARDREADER-%s" % card["instance"],
+                     "%s\\%s" % (VSC_ENUM_KEY, card["instance"]))]
+            reader_key = "%s\\Microsoft Virtual Smart Card %d" % (VSC_READER_KEY,
+                                                                 int(card["instance"]))
+            code, _ = run_command(["reg", "query", reader_key])
+            if code == 0:
+                keys.append(("CalaisReader-%s" % card["instance"], reader_key))
+            with tempfile.TemporaryDirectory(prefix="tpmvsc-reg-") as reg_dir:
+                for tag, key in keys:
+                    reg_file = os.path.join(reg_dir, "%s.reg" % tag)
+                    code, output = run_command(["reg", "export", key, reg_file, "/y"])
+                    if code != 0:
+                        log.append("导出注册表失败（已跳过）: %s" % key)
+                        continue
+                    archive.write(reg_file, "%s/%s.reg" % (REGISTRY_DIR, tag))
+                    registry.append({"key": key, "file": "%s/%s.reg" % (REGISTRY_DIR, tag)})
+                    log.append("已导出注册表: %s" % key)
+            if not registry:
+                raise BackupError("注册表导出失败：未拿到任何卡片设备节点，请确认卡片存在且以管理员运行")
+
+            # ---- 4. 清单 -------------------------------------------------- #
+            tpm = tpm_identity()
+            log.append("本机 TPM 指纹: %s" % (tpm["ek"] or "读取失败（需管理员权限）"))
+            if tpm["info"]:
+                log.append("本机 TPM: %s" % tpm["info"])
+            manifest = {
+                "format": BACKUP_FORMAT,
+                "tool": "TPMSmartCard",
+                "tool_version": VERSION,
+                "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "computer": socket.gethostname(),
+                "tpm": tpm,
+                "card": {
+                    "name": card_name,
+                    "instance": card["instance"],
+                    "enum_key": "%s\\%s" % (VSC_ENUM_KEY, card["instance"]),
+                },
+                "store": {
+                    "dir": VSC_STORE_DIR,
+                    "scope": scope,
+                    "guid": guid,
+                    "entries": entries,
+                    "index": "store-index.txt",
+                },
+                "registry": registry,
+                "files": [{"path": rel, "size": size, "sha256": sha}
+                          for rel, _, size, sha in copied],
+                "notes": [
+                    "备份只包含卡片数据目录（Tpm）与设备注册表，不含 TPM 内部的密钥材料；"
+                    "卡片私钥由 TPM 保护，磁盘上只有 TPM 封装后的数据。",
+                    "仅在「同一台电脑 + 同一 TPM（未清除）」上可以还原；换机、清除 TPM、"
+                    "删除卡片后再还原都可能无法恢复私钥，请同时保留卡片名称、PIN、PUK 与管理密码。",
+                ] + ([warning] if warning else []),
+            }
+            archive.writestr(MANIFEST_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
+
+        os.replace(part_path, tsb_path)
+    except OSError as err:
+        raise BackupError("写入备份文件失败: %s" % err)
+    finally:
+        _discard(part_path)
+
+    total = sum(item[2] for item in copied)
+    log.append("已生成备份文件: %s" % tsb_path)
     print("\n".join(log))
     return {
-        "dir": package,
+        "file": tsb_path,
         "card": card_name,
         "instance": card["instance"],
         "scope": scope,
@@ -456,15 +734,58 @@ def create_backup(dest_dir, name="", uid=""):
 # --------------------------------------------------------------------------- #
 # 还原
 # --------------------------------------------------------------------------- #
-def read_manifest(package_dir):
-    """读取备份清单并做基本校验。"""
-    path = os.path.join(package_dir, MANIFEST_NAME)
-    if not os.path.isfile(path):
-        raise BackupError("该目录不是本工具的备份：缺少 %s" % MANIFEST_NAME)
+class _PackageReader:
+    """``.tsb`` 备份包读取器（``.tsb`` 就是 zip 压缩包，按包内相对路径读取）。"""
+
+    def __init__(self, package):
+        self.path = os.path.abspath(str(package or "").strip('"').strip())
+        if not os.path.isfile(self.path):
+            raise BackupError("找不到备份文件: %s" % self.path)
+        if not self.path.lower().endswith(BACKUP_SUFFIX):
+            raise BackupError("请选择 %s 备份文件: %s" % (BACKUP_SUFFIX, self.path))
+        if not zipfile.is_zipfile(self.path):
+            raise BackupError("该文件不是有效的 %s 备份文件: %s" % (BACKUP_SUFFIX, self.path))
+        try:
+            self.zip = zipfile.ZipFile(self.path, "r")
+        except (OSError, zipfile.BadZipFile) as err:
+            raise BackupError("备份文件无法打开: %s" % err)
+
+    def close(self):
+        if self.zip is not None:
+            self.zip.close()
+            self.zip = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        self.close()
+
+    def exists(self, rel):
+        return str(rel or "").replace("\\", "/") in self.zip.namelist()
+
+    def read(self, rel):
+        rel = str(rel or "").replace("\\", "/")
+        try:
+            return self.zip.read(rel)
+        except (KeyError, OSError, zipfile.BadZipFile) as err:
+            raise BackupError("读取备份文件失败: %s (%s)" % (rel, err))
+
+
+def read_manifest(package, reader=None):
+    """读取备份清单并做基本校验。
+
+    ``package`` 是 ``.tsb`` 备份文件；``reader`` 用于复用已经打开的备份包，
+    避免同一次还原里重复打开压缩包。
+    """
+    if reader is None:
+        with _PackageReader(package) as opened:
+            return read_manifest(package, opened)
+    if not reader.exists(MANIFEST_NAME):
+        raise BackupError("不是本工具的备份：缺少 %s" % MANIFEST_NAME)
     try:
-        with open(path, "r", encoding="utf-8") as handle:
-            manifest = json.loads(handle.read())
-    except (OSError, ValueError) as err:
+        manifest = json.loads(reader.read(MANIFEST_NAME).decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as err:
         raise BackupError("备份清单无法解析: %s" % err)
     if not isinstance(manifest, dict) or "card" not in manifest:
         raise BackupError("备份清单内容不完整")
@@ -473,81 +794,318 @@ def read_manifest(package_dir):
     return manifest
 
 
-def _restart_service():
-    """尽力重启智能卡服务，让还原后的卡片重新被枚举。"""
+def _clear_readonly(path):
+    """清除只读属性：Windows 上覆盖写入只读文件会直接报 errno 13。"""
+    if not os.path.lexists(path):
+        return
+    try:
+        os.chmod(path, stat.S_IWRITE)
+    except OSError:
+        pass
+
+
+def _remove_entry(path):
+    """移除目标位置的同名条目（只读文件 / 同名目录），失败时忽略后续再报错。"""
+    _clear_readonly(path)
+    try:
+        if os.path.isdir(path) and not os.path.islink(path):
+            shutil.rmtree(path, ignore_errors=True)
+        elif os.path.lexists(path):
+            os.remove(path)
+    except OSError:
+        pass
+
+
+def _take_control(directory):
+    """对目录及其内容取得所有权并授予管理员完全控制，返回日志行。
+
+    卡片数据目录位于 LocalService 配置文件下，其中部分条目（如 ``keymaps``）
+    的 ACL 只授予 SYSTEM，导致即使以管理员身份运行，写入仍被拒绝（errno 13）。
+    """
     log = []
-    code, output = run_command(["sc", "stop", CARD_SERVICE])
-    log.append("停止服务 %s: %s" % (CARD_SERVICE, output.splitlines()[0] if output else code))
-    code, output = run_command(["sc", "start", CARD_SERVICE])
-    log.append("启动服务 %s: %s" % (CARD_SERVICE, output.splitlines()[0] if output else code))
+    if not directory or not os.path.isdir(directory):
+        return log
+    commands = (
+        ["takeown", "/f", directory, "/r", "/d", "y", "/a"],
+        ["icacls", directory, "/grant", "*S-1-5-32-544:(OI)(CI)F", "/t", "/c", "/q"],
+    )
+    for command in commands:
+        code, output = run_command(command)
+        detail = "成功" if code == 0 else (output.splitlines()[0] if output else str(code))
+        log.append("修复访问控制 %s %s: %s" % (command[0], directory, detail))
     return log
 
 
-def restore_backup(package_dir):
-    """从备份目录还原一张 TPM 虚拟智能卡（文件 + 注册表）。
+def _write_data(data, target, log):
+    """把备份包里的数据写入卡片数据目录，自动绕开常见的写入受阻情况。
 
-    :return: 报告字典 ``{"card", "instance", "file_count", "reg_count", "log", "stale"}``
-    :raises BackupError: 权限不足 / 备份无效 / 写入失败
+    实测 ``Tpm\\<GUID>\\keymaps`` 这类条目会直接报
+    ``[Errno 13] Permission denied``，原因是：目标带只读属性、
+    目标被同名目录占位，或被 ACL 限制为仅 SYSTEM 可写。
+    这里按「清除只读属性 -> 清理占位条目 -> 修复 ACL」的顺序处理后重试。
+    """
+    parent = os.path.dirname(target)
+    try:
+        os.makedirs(parent, exist_ok=True)
+    except OSError:
+        log.extend(_take_control(parent))
+        if os.path.lexists(parent) and not os.path.isdir(parent):
+            # 目标父级被同名文件占位（备份里是目录、本机是文件）
+            log.append("目标父级被同名文件占用，已移除后重建: %s" % parent)
+            _remove_entry(parent)
+        try:
+            os.makedirs(parent, exist_ok=True)
+        except OSError as err:
+            raise BackupError("创建卡片数据目录失败: %s\n请先删除同名卡片或重启系统后重试。" % err)
+
+    for attempt in (0, 1):
+        try:
+            _clear_readonly(target)
+            with open(target, "wb") as handle:
+                handle.write(data)
+            return
+        except PermissionError as err:
+            if attempt:
+                raise BackupError(
+                    "写入卡片数据失败: %s\n"
+                    "目标可能只允许 SYSTEM 访问，或被智能卡服务占用。\n"
+                    "请确认以管理员身份运行、先删除同名卡片，或重启系统后重试。" % err)
+            if os.path.isdir(target):
+                log.append("目标被同名目录占用，已移除后重写: %s" % target)
+            _remove_entry(target)
+            log.extend(_take_control(parent))
+        except OSError as err:
+            raise BackupError("写入卡片数据失败: %s\n请先删除同名卡片或重启系统后重试" % err)
+
+
+def _service(action):
+    """启动 / 停止智能卡服务，返回一行日志。"""
+    code, output = run_command(["sc", action, CARD_SERVICE])
+    detail = output.splitlines()[0] if output else str(code)
+    return "智能卡服务 %s %s: %s" % (CARD_SERVICE, action, detail)
+
+
+def _rescan_devices(uid=""):
+    """让 PnP 重新枚举设备，使还原后的虚拟智能卡无需重启即可出现。
+
+    还原只是把 ``Enum\\ROOT\\SMARTCARDREADER\\<uid>`` 注册表项写了回去，
+    PnP 的内存设备树上并没有这个设备节点；必须重新枚举才会真正创建并启动
+    这张卡（等价于设备管理器里的「扫描检测硬件改动」），否则要重启系统才能在
+    读卡器列表里看到它。
+
+    返回日志行列表，并附带设备节点的实际状态。
+    """
+    import ctypes
+
+    try:
+        cfgmgr32 = ctypes.WinDLL("cfgmgr32.dll")
+    except Exception as err:
+        return ["设备重新枚举不可用: %s" % err]
+
+    # DN_STARTED = 0x8：设备节点已启动
+    dn_started = 0x00000008
+    # CM_REENUMERATE_SYNCHRONOUS = 0x1：同步重新枚举（返回时枚举已完成）
+    sync = 0x00000001
+
+    def locate(name=None):
+        """按设备实例 ID 取设备节点；name 为 None 时取设备树根节点。"""
+        node = ctypes.c_uint32(0)
+        code = cfgmgr32.CM_Locate_DevNodeW(ctypes.byref(node), name, 0)
+        return node.value if code == 0 else None
+
+    def started(node):
+        status = ctypes.c_uint32(0)
+        problem = ctypes.c_uint32(0)
+        code = cfgmgr32.CM_Get_DevNode_Status(ctypes.byref(status), ctypes.byref(problem), node, 0)
+        return code == 0 and bool(status.value & dn_started)
+
+    def wait_started(node, seconds):
+        """驱动加载是异步的，等设备节点进入已启动状态（最多等 seconds 秒）。"""
+        deadline = time.time() + seconds
+        while True:
+            if started(node):
+                return True
+            if time.time() >= deadline:
+                return False
+            time.sleep(0.5)
+
+    root = locate()
+    if root is None:
+        return ["定位设备树根节点失败，已跳过设备重新枚举"]
+
+    log = []
+    code = cfgmgr32.CM_Reenumerate_DevNode(root, sync)
+    log.append("重新枚举设备（等效于「扫描检测硬件改动」）: %s" %
+               ("成功" if code == 0 else "失败(code=%s)" % code))
+
+    uid = instance_id(uid)
+    node = locate("ROOT\\SMARTCARDREADER\\%s" % uid) if uid else None
+    if node is None:
+        log.append("卡片设备尚未被系统创建，需重启系统后才会出现在列表中")
+        return log
+    # 设备节点已存在也要重新枚举一次：让驱动重新加载并重新读取卡片数据，
+    # 否则驱动里可能还停留在「卡片已被删除」的旧状态，读卡器会显示无卡。
+    cfgmgr32.CM_Reenumerate_DevNode(node, sync)
+    if wait_started(node, 8):
+        log.append("卡片设备已就绪: ROOT\\SMARTCARDREADER\\%s" % uid)
+    else:
+        log.append("卡片设备已创建但未启动，需重启系统后才会出现在列表中")
+    return log
+
+
+def _reader_state(uid=""):
+    """报告读卡器 / 卡片当前是否已被系统识别（与界面读卡器列表同一来源：OpenSC）。
+
+    需要智能卡服务在运行，因此放在还原流程最后调用；输出用于区分
+    「设备没建出来」与「设备在、但卡片没加载」两种情况。
+    """
+    uid = instance_id(uid)
+    if not uid:
+        return "读卡器状态未知：备份里没有实例编号"
+    # 与界面一致用 OpenSC 列读卡器；工作目录可能不是程序目录，做一次兜底
+    tool = os.path.join("OpenSC", "opensc-tool.exe")
+    if not os.path.isfile(tool):
+        tool = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "OpenSC", "opensc-tool.exe")
+    if not os.path.isfile(tool):
+        return "读卡器状态未知：未找到 OpenSC\\opensc-tool.exe"
+    code, output = run_command([tool, "--list-readers"], timeout=60)
+    if code != 0 and not output:
+        return "读卡器状态未知：调用 %s 失败(%s)" % (tool, code)
+    name = "Microsoft Virtual Smart Card %d" % int(uid)
+    pattern = re.compile(re.escape(name) + r"(?!\d)")
+    for line in output.splitlines():
+        matched = pattern.search(line)
+        if not matched:
+            continue
+        # pcsc 输出中卡片列固定为 Yes / No，位于读卡器名之前
+        flag = line[:matched.start()].rstrip().lower()
+        if flag.endswith("yes"):
+            return "读卡器已出现且卡片可识别: %s" % name
+        if flag.endswith("no"):
+            return "读卡器已出现但没有卡片: %s（设备或卡片数据未正确加载）" % name
+        return "读卡器已出现: %s" % name
+    return "读卡器尚未出现: %s" % name
+
+
+def restore_backup(package, force=False):
+    """从 ``.tsb`` 备份文件还原一张 TPM 虚拟智能卡。
+
+    :param package: ``.tsb`` 备份文件路径
+    :param force: TPM 指纹与本机不一致时是否强制还原（界面确认后传 True）
+    :return: 报告字典 ``{"card", "instance", "file_count", "reg_count",
+             "stale", "tpm_state", "log"}``
+    :raises BackupError: 权限不足 / 备份无效 / TPM 不一致且未强制 / 写入失败
     """
     if not is_admin():
         raise BackupError("需要管理员权限：请以管理员身份运行本工具后再还原")
 
-    package_dir = os.path.abspath(package_dir)
-    manifest = read_manifest(package_dir)
-    card = manifest.get("card") or {}
-    card_name = card.get("name") or ""
-    uid = instance_id(card.get("instance"))
-    log = []
+    with _PackageReader(package) as reader:
+        manifest = read_manifest(package, reader)
+        card = manifest.get("card") or {}
+        card_name = card.get("name") or ""
+        uid = instance_id(card.get("instance"))
+        tpm_state, tpm_text = check_tpm(manifest)
+        log = ["TPM 校验: %s" % tpm_text]
+        if tpm_state == "mismatch":
+            if not force:
+                raise BackupError("备份的 TPM 与本机不一致，已中止还原"
+                                  "（确认风险后可强制还原）：%s" % tpm_text)
+            log.append("已按用户确认强制还原（TPM 不一致）")
 
-    # ---- 1. 校验备份文件并回写 -------------------------------------------- #
-    # 备份包内 files/ 的相对结构就是卡片数据目录（Tpm）的相对结构，
-    # 因此固定还原到本机数据目录，避免备份记录的是别的机器路径。
-    source_root = os.path.join(package_dir, FILES_DIR)
-    stale = []
-    file_count = 0
-    if os.path.isdir(source_root):
-        if store_state() == "denied":
-            raise BackupError("无权访问卡片数据目录，请以管理员身份运行本工具: %s" % VSC_STORE_DIR)
-        for item in manifest.get("files") or []:
-            rel = str(item.get("path") or "").replace("\\", "/")
-            if not rel.startswith(FILES_DIR + "/"):
-                continue
-            inner = rel[len(FILES_DIR) + 1:]
-            source = os.path.join(package_dir, *rel.split("/"))
-            if not os.path.isfile(source):
-                raise BackupError("备份文件缺失: %s" % rel)
-            expect = str(item.get("sha256") or "")
-            if expect and _sha256(source) != expect:
-                stale.append(inner)
-            target = os.path.join(VSC_STORE_DIR, *inner.split("/"))
-            try:
-                os.makedirs(os.path.dirname(target), exist_ok=True)
-                shutil.copy2(source, target)
-            except PermissionError as err:
-                raise BackupError("写入卡片数据失败（需要管理员权限，且建议先删除同名卡片）: %s" % err)
-            except OSError as err:
-                raise BackupError("写入卡片数据失败: %s\n请先删除同名卡片或重启系统后重试" % err)
-            file_count += 1
-        log.append("已还原卡片数据文件: %d 个" % file_count)
+        # 写文件前先停掉智能卡服务：服务（LocalService）会打开卡片数据目录，
+        # 此时覆盖写入会报 [Errno 13] Permission denied。
+        log.append(_service("stop"))
+        try:
+            # ---- 1. 校验备份文件并回写 ------------------------------------ #
+            # 备份包内 files/ 的相对结构就是卡片数据目录（Tpm）的相对结构，
+            # 因此固定还原到本机数据目录，避免备份记录的是别的机器路径。
+            stale = []
+            file_count = 0
+            entries = manifest.get("files") or []
+            if entries:
+                if store_state() == "denied":
+                    raise BackupError("无权访问卡片数据目录，请以管理员身份运行本工具: %s"
+                                      % VSC_STORE_DIR)
+                for item in entries:
+                    rel = str(item.get("path") or "").replace("\\", "/")
+                    if not rel.startswith(FILES_DIR + "/"):
+                        continue
+                    inner = rel[len(FILES_DIR) + 1:]
+                    if not reader.exists(rel):
+                        raise BackupError("备份文件缺失: %s" % rel)
+                    data = reader.read(rel)
+                    expect = str(item.get("sha256") or "")
+                    if expect and hashlib.sha256(data).hexdigest() != expect:
+                        stale.append(inner)
+                    target = os.path.join(VSC_STORE_DIR, *inner.split("/"))
+                    _write_data(data, target, log)
+                    file_count += 1
+                log.append("已还原卡片数据文件: %d 个" % file_count)
+            else:
+                log.append("备份中没有卡片数据文件，仅还原注册表")
+
+            # ---- 2. 还原注册表（reg import 需要一个真实的 .reg 文件） ------- #
+            reg_count = 0
+            with tempfile.TemporaryDirectory(prefix="tpmvsc-reg-") as reg_dir:
+                for item in manifest.get("registry") or []:
+                    rel = str(item.get("file") or "").replace("\\", "/")
+                    if not reader.exists(rel):
+                        log.append("注册表备份缺失，已跳过: %s" % item.get("file"))
+                        continue
+                    reg_file = os.path.join(reg_dir, os.path.basename(rel) or "restore.reg")
+                    try:
+                        with open(reg_file, "wb") as handle:
+                            handle.write(reader.read(rel))
+                    except OSError as err:
+                        log.append("写入临时注册表文件失败，已跳过: %s (%s)" % (rel, err))
+                        continue
+                    code, output = run_command(["reg", "import", reg_file])
+                    if code != 0:
+                        log.append("导入注册表失败: %s (%s)" % (item.get("key"), output))
+                        continue
+                    reg_count += 1
+                    log.append("已导入注册表: %s" % item.get("key"))
+        finally:
+            # ---- 3. 启动服务，读卡器列表需要智能卡服务在运行 -------------- #
+            log.append(_service("start"))
+
+    # ---- 4. 让 PnP 重新枚举设备：注册表项只是写回了磁盘，PnP 的内存设备树上
+    # 还没有这个节点，必须重新枚举（扫描检测硬件改动）卡片才会真正出现 ------ #
+    log.extend(_rescan_devices(uid))
+
+    # ---- 5. 设备就绪后再重启一次服务，刷新读卡器列表 ---------------------- #
+    log.append(_service("stop"))
+    log.append(_service("start"))
+
+    # ---- 6. 报告读卡器 / 卡片的真实状态（与界面同一来源） ------------------ #
+    log.append(_reader_state(uid))
+
+    # ---- 7. 修复「设备实例 → store 目录」绑定 ------------------------------ #
+    # 该绑定是设备属性（存在 Enum 下受 ACL 保护的 Properties 子键里），注册表备份
+    # 里通常没有它；设备节点已存在时可以用 PnP 属性接口直接写回，写完让驱动重新加载。
+    guid = str((manifest.get("store") or {}).get("guid") or "") or card_store_guid(uid)
+    bound = device_store_path(uid)
+    if bound:
+        log.append("设备已绑定 store: %s" % bound)
+    elif guid:
+        target = os.path.join(VSC_STORE_DIR, guid) + os.sep
+        if set_device_store_path(uid, target):
+            log.append("已写回设备属性（store 路径）: %s" % target)
+            log.extend(_rescan_devices(uid))
+            log.append(_reader_state(uid))
+        else:
+            log.append("设备节点还不存在，无法写回 store 路径；"
+                       "重启系统后再执行一次还原即可完成绑定")
     else:
-        log.append("备份中没有卡片数据文件，仅还原注册表")
+        log.append("备份里没有 store GUID，跳过设备绑定修复")
 
-    # ---- 2. 还原注册表 ---------------------------------------------------- #
-    reg_count = 0
-    for item in manifest.get("registry") or []:
-        reg_file = os.path.join(package_dir, *(str(item.get("file") or "").replace("\\", "/").split("/")))
-        if not os.path.isfile(reg_file):
-            log.append("注册表备份缺失，已跳过: %s" % item.get("file"))
-            continue
-        code, output = run_command(["reg", "import", reg_file])
-        if code != 0:
-            log.append("导入注册表失败: %s (%s)" % (item.get("key"), output))
-            continue
-        reg_count += 1
-        log.append("已导入注册表: %s" % item.get("key"))
-
-    # ---- 3. 重启服务，让卡片重新枚举 -------------------------------------- #
-    log.extend(_restart_service())
+    # ---- 8. 自检：TPM 内这张卡的私钥是否还在 ------------------------------- #
+    key_state = tpm_key_state(guid)
+    log.append({"exists": "TPM 私钥仍在：卡片应可正常使用",
+                "missing": "警告：TPM 内该卡的密钥已不存在（删卡 / 清除过 TPM），"
+                           "卡片数据虽已还原，但私钥无法使用",
+                "unknown": "TPM 私钥状态未知（需要管理员权限）"}.get(key_state, key_state))
 
     print("\n".join(log))
     return {
@@ -556,6 +1114,8 @@ def restore_backup(package_dir):
         "file_count": file_count,
         "reg_count": reg_count,
         "stale": stale,
+        "tpm_state": tpm_state,
+        "key_state": key_state,
         "log": log,
     }
 
