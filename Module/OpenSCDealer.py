@@ -29,7 +29,7 @@ class OpenSCDealer:
             fields[name.replace(" ", "")] = value
         return fields
 
-    def readCert(self, results, details):
+    def readCert(self, results, details, in_card=None):
         if len(results) <= 0 or "[" not in results[0]:
             return None
         cr_name = results[0].split("[")[1].replace("]", "")
@@ -44,7 +44,8 @@ class OpenSCDealer:
                 cr_name, results.get('MD:guid', "Unknown"),
                 key_parts[1] + " " + results['ModLength'],
                 results.get('Usage', "Unknown"),
-                None if details.find("not found") >= 0 else details
+                None if details.find("not found") >= 0 else details,
+                in_card
             )
         except Exception as err:
             print("Read Cert Error:", err)
@@ -115,7 +116,9 @@ class OpenSCDealer:
                             details = OpenSCDealer.openText(
                                 "--read-certificate %d %s" % (
                                     int(count), "--reader %d" % int(card_uuid)))
-                            self.readCert(results[nums:nums + 11], "\n".join(details))
+                            # 记下证书所属读卡器名（与 self.cards 的键一致），供界面按卡过滤
+                            self.readCert(results[nums:nums + 11], "\n".join(details),
+                                          card_all[card_uuid])
                 except Exception as err:
                     print("Read Card Error:", err)
                     traceback.print_exc()

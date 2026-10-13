@@ -71,3 +71,29 @@ def set_current(key):
     settings = read_user_settings()
     settings["theme"] = key
     return write_user_settings(settings)
+
+
+def unsubscribe(in_widget):
+    """取消控件及其全部子控件在 ttkbootstrap 主题频道上的订阅。
+
+    ttkbootstrap 在创建控件时会把它登记到 Publisher 上（原生 Tk 控件、以及
+    ttk.Combobox 的下拉框样式），以便切换主题时刷新；但控件销毁后订阅不会
+    自动移除，之后切换主题就会去刷新这些已销毁的控件并抛 TclError
+    （``bad window path name "..."``）。因此窗口关闭（销毁）之前先调用本函数，
+    从根源上避免该异常；主程序里的兜底捕获（见 SmartCardAPP.setup_theme）保留。
+    """
+    try:
+        from ttkbootstrap.publisher import Publisher
+    except Exception:
+        return None
+    try:
+        Publisher.unsubscribe(in_widget.winfo_pathname(in_widget.winfo_id()))
+    except Exception:
+        pass
+    try:
+        children = in_widget.winfo_children()
+    except Exception:
+        return None
+    for child in children:
+        unsubscribe(child)
+    return None

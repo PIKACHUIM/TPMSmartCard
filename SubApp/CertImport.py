@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X
 from ttkbootstrap import *
 import ttkbootstrap as ttk
 
+from Module import Theme
 from Module.AppConfigure import AppConfigure
 from Module.Cryptography import Crypto
 from Module.TPMSmartCard import TPMSmartCard
@@ -37,6 +38,8 @@ class CertImport:
             self.main.read()
 
         # self.page.attributes('-topmost', True)
+        # 关闭窗口（点右上角 × / 取消）都要走 close，先取消主题订阅再销毁
+        self.page.protocol("WM_DELETE_WINDOW", self.close)
         self.page.geometry("%dx%d" % (
             # 拉丁/西里尔字母比汉字占位更宽，按语言调整窗口宽度
             750 if self.main.wide else 630,
@@ -72,8 +75,9 @@ class CertImport:
             # 云端下发方式：勾选 = 使用密码（取件码，自协商）下发；不勾选 = 交换密钥（X25519）
             # 说明：云端下发无法使用本地 CSP，因此这里直接复用「使用本地 CSP」复选框的位置，
             #      进入云端下发时用「使用密码下发」替换它（见 apply_cloud）。
+            #      默认（每次进入云端下发）为「使用密码下发」，交换密钥需用户自己切换。
             self.v_cloud_pass = tk.IntVar()
-            self.v_cloud_pass.set(0)
+            self.v_cloud_pass.set(1)
             self.v_cloud_pass.trace('w', self.cloud_pass_switch)
             self.k_cloud_pass = ttk.Checkbutton(self.page, bootstyle="success-round-toggle",
                                                 text=self.main.i18n('msg_cloud_pass'),
@@ -86,7 +90,7 @@ class CertImport:
             self.csp_data = ttk.Combobox(self.page, bootstyle="info", width=40,
                                          values=list())
         # 确认按钮 ====================================================================================
-        self.cancel_button = ttk.Button(self.page, bootstyle="danger", command=self.page.destroy,
+        self.cancel_button = ttk.Button(self.page, bootstyle="danger", command=self.close,
                                         text=self.main.i18n("msg_cancel"))
         self.submit_button = ttk.Button(self.page, bootstyle="success", command=self.submit,
                                         text=self.main.i18n("msg_import") + self.flag.upper())
@@ -98,6 +102,16 @@ class CertImport:
             self.submit_button.config(state=tk.DISABLED)
         # 执行操作 =====================================================================================
         self.packUI()
+        # 窗口按内容实测尺寸再定一次：提示语、CSP 选项、按钮等文案在各语言下长度差别很大，
+        # 固定尺寸会把右侧内容挤掉（不低于上面的设计尺寸，且不超出屏幕）
+        self.page.update_idletasks()
+        self.page.geometry("%dx%d" % (
+            min(max(750 if self.main.wide else 630, self.page.winfo_reqwidth()),
+                self.page.winfo_screenwidth() - 40),
+            min(max(200 if self.flag == "pfx" else 120, self.page.winfo_reqheight()),
+                self.page.winfo_screenheight() - 80)
+        ))
+        self.page.resizable(False, False)
 
     def packUI(self):
         self.path_tag.grid(column=0, row=0, pady=10, padx=15)
@@ -112,7 +126,21 @@ class CertImport:
         self.submit_button.grid(column=3, row=3, pady=5, padx=0)
         # self.deals_process.grid(column=1, row=3, pady=10, padx=5, sticky=tk.W)
         self.import_output.grid(column=2, row=3, pady=10, padx=5, sticky=tk.W)
-        self.v_csp_ts.set(0 if self.apps == False else 1)
+        # CSP / 云端下发仅 PFX 导入才有对应控件（cer 导入直接走文件导入）
+        if self.flag == "pfx":
+            self.v_csp_ts.set(0 if self.apps == False else 1)
+
+    def close(self):
+        """关闭窗口；先取消 ttkbootstrap 的主题订阅再销毁。
+
+        控件销毁后订阅不会自动移除，之后切换主题时 ttkbootstrap 会去刷新这些
+        已销毁的控件（本窗口有 CSP 下拉框）并报 TclError，见 Module.Theme.unsubscribe。
+        """
+        Theme.unsubscribe(self.page)
+        try:
+            self.page.destroy()
+        except Exception:
+            pass
 
     def change(self, *args):
         if self.flag == "pfx" and len(self.pass_txt.get()) == 0:
@@ -124,7 +152,7 @@ class CertImport:
             self.submit_button.config(state=tk.DISABLED)
         else:
             self.submit_button.config(state=tk.NORMAL)
-        if self.v_clouds.get():
+        if self.flag == "pfx" and self.v_clouds.get():
             # 云端下发：地址 + 下方文本框都必须填写（取件码 / 交换密钥）
             if len(self.path_txt.get()) == 0 or len(self.pass_txt.get()) == 0:
                 self.submit_button.config(state=tk.DISABLED)
@@ -157,7 +185,12 @@ class CertImport:
     def clouds(self, *args):
         # 云端下发 ====================================
         if self.v_clouds.get():
-            self.apply_cloud()
+            # 每次进入云端下发都回到默认的「使用密码下发」；
+            # 置位会触发 cloud_pass_switch → apply_cloud，这里不能再调用一次（否则提示会弹两遍）
+            if self.v_cloud_pass.get():
+                self.apply_cloud()
+            else:
+                self.v_cloud_pass.set(1)
         else:
             # 退出云端下发：恢复「使用本地 CSP」并按其勾选状态刷新
             self.k_cloud_pass.grid_forget()
@@ -283,8 +316,8 @@ class CertImport:
     def submit(self, ):
         self.page.attributes('-topmost', False)
         result = ""
-        # 云端下发 =======================================================================
-        if self.v_clouds.get():
+        # 云端下发（仅 PFX 导入支持）=====================================================
+        if self.flag == "pfx" and self.v_clouds.get():
             url = self.path_txt.get()
             # ---- 使用密码（取件码，自协商）：无需事先交换密钥 ----
             if self.v_cloud_pass.get():
@@ -387,7 +420,7 @@ class CertImport:
                     print("Import Cert Error:", import_err)
                     result = "Error: %s" % import_err
                 self.main.load_status()
-                self.page.destroy()
+                self.close()
         messagebox.showinfo(
             self.main.i18n("msg_import") + self.main.i18n("msg_cert") + self.main.i18n("msg_result"),
             result + self.main.i18n("msg_import_results"))

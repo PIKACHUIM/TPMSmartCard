@@ -143,6 +143,10 @@ class SystemSettings:
         # 关闭按钮 ==============================================================
         ttk.Button(self.page, bootstyle="secondary", text=self.t("msg_set_close"),
                    command=self.close).pack(side=tk.RIGHT, padx=12, pady=(0, 12))
+        # 页签内容（长语言的说明文本会折成多行）可能超出 400，按内容实测高度再定一次尺寸
+        self.page.update_idletasks()
+        self.page.geometry("%dx%d" % (width, min(max(400, self.page.winfo_reqheight()),
+                                                 self.page.winfo_screenheight() - 80)))
         # 首次 TPM 检测放到窗口显示之后，避免打开设置时界面卡顿
         self.page.after(60, self.refresh_tpm)
 
@@ -156,28 +160,14 @@ class SystemSettings:
         """关闭窗口；同时取消 ttkbootstrap 的主题订阅。
 
         控件销毁后订阅不会自动移除，若不取消，之后切换主题时
-        ttkbootstrap 刷新该控件会报 TclError。
+        ttkbootstrap 刷新该控件会报 TclError（见 Module.Theme.unsubscribe）。
         """
         self.alive = False
-        self.unsubscribe(self.page)
+        Theme.unsubscribe(self.page)
         try:
             self.page.destroy()
         except Exception:
             pass
-
-    @staticmethod
-    def unsubscribe(widget):
-        """递归取消该窗口下所有控件在 ttkbootstrap 主题频道上的订阅。"""
-        try:
-            from ttkbootstrap.publisher import Publisher
-        except Exception:
-            return
-        try:
-            Publisher.unsubscribe(widget.winfo_pathname(widget.winfo_id()))
-        except Exception:
-            pass
-        for child in widget.winfo_children():
-            SystemSettings.unsubscribe(child)
 
     def open_url(self, url):
         webbrowser.open(url)

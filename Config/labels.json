@@ -73,6 +73,10 @@
       }
     ]
   },
+  "wrap": {
+    "user_ou_t": 225,
+    "last_ou_t": 225
+  },
   "cert_user": {
     "conf": [
       434,

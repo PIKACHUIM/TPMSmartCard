@@ -71,6 +71,20 @@ class CertDataInfo:
             return self.CertExtend[in_name]
         return b""
 
+    @staticmethod
+    def extText(in_data):
+        """扩展值的文本形式。
+
+        扩展缺失时 ``certExtend`` 返回 ``b""``，原样拼到界面上会显示成 ``b''``；
+        这里统一转成文本，空值返回空串。
+        """
+        if in_data is None:
+            return ""
+        if isinstance(in_data, bytes):
+            return in_data.decode("utf-8", "ignore")
+        text = str(in_data)
+        return "" if text in ("b''", 'b""') else text
+
     def textExtend(self, in_name):
         for ext_line in self.TextExtend:
             ext_line = str(ext_line)
@@ -100,23 +114,22 @@ class CertDataInfo:
         self.TextExtend = self._certs_['extension_text'] if 'extension_text' in self._certs_ else []
 
         self.is_expired = self._certs_['has_expired'] if 'has_expired' in self._certs_ else "Unknown"
-        basic_ca = self.certExtend('basicConstraints')
-        if isinstance(basic_ca, bytes):
-            basic_ca = basic_ca.decode("utf-8", "ignore")
+        basic_ca = self.extText(self.certExtend('basicConstraints'))
         # 扩展缺失时不再把 "b''" 显示到界面上
         self.is_ca_cert = "Unknown"
         if basic_ca:
-            basic_ca = str(basic_ca).strip()
+            basic_ca = basic_ca.strip()
             self.is_ca_cert = basic_ca.split(":")[-1].strip() if ":" in basic_ca else basic_ca
 
-        self.CertPolicy = self.certExtend('certificatePolicies')
-        self.MainUsages = self.certExtend('keyUsage') if len(str(self.certExtend('keyUsage'))) > 0 else ""
-        self.MainHashID = self.certExtend('authorityKeyIdentifier')
-        self.SubsUsages = self.certExtend('extendedKeyUsage')
-        self.SubsOwners = self.certExtend('subjectAltName')
-        self.SubsHashID = self.certExtend('subjectKeyIdentifier')
-        self.AuthAccess = self.certExtend('authorityInfoAccess')
-        self.CRLsDPoint = self.certExtend('crlDistributionPoints')
+        # 以下扩展统一转成文本（缺失时为空串），避免界面上出现 b''
+        self.CertPolicy = self.extText(self.certExtend('certificatePolicies'))
+        self.MainUsages = self.extText(self.certExtend('keyUsage'))
+        self.MainHashID = self.extText(self.certExtend('authorityKeyIdentifier'))
+        self.SubsUsages = self.extText(self.certExtend('extendedKeyUsage'))
+        self.SubsOwners = self.extText(self.certExtend('subjectAltName'))
+        self.SubsHashID = self.extText(self.certExtend('subjectKeyIdentifier'))
+        self.AuthAccess = self.extText(self.certExtend('authorityInfoAccess'))
+        self.CRLsDPoint = self.extText(self.certExtend('crlDistributionPoints'))
 
 
 CER = CertDataInfo
