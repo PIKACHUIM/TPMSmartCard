@@ -197,18 +197,23 @@ def check_tpm(manifest):
     return "match", "TPM 指纹一致（%s）" % (now["info"] or "型号未知")
 
 
-def tpm_key_state(guid):
-    """检查 TPM 里这张卡的 KSP 持久密钥是否还在（还原后私钥能否使用的前提）。
+def _classify_key_error(hresult, message):
+    """把"打开 TPM 密钥失败"的信息归类：``missing``（这个名字下确实没有）/ ``unknown``。"""
+    hr = str(hresult or "").upper()
+    if "80090016" in hr or "8009000D" in hr:            # NTE_BAD_KEYSET / NTE_NOT_FOUND
+        return "missing"
+    text = "%s %s" % (hr, message or "")
+    for token in ("keyset", "密钥集", "cannot find the file", "找不到"):
+        if token.lower() in text.lower():
+            return "missing"
+    return "unknown"
 
-    card 的私钥是 TPM（Microsoft Platform Crypto Provider）里一颗以 store GUID
-    命名的机器级持久密钥；删卡（``tpmvscmgr destroy``）或清除 TPM 之后它就不在了，
-    此时 store 数据还原得再完整，私钥也无法使用。
 
-    :return: ``"exists"`` 还在 / ``"missing"`` 已不存在 / ``"unknown"`` 无法判定
+def _cng_open_key(guid):
+    """直接以 ``guid`` 为名打开 TPM（KSP）里的机器级持久密钥。
+
+    :return: ``(state, detail)``，state 取 ``exists`` / ``missing`` / ``unknown``
     """
-    guid = str(guid or "").strip()
-    if not guid:
-        return "unknown"
     script = (
         "$ErrorActionPreference='Stop';"
         "try{"
@@ -217,21 +222,75 @@ def tpm_key_state(guid):
         "[System.Security.Cryptography.CngKeyOpenOptions]::MachineKey);"
         "$k.Dispose();Write-Output 'KEY=exists'"
         "}catch{"
-        "$m=$_.Exception.Message+' hr=0x'+('{0:X8}' -f $_.Exception.HResult);"
-        "if($m -match '80090016|Keyset does not exist|keyset does not exist')"
-        "{Write-Output 'KEY=missing'}else{Write-Output ('KEY=unknown '+$m)}"
+        "$ex=$_.Exception; while($ex.InnerException){$ex=$ex.InnerException};"
+        "$h='{0:X8}' -f ($ex.HResult -band 0xFFFFFFFF);"
+        "Write-Output ('KEY=error hr=0x'+$h+' msg='+$ex.Message)"
         "}"
     ) % (_PCP_NAME, guid)
     code, output = run_command(["powershell", "-NoProfile", "-NonInteractive",
                                 "-Command", script], timeout=90)
+    detail = " ".join(line.strip() for line in output.splitlines() if line.strip())
+    if "KEY=exists" in detail:
+        return "exists", "能以该 GUID 为名直接打开 TPM 密钥"
+    if "KEY=error" in detail:
+        rest = detail.split("KEY=error", 1)[1].strip()
+        hr, _, msg = rest.partition("msg=")
+        state = _classify_key_error(hr, msg)
+        return state, "%s %s" % (hr.strip(), msg.strip())
+    return "unknown", detail or ("PowerShell 调用失败(%s)" % code)
+
+
+def tpm_key_names():
+    """列出 TPM（Microsoft Platform Crypto Provider）里 GUID 形式的机器级密钥名。
+
+    :return: ``(names, raw)``：``names is None`` 表示列不出来（通常是没有管理员权限）；
+             ``names == []`` 表示列出来了但里面没有 GUID 形式的密钥名。
+    """
+    code, output = run_command(["certutil", "-csp", _PCP_NAME, "-key"], timeout=120)
+    if code != 0 and not output:
+        return None, output
+    names = []
     for line in output.splitlines():
-        line = line.strip()
-        if line.startswith("KEY=exists"):
-            return "exists"
-        if line.startswith("KEY=missing"):
-            return "missing"
-    print("检查 TPM 私钥失败: %s" % (output.splitlines()[0] if output else code))
-    return "unknown"
+        text = line.strip()
+        if not text or text.endswith(":"):
+            continue
+        compact = text.replace(" ", "")
+        if re.match(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                     compact):
+            names.append(compact)
+    return names, output
+
+
+def tpm_key_report(guid):
+    """探测该卡在 TPM 里的持久密钥，返回 ``(state, text)``。
+
+    **只有能确认"存在"时才给 ``exists``，其余一律 ``unknown``**，原因：
+
+    * VSC 的 TPM 密钥并不以 store GUID 命名在机器作用域里——实测：两张能正常
+      签名的卡片，用 store GUID 直接 ``CngKey.Open(..., MachineKey)`` 同样返回
+      ``0x80090016 密钥集不存在``（驱动以 LocalService 身份创建，作用域/命名与
+      我们看到的 GUID 不一致）；
+    * 所以"私钥到底还能不能用"的可靠判定方式是**用 PIN 做一次真实签名**
+      （``OpenSC\\pkcs15-crypt.exe --sign``，见开发文档），软件侧不做负面断言。
+    """
+    guid = str(guid or "").strip()
+    if not guid:
+        return "unknown", "备份里没有 store GUID，跳过 TPM 密钥探测"
+    state, detail = _cng_open_key(guid)
+    if state == "exists":
+        return "exists", "已能以该 GUID 为名直接打开 TPM 密钥"
+    names, _ = tpm_key_names()
+    if names:
+        norm = guid.replace("-", "").lower()
+        if any(n.replace("-", "").lower() == norm for n in names):
+            return "exists", "TPM 机器级密钥列表里找到该 GUID"
+    return "unknown", ("无法由软件判定（TPM 密钥的作用域/命名与 store GUID 不一致）: %s；"
+                       "要确认私钥是否可用，请用 PIN 做一次签名验证" % detail)
+
+
+def tpm_key_state(guid):
+    """兼容接口：等价于 ``tpm_key_report(guid)[0]``，只返回 ``exists`` / ``unknown``。"""
+    return tpm_key_report(guid)[0]
 
 
 def run_command(command, timeout=120):
@@ -953,6 +1012,55 @@ def _rescan_devices(uid=""):
     return log
 
 
+def _opensc_tool(name):
+    """定位随包分发的 OpenSC 工具（工作目录可能不是程序目录，做一次兜底）。"""
+    paths = (os.path.join("OpenSC", name),
+             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "OpenSC", name))
+    for path in paths:
+        if os.path.isfile(path):
+            return path
+    return ""
+
+
+def _reader_index(uid=""):
+    """用 OpenSC 的读卡器列表解析该卡对应的 pcsc 编号；找不到返回 -1。"""
+    uid = instance_id(uid)
+    tool = _opensc_tool("opensc-tool.exe")
+    if not uid or not tool:
+        return -1
+    code, output = run_command([tool, "--list-readers"], timeout=60)
+    name = "Microsoft Virtual Smart Card %d" % int(uid)
+    for line in output.splitlines():
+        text = line.strip()
+        matched = re.match(r"^(\d+)\s", text)
+        if not matched:
+            continue
+        if re.search(re.escape(name) + r"(?!\d)", text):
+            return int(matched.group(1))
+    return -1
+
+
+def _card_key_objects(uid=""):
+    """数据层自检：用 OpenSC 列出卡片上的密钥对象（不需要 PIN）。
+
+    能列出私钥对象说明 store 里的卡文件系统（PKCS#15）已正确加载；
+    「这把私钥能不能用」仍需用户用 PIN 做一次签名（见文档）。
+    """
+    index = _reader_index(uid)
+    if index < 0:
+        return "卡片私钥对象: 未找到读卡器，跳过"
+    tool = _opensc_tool("pkcs15-tool.exe")
+    if not tool:
+        return "卡片私钥对象: 未找到 OpenSC\\pkcs15-tool.exe，跳过"
+    code, output = run_command([tool, "--reader", str(index), "--list-keys"], timeout=60)
+    keys = [line.strip() for line in output.splitlines() if line.strip().startswith("Private")]
+    if not keys:
+        detail = output.strip().splitlines()[0] if output.strip() else "退出码 %s" % code
+        return "卡片私钥对象: 未发现（卡片数据可能不完整）: %s" % detail
+    return "卡片私钥对象: %s" % "; ".join(keys[:3])
+
+
 def _reader_state(uid=""):
     """报告读卡器 / 卡片当前是否已被系统识别（与界面读卡器列表同一来源：OpenSC）。
 
@@ -962,12 +1070,8 @@ def _reader_state(uid=""):
     uid = instance_id(uid)
     if not uid:
         return "读卡器状态未知：备份里没有实例编号"
-    # 与界面一致用 OpenSC 列读卡器；工作目录可能不是程序目录，做一次兜底
-    tool = os.path.join("OpenSC", "opensc-tool.exe")
-    if not os.path.isfile(tool):
-        tool = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                            "OpenSC", "opensc-tool.exe")
-    if not os.path.isfile(tool):
+    tool = _opensc_tool("opensc-tool.exe")
+    if not tool:
         return "读卡器状态未知：未找到 OpenSC\\opensc-tool.exe"
     code, output = run_command([tool, "--list-readers"], timeout=60)
     if code != 0 and not output:
@@ -1100,12 +1204,10 @@ def restore_backup(package, force=False):
     else:
         log.append("备份里没有 store GUID，跳过设备绑定修复")
 
-    # ---- 8. 自检：TPM 内这张卡的私钥是否还在 ------------------------------- #
-    key_state = tpm_key_state(guid)
-    log.append({"exists": "TPM 私钥仍在：卡片应可正常使用",
-                "missing": "警告：TPM 内该卡的密钥已不存在（删卡 / 清除过 TPM），"
-                           "卡片数据虽已还原，但私钥无法使用",
-                "unknown": "TPM 私钥状态未知（需要管理员权限）"}.get(key_state, key_state))
+    # ---- 8. 自检：卡片上的私钥对象（数据层）+ TPM 密钥（信息，不下负面断言） -- #
+    log.append(_card_key_objects(uid))
+    key_state, key_text = tpm_key_report(guid)
+    log.append("TPM 密钥自检: %s" % key_text)
 
     print("\n".join(log))
     return {
