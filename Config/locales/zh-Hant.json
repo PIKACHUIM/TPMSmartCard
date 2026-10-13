@@ -131,6 +131,7 @@
   "msg_tpm_none_act": "未偵測到已啟用的 TPM",
   "msg_tpm_unknown": "未知的 TPM 狀態",
   "msg_need_admin": "建立/刪除 TPM 虛擬智慧卡需要系統管理員權限，請以系統管理員身分重新執行本程式。",
+  "msg_remote_session": "Windows 不允許在遠端桌面（終端服務）工作階段中建立/刪除 TPM 虛擬智慧卡（0x800704d3）。請用 mstsc /admin 連線到主控台工作階段，或直接在本機主控台操作。",
   "msg_pass_length_l1": "原密碼至少為 8 位",
   "msg_pass_length_l2": "新密碼至少為 8 位",
   "msg_pass_not_same_": "兩次輸入不相符",

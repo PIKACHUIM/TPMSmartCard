@@ -131,6 +131,7 @@
   "msg_tpm_none_act": "None Activated TPM",
   "msg_tpm_unknown": "Unknown TPM Status",
   "msg_need_admin": "Creating or deleting a TPM virtual smart card requires Administrator privileges, please restart this program as Administrator.",
+  "msg_remote_session": "Windows does not allow creating or deleting a TPM virtual smart card inside a Remote Desktop (Terminal Services) session (0x800704d3). Please connect to the console session with \"mstsc /admin\", or run this tool on the local console.",
   "msg_pass_length_l1": "Original password must be at least 8 characters",
   "msg_pass_length_l2": "New password must be at least 8 characters",
   "msg_pass_not_same_": "The two inputs do not match",

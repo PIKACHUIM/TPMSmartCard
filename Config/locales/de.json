@@ -131,6 +131,7 @@
   "msg_tpm_none_act": "Kein aktiviertes TPM gefunden",
   "msg_tpm_unknown": "Unbekannter TPM-Status",
   "msg_need_admin": "Zum Erstellen oder Löschen einer virtuellen TPM-Smartcard sind Administratorrechte erforderlich. Bitte starten Sie dieses Programm als Administrator neu.",
+  "msg_remote_session": "Windows erlaubt das Erstellen oder Löschen einer virtuellen TPM-Smartcard nicht in einer Remotedesktop-Sitzung (Terminaldienstesitzung) (0x800704d3). Verbinden Sie sich mit \"mstsc /admin\" mit der Konsolensitzung oder führen Sie den Vorgang lokal an der Konsole aus.",
   "msg_pass_length_l1": "Das aktuelle Kennwort muss mindestens 8 Zeichen lang sein",
   "msg_pass_length_l2": "Das neue Kennwort muss mindestens 8 Zeichen lang sein",
   "msg_pass_not_same_": "Die beiden Eingaben stimmen nicht überein",

@@ -131,6 +131,7 @@
   "msg_tpm_none_act": "Aucun TPM activé détecté",
   "msg_tpm_unknown": "État du TPM inconnu",
   "msg_need_admin": "La création ou la suppression d'une carte à puce virtuelle TPM nécessite des privilèges d'administrateur. Relancez ce programme en tant qu'administrateur.",
+  "msg_remote_session": "Windows n'autorise pas la création ou la suppression d'une carte à puce virtuelle TPM dans une session Bureau à distance (session Services Terminal Server) (0x800704d3). Connectez-vous à la session de console avec \"mstsc /admin\" ou effectuez l'opération localement sur la console.",
   "msg_pass_length_l1": "Le mot de passe actuel doit comporter au moins 8 caractères",
   "msg_pass_length_l2": "Le nouveau mot de passe doit comporter au moins 8 caractères",
   "msg_pass_not_same_": "Les deux saisies ne correspondent pas",

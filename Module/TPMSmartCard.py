@@ -29,6 +29,23 @@ class TPMSmartCard:
             return False
 
     @staticmethod
+    # 当前会话是否为远程（终端服务/远程桌面）会话 ================================
+    #   Windows 的虚拟智能卡管理会拒绝在终端服务会话中建卡/删卡，报错为
+    #   「不能在终端服务会话中使用TPM虚拟智能卡管理。(0x800704d3)」。
+    #   该判定由系统在服务端按调用方所在会话完成（tpmvscmgr.exe 本身不导入
+    #   任何 WTS/会话相关接口），换 exe、提权、加静默参数都绕不过去，
+    #   只能改用 mstsc /admin 附着到物理控制台会话，或直接在本机控制台操作。
+    #   这里提前拦截，避免卡在交互式 tpmvscmgr 上干等 5 分钟超时。
+    def isRemoteSession():
+        try:
+            import ctypes
+            # SM_REMOTESESSION = 0x1000：远程会话返回非 0，控制台会话返回 0
+            return bool(ctypes.windll.user32.GetSystemMetrics(0x1000))
+        except Exception as err:
+            print("Check Remote Session Error:", err)
+            return False
+
+    @staticmethod
     # 制作一张新的虚拟智能卡 =======================================================
     def makeCards(in_pin,  # 卡密码，必要
                   in_puk="",  # 可选PUK码
@@ -40,6 +57,12 @@ class TPMSmartCard:
             return "Error: %s not found." % mgr_path
         if not TPMSmartCard.isElevated():
             return "Error: Administrator privileges are required to create a TPM virtual smart card."
+        if TPMSmartCard.isRemoteSession():
+            # 终端服务（远程桌面）会话下建卡必失败，直接返回可读原因
+            return ("Error: TPM virtual smart card management cannot be used in a "
+                    "Terminal Services session. (0x800704d3)\n"
+                    "Please connect to the console session with 'mstsc /admin', "
+                    "or run this tool on the local console.")
         # 根据参数设置命令 =========================================================
         command = '"%s" create /name "%s"' % (mgr_path, in_tag)
         command += " /AdminKey PROMPT" if len(in_adk) == 48 else " /AdminKey RANDOM"
@@ -133,6 +156,12 @@ class TPMSmartCard:
             return "Error: %s not found." % mgr_path
         if not TPMSmartCard.isElevated():
             return "Error: Administrator privileges are required to delete a TPM virtual smart card."
+        if TPMSmartCard.isRemoteSession():
+            # 删卡与建卡受同一条会话限制（0x800704d3）
+            return ("Error: TPM virtual smart card management cannot be used in a "
+                    "Terminal Services session. (0x800704d3)\n"
+                    "Please connect to the console session with 'mstsc /admin', "
+                    "or run this tool on the local console.")
         proc = PtyProcess.spawn('cmd.exe')
         proc.write("@echo off && cls\r")
         time.sleep(1)

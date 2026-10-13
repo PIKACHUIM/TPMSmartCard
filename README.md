@@ -54,10 +54,12 @@ Compared to directly storing certificates within the Windows system, the advanta
 - 系统：Windows 8 x86/64或者更高
 - 软件：OpenSC Certutil Tpmvscmgr
 - 硬件：TPM硬件 1.2/2.0或更高
+- 注意：创建/删除虚拟智能卡不能在远程桌面（终端服务）会话中进行，系统会拒绝并报 `(0x800704d3)`，请到本机控制台操作，或用 `mstsc /admin` 连接到控制台会话
 
 - System: Windows 8 x86/64 or higher
 - Software: OpenSC Certuti Tpmvscmgr
 - Hardware: TPM hardware 1.2/2.0 or higher
+- Note: Creating/deleting a virtual smart card cannot be done inside a Remote Desktop (Terminal Services) session; Windows rejects it with `(0x800704d3)`. Use the local console, or connect with `mstsc /admin`
 
 ## 参考 / Reference
 

@@ -1101,6 +1101,12 @@ class SmartCardAPP:
                 make.attributes('-topmost', False)
                 messagebox.showwarning(self.i18n("fail"), self.i18n("msg_need_admin"))
                 make.attributes('-topmost', True)
+            elif TPMSmartCard.isRemoteSession():
+                # 远程桌面（终端服务）会话下 Windows 会拒绝建卡（0x800704d3），
+                # 提前提示，避免跑满 5 分钟超时后再弹出难懂的错误
+                make.attributes('-topmost', False)
+                messagebox.showwarning(self.i18n("fail"), self.i18n("msg_remote_session"))
+                make.attributes('-topmost', True)
             elif name_txt.get() == "":
                 make.attributes('-topmost', True)
                 messagebox.showwarning(self.i18n("fail"), self.i18n("msg_new_card_txt_e"))
@@ -1255,6 +1261,12 @@ class SmartCardAPP:
                     # 删除卡同样需要管理员权限
                     make.attributes('-topmost', False)
                     messagebox.showwarning(self.i18n("fail"), self.i18n("msg_need_admin"))
+                    make.attributes('-topmost', True)
+                    return None
+                if in_name == "card" and TPMSmartCard.isRemoteSession():
+                    # 删卡同样受终端服务会话限制（0x800704d3）
+                    make.attributes('-topmost', False)
+                    messagebox.showwarning(self.i18n("fail"), self.i18n("msg_remote_session"))
                     make.attributes('-topmost', True)
                     return None
                 if in_name == "card":

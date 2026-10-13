@@ -131,6 +131,7 @@
   "msg_tpm_none_act": "未检测到已启用的 TPM",
   "msg_tpm_unknown": "未知的 TPM 状态",
   "msg_need_admin": "创建/删除 TPM 虚拟智能卡需要管理员权限，请以管理员身份重新运行本程序。",
+  "msg_remote_session": "Windows 不允许在远程桌面（终端服务）会话中创建/删除 TPM 虚拟智能卡（0x800704d3）。请用 mstsc /admin 连接到控制台会话，或在本机控制台直接操作。",
   "msg_pass_length_l1": "原密码至少为 8位",
   "msg_pass_length_l2": "新密码至少为 8位",
   "msg_pass_not_same_": "两次输入的不匹配",

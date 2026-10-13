@@ -131,6 +131,7 @@
   "msg_tpm_none_act": "No se detectó ningún TPM activado",
   "msg_tpm_unknown": "Estado del TPM desconocido",
   "msg_need_admin": "Para crear o eliminar una tarjeta inteligente virtual TPM se requieren privilegios de administrador. Reinicie este programa como administrador.",
+  "msg_remote_session": "Windows no permite crear ni eliminar una tarjeta inteligente virtual TPM en una sesión de Escritorio remoto (sesión de Servicios de Terminal Server) (0x800704d3). Conéctese a la sesión de consola con \"mstsc /admin\" o realice la operación localmente en la consola.",
   "msg_pass_length_l1": "La contraseña actual debe tener al menos 8 caracteres",
   "msg_pass_length_l2": "La nueva contraseña debe tener al menos 8 caracteres",
   "msg_pass_not_same_": "Las dos entradas no coinciden",
