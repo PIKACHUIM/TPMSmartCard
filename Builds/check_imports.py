@@ -1,17 +1,21 @@
 # -*- coding: utf-8 -*-
-"""打包前的依赖自查：项目里 import 的第三方模块，当前解释器里必须都能导入。
+"""打包前的依赖自查，查两件事：
 
-背景：cx_Freeze 遇到缺失模块只会打印告警，构建照常成功，产物运行到那一行才抛
-ModuleNotFoundError（例如 requirements.txt 少写 requests）。所以在 CI 里先跑这个
-脚本，把「漏写依赖」在构建阶段就拦下来。
+1. 导入检查：项目里 import 的第三方模块，在当前解释器里必须都能导入。
+   cx_Freeze 遇到缺失模块只会打印告警、构建照常成功，产物运行到那一行才抛
+   ModuleNotFoundError（例如 requirements.txt 少写 requests）。
+2. 声明检查：这些模块对应的发行包必须写在 requirements.txt 里。
+   本地 venv 里手装过（或被别的包顺带装上）却忘了写进 requirements 时，
+   本地构建一切正常，CI 干净环境才缺 —— 这个检查能在本地就发现。
 
 用法：
     python Builds/check_imports.py          # 在装好依赖的解释器里执行
-返回码：0 = 全部可导入；1 = 有模块缺失（会列出对应需要补的发行包名）。
+返回码：0 = 通过；1 = 有模块导入失败，或有模块的发行包未声明。
 """
 
 import ast
 import os
+import re
 import sys
 from importlib import metadata, util
 
@@ -61,6 +65,37 @@ DIST_ALIASES = {
     "pywintypes": "pywin32",
 }
 
+# 允许「导入了但不必写进 requirements.txt」的模块（一般是故意使用某个依赖的附带模块）。
+# 留空表示要求全部显式声明。
+ALLOW_UNLISTED = set()
+
+
+def normalize(name):
+    """规范化包名，便于跨写法比较（Flask-Classful == flask_classful）。"""
+    return name.strip().lower().replace("_", "").replace("-", "")
+
+
+def load_declared(root):
+    """读取 requirements.txt 里声明的发行包名（兼容 UTF-16/UTF-8 与 BOM）。"""
+    path = os.path.join(root, "requirements.txt")
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        text = raw.decode("utf-16")
+    else:
+        text = raw.decode("utf-8-sig", errors="replace")
+
+    declared = set()
+    for line in text.splitlines():
+        line = line.split("#")[0].strip()
+        if not line or line.startswith("-"):
+            continue
+        # 去掉版本约束：Flask-Classful~=0.16.0 -> Flask-Classful
+        name = re.split(r"[<>=!~\[\s;]", line, 1)[0].strip()
+        if name:
+            declared.add(normalize(name))
+    return declared
+
 
 def collect_imports(root):
     """返回 {顶层模块名: {出现的文件}}，以及本地模块名集合。"""
@@ -98,9 +133,11 @@ def collect_imports(root):
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     imports, local_names = collect_imports(root)
+    declared = load_declared(root)
 
     stdlib = set(getattr(sys, "stdlib_module_names", ()))
     missing = []
+    undeclared = []
     checked = 0
     for module in sorted(imports):
         if module in stdlib or module in local_names or module.startswith("_"):
@@ -112,23 +149,39 @@ def main():
             spec = util.find_spec(module)
         except (ImportError, ValueError):
             spec = None
+
+        dists = metadata.packages_distributions().get(module) or []
+        if not dists and module in DIST_ALIASES:
+            dists = [DIST_ALIASES[module]]
+
         if spec is None:
-            dists = metadata.packages_distributions().get(module) or []
-            if not dists and module in DIST_ALIASES:
-                dists = [DIST_ALIASES[module]]
             missing.append((module, dists, sorted(imports[module])))
+        elif dists and module not in ALLOW_UNLISTED:
+            if not any(normalize(dist) in declared for dist in dists):
+                undeclared.append((module, dists, sorted(imports[module])))
 
     print("检查 %d 个项目内 import 的第三方模块（%s）" % (checked, sys.executable))
-    if not missing:
-        print("依赖检查通过：所有第三方模块均可导入。")
+    print("requirements.txt 已声明 %d 个发行包" % len(declared))
+
+    if not missing and not undeclared:
+        print("依赖检查通过：模块都能导入，且发行包都已在 requirements.txt 中声明。")
         return 0
 
-    print("\n以下模块在当前环境导入失败，打包出来的程序会在运行时崩溃：")
-    for module, dists, where in missing:
-        hint = "、".join(dists) if dists else "（未能确定发行包名）"
-        print("  - %s  → 需要安装 %s" % (module, hint))
-        print("      被引用于：%s" % "、".join(where))
-    print("\n请把这些发行包补进 requirements.txt，再重新安装依赖后构建。")
+    if missing:
+        print("\n以下模块在当前环境导入失败（CI 干净环境打包出来的程序会在运行时崩溃）：")
+        for module, dists, where in missing:
+            hint = "、".join(dists) if dists else "（未能确定发行包名）"
+            print("  - %s  → 需要安装 %s" % (module, hint))
+            print("      被引用于：%s" % "、".join(where))
+
+    if undeclared:
+        print("\n以下模块能导入，但其发行包没有写进 requirements.txt"
+              "（本地手装过就会漏，CI 干净环境会缺）：")
+        for module, dists, where in undeclared:
+            print("  - %s  → 请补上 %s" % (module, "、".join(dists)))
+            print("      被引用于：%s" % "、".join(where))
+
+    print("\n请把上面列出的发行包补进 requirements.txt，重新安装依赖后再构建。")
     return 1
 
 
