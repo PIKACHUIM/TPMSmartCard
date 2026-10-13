@@ -1,4 +1,4 @@
-<#
+﻿<#
   Test-VscStoreLoss.ps1
   ---------------------------------------------------------------------------
   验证场景 B / C：智能卡 store 文件意外丢失、或系统重装（TPM 未清除）之后，
@@ -116,10 +116,10 @@ $instanceNum = [int]($Instance -replace "\D", "")
 $instance = "{0:D4}" -f $instanceNum
 $readerName = "Microsoft Virtual Smart Card $instanceNum"
 $readerIdx = -1
-$idx = 0
 foreach ($m in (& (Join-Path $opensc "opensc-tool.exe") --list-readers 2>&1)) {
-    if ($m -match [regex]::Escape($readerName)) { $readerIdx = $idx }
-    elseif ($m -match "^\d+\s") { $idx++ }
+    # pcsc 列表每行形如：0    Yes    Microsoft Virtual Smart Card 0
+    $matched = [regex]::Match($m, "^(\d+)\s.*" + [regex]::Escape($readerName) + "(?!\d)")
+    if ($matched.Success) { $readerIdx = [int]$matched.Groups[1].Value }
 }
 if ($readerIdx -lt 0) { throw "找不到读卡器 '$readerName'（实例 $instance）" }
 "目标: 实例 $instance / 读卡器 '$readerName'（pcsc 编号 $readerIdx）"
@@ -162,7 +162,13 @@ if (-not $Force) {
 
 Stop-Service SCardSvr -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
-Move-Item -LiteralPath $store -Destination $bak
+try {
+    Move-Item -LiteralPath $store -Destination $bak -ErrorAction Stop
+} catch {
+    Start-Service SCardSvr -ErrorAction SilentlyContinue
+    throw ("无法改名卡片数据目录（通常是被 SmartcardSimulator/WUDFRd 驱动占用）：{0}`n" -f $_.Exception.Message) +
+          "请先关闭本工具与设备管理器后重试；或用 -Backup 指定已有备份，手工把 Tpm 改名后再跑校验部分。"
+}
 "已改名 -> $bak"
 if ($SimulateOsReinstall) {
     "----- 追加模拟「系统重装」：移除设备节点与注册表残留（请只在测试卡上执行） -----"
@@ -204,11 +210,11 @@ $verdict = "无法判定"
 $lines = & (Join-Path $opensc "opensc-tool.exe") --list-readers 2>&1
 $line = $lines | Where-Object { $_ -match [regex]::Escape($readerName) } | Select-Object -First 1
 if (-not $line) {
-    $verdict = "❌ 读卡器没有回来：B/C 场景在这个环境下未通过（把 $bak 改回 $store 可回滚）"
+    $verdict = "[FAIL] 读卡器没有回来：B/C 场景在这个环境下未通过（把 $bak 改回 $store 可回滚）"
 } elseif ($line -match "Yes") {
-    $verdict = "✅ 读卡器回来且卡片可识别：B/C 场景通过（私钥是否可用见下面 PIN 校验）"
+    $verdict = "[OK] 读卡器回来且卡片可识别：B/C 场景通过（私钥是否可用见下面 PIN 校验）"
 } else {
-    $verdict = "⚠ 读卡器回来了但没有卡片（Card=No）：数据未正确加载"
+    $verdict = "[WARN] 读卡器回来了但没有卡片（Card=No）：数据未正确加载"
 }
 
 if ($Pin -and $readerIdx -ge 0) {
@@ -219,9 +225,9 @@ if ($Pin -and $readerIdx -ge 0) {
     & (Join-Path $opensc "pkcs15-crypt.exe") --reader $readerIdx --sign --sha-256 --pkcs1 `
         --input $bin --output ($bin + ".sig") --pin $Pin
     if (Test-Path ($bin + ".sig")) {
-        "✅ 签名成功（$(  (Get-Item ($bin + ".sig")).Length ) 字节）：TPM 内的私钥仍可用"
+        "[OK] 签名成功（$(  (Get-Item ($bin + ".sig")).Length ) 字节）：TPM 内的私钥仍可用"
     } else {
-        "❌ 签名失败：TPM 内的密钥已不可用"
+        "[FAIL] 签名失败：TPM 内的密钥已不可用"
     }
 } else {
     "（未提供 -Pin，跳过私钥可用性判定；可手动执行："
