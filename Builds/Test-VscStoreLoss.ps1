@@ -84,16 +84,14 @@ print("GUID=%s" % (T.card_store_guid(uid) or "(空)"))
 
 function Show-TpmKey([string]$guid) {
     if (-not $guid -or $guid -eq "(空)") { "----- TPM 私钥状态: 拿不到 GUID，跳过 -----"; return }
-    "----- TPM 内私钥状态（KSP 持久密钥 $guid） -----"
+    "----- TPM 内私钥状态（按 store GUID 判定） -----"
     Invoke-Python @'
 import sys, os
 root, guid = sys.argv[1], sys.argv[2]
 sys.path.insert(0, root); os.chdir(root)
 from Module import TPMBackup as T
-state = T.tpm_key_state(guid)
-print({"exists": "exists  -> TPM 内私钥还在（还原后可用）",
-       "missing": "missing -> TPM 内私钥已被删除（还原后不可用）",
-       "unknown": "unknown -> 无法判定（需要管理员权限）"}.get(state, state))
+state, text = T.tpm_key_report(guid)
+print("%s -> %s" % (state, text))
 '@ @($root, $guid)
 }
 

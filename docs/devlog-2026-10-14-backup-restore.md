@@ -27,7 +27,7 @@
 | 符号/字符串 | 含义 |
 |---|---|
 | `Microsoft Platform Crypto Provider`、`Failed to open TPM KSP`、`I_CreateKspKey` / `I_LoadKspKey` / `I_DeleteKspKey` / `I_AuthenticateKspKey` / `I_DuplicateKspKey` / `I_ImportKspKey` | 卡片密钥是 **TPM 支撑的 KSP（PCP）持久密钥** |
-| `I_GenerateGuid`、`Unable to generate key name`、`protection key name`、`validation key name` | 这些持久密钥**以生成的 GUID 命名** |
+| `I_GenerateGuid`、`Unable to generate key name`、`protection key name`、`validation key name` | 这些持久密钥**以生成的 GUID 命名**（符号证据）——但**实测并非 store 目录名**：两张能正常签名的卡片，用 store GUID 直接 `CngKey.Open(..., MachineKey)` 同样返回 `0x80090016 密钥集不存在`，说明实际作用域/命名与 store GUID 不同（驱动以 LocalService 身份创建） |
 | `NCryptCreatePersistedKey` / `NCryptOpenKey` / `NCryptSignHash` / `NCryptDecrypt` / `NCryptDeleteKey` | 卡上签名/解密**由 TPM 内的持久密钥完成**，不在软件里 |
 | `I_KeyMapKeyIdToBlobFileName`、`I_PinMapCardRoleToBlobFileName`、`I_KeyMapSaveSymBlob`、`I_PinMapLoadAuthBlob` | `keymaps` / `pinmaps` 是「角色 / 密钥 ID → `blobs\<文件名>`」的映射表 |
 | `KSP encryption failed`、`Unable to encrypt auth blob`、`I_EncryptSym/Asym/Locking`、`I_AuthenticatePinAndLoadAuth` | `blobs\*` 是**用 TPM KSP 加密的密钥/授权材料**，PIN 正确才解锁 |
@@ -193,6 +193,10 @@ foreach ($n in @("<卡片 GUID>")) {
 1. **`Properties` 子键纳入备份**：目前靠 `store.guid` + `set_device_store_path` 运行时写回；若要在"设备节点尚未创建"时也能恢复绑定，需要在导出/导入前对该子键取得所有权（.NET 注册表 ACL）。
 2. **C 场景真机验证**：重装 → 还原 →（可能需要）重启 → 再执行一次还原完成绑定。
 3. **A 的最终判定**：`certutil -key` + `CngKey.ExportPolicy`；若可导出，才有"备份 TPM 密钥以支持 A"的可能。
+   附：TPM 密钥的**作用域与命名**待确认（机器作用域按 store GUID 打不开）——可用管理员执行
+   `certutil -csp "Microsoft Platform Crypto Provider" -key`，并查看 `C:\Windows\ServiceProfiles\LocalService\AppData\...\Microsoft\Crypto`
+   是否有对应密钥元数据（若是"用户作用域 + OS 侧元数据"，则"系统重装（C）"还需要这部分元数据，
+   会影响 C 的最终结论）。软件侧因此不对私钥是否存在做负面断言，只给"存在"或"无法判定"。
 4. `list_cards()` 目前会把"只有注册表残留、没有设备"的实例当成正常卡列出，建议标注"设备缺失/不可用"。
 5. 界面上展示三项自检结论（TPM 是否一致 / 私钥是否还在 / 设备是否已绑定），需要新增词条（11 语言同步）。
 6. 运行期创建 ROOT 枚举设备在部分环境可能失败，此时需重启系统后再执行一次还原（工具已在日志中提示）。
