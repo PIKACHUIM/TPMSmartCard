@@ -101,6 +101,8 @@ PrivilegesRequired=admin
 MinVersion=6.3
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+; 注册 .tsb 文件类型关联后需要通知外壳刷新（否则资源管理器不会立刻认图标）
+ChangesAssociations=yes
 SetupLogging=yes
 
 [Languages]
@@ -168,7 +170,18 @@ Name: "{autodesktop}\{cm:AgentShortcut}"; Filename: "{app}\SSHCardAgent.exe"; Wo
 ; 开机自启：与旧安装包（Advanced Installer 的 StartupFolder 快捷方式）行为一致
 Name: "{commonstartup}\{cm:AgentShortcut}"; Filename: "{app}\SSHCardAgent.exe"; WorkingDir: "{app}"; Tasks: agentstartup
 
+[Registry]
+; .tsb（智能卡备份文件）的文件类型关联中与安装路径相关的部分：
+;   · 图标用主程序图标；
+;   · 双击打开 = 用主程序还原（主程序收到 "%1" 后直接进入还原流程）。
+; 与安装路径无关的部分（.tsb -> ProgID、Content Type 等）在 Config\tsb.reg，
+; 安装时用 reg import 合并（见下面 [Run] 段）。
+Root: HKA; Subkey: "TPMSmartCard.Backup\DefaultIcon"; ValueType: string; ValueData: "{app}\Config\iconer\icon02.ico"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "TPMSmartCard.Backup\shell\open\command"; ValueType: string; ValueData: """{app}\SmartCardAPP.exe"" ""%1"""; Flags: uninsdeletevalue
+
 [Run]
+; 合并 .tsb 文件类型注册（Config\tsb.reg）
+Filename: "{cmd}"; Parameters: "/c reg import ""{app}\Config\tsb.reg"""; Flags: runhidden; RunOnceId: "RegisterTsbFileType"
 ; SSH 密钥代理是托盘程序，按原用户身份启动（不继承管理员权限）
 Filename: "{app}\SSHCardAgent.exe"; Description: "{cm:RunAgent}"; Flags: postinstall nowait runasoriginaluser
 ; 主程序自带 requireAdministrator 清单，这里按原用户启动，由 Windows 弹 UAC 提权
@@ -178,6 +191,9 @@ Filename: "{app}\SmartCardAPP.exe"; Description: "{cm:RunApp}"; Flags: postinsta
 ; 代理与 Web 服务常驻后台，卸载前先结束，避免文件占用
 Filename: "{sys}\taskkill.exe"; Parameters: "/f /im SSHCardAgent.exe"; Flags: runhidden; RunOnceId: "StopSshAgent"
 Filename: "{sys}\taskkill.exe"; Parameters: "/f /im SmartCardWEB.exe"; Flags: runhidden; RunOnceId: "StopWebServer"
+; 移除 .tsb 文件类型关联（.tsb 是本工具自己的备份格式）
+Filename: "{cmd}"; Parameters: "/c reg delete ""HKCR\TPMSmartCard.Backup"" /f"; Flags: runhidden; RunOnceId: "UnregisterTsbProgId"
+Filename: "{cmd}"; Parameters: "/c reg delete ""HKCR\.tsb"" /f"; Flags: runhidden; RunOnceId: "UnregisterTsbExt"
 
 [InstallDelete]
 ; 覆盖升级时清掉旧的 cx_Freeze 运行库目录，避免残留旧模块

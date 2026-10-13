@@ -1,0 +1,20 @@
+Windows Registry Editor Version 5.00
+
+; File type registration for TPM virtual smart card backups (.tsb).
+; .tsb is a ZIP archive produced by the "Backup" function of this tool.
+;
+; The icon and the "open" command need the installation path, so those keys are
+; written by install.iss ([Registry] section). This file keeps the
+; path-independent part and is merged during setup:
+;     reg import "{app}\Config\tsb.reg"
+; For a source checkout you can register manually:
+;     reg import Config\tsb.reg
+
+[HKEY_CLASSES_ROOT\.tsb]
+@="TPMSmartCard.Backup"
+"Content Type"="application/x-tpmvsc-backup"
+"PerceivedType"="document"
+
+[HKEY_CLASSES_ROOT\TPMSmartCard.Backup]
+@="TPM Virtual Smart Card Backup"
+"FriendlyTypeName"="TPM Virtual Smart Card Backup"
