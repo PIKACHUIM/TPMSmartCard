@@ -265,5 +265,17 @@
   "msg_set_ssh_start": "Avvia l'agente WinSSH",
   "msg_set_ssh_tip": "L'agente WinSSH consente ai certificati delle smart card di autenticare le sessioni SSH. L'installazione usa Chocolatey e richiede rete e privilegi di amministratore.",
   "msg_set_ssh_missing": "SSHCardAgent.exe non trovato; installalo prima.",
-  "msg_set_installing": "Installazione in corso, attendere..."
+  "msg_set_installing": "Installazione in corso, attendere...",
+  "msg_tray_show": "Mostra finestra principale",
+  "msg_tray_exit": "Esci",
+  "msg_tray_hidden": "Il programma è ridotto nell'area di notifica: fai clic sull'icona per mostrare la finestra, clic destro per uscire.",
+  "msg_set_startup": "Avvio e area di notifica",
+  "msg_set_startup_tip": "Se attivato, il programma si avvia automaticamente all'accesso e si riduce nell'area di notifica (senza mostrare la finestra principale). Poiché richiede i privilegi di amministratore, l'avvio automatico viene registrato come attività pianificata: non compare alcuna richiesta UAC.",
+  "msg_set_startup_app": "Avvia il programma all'accesso (ridotto nell'area di notifica)",
+  "msg_set_startup_agent": "Avvia l'agente WinSSH all'accesso",
+  "msg_set_startup_task": "Attivo: avvio all'accesso (attività pianificata, senza UAC)",
+  "msg_set_startup_run": "Attivo: avvio all'accesso (chiave Run del registro, una richiesta UAC)",
+  "msg_set_startup_on": "Attivo",
+  "msg_set_startup_off": "Non attivo",
+  "msg_set_startup_fail": "Impossibile modificare l'avvio automatico. Verifica che il programma sia eseguito come amministratore e che le attività pianificate non siano bloccate."
 }

@@ -33,10 +33,14 @@ class MoreConfig:
 
     @staticmethod
     def installOpenSC():
-        """静默安装随程序分发的 OpenSC，返回安装后的检测结果（需要管理员权限）。"""
+        """静默安装随程序分发的 OpenSC，返回安装后的检测结果（需要管理员权限）。
+
+        ``REMOVE=OpenSC_menu``：不创建 OpenSC 的开始菜单快捷方式，
+        与安装包（install.iss）里的处理保持一致。
+        """
         arch = platform.architecture()[0][:2]  # 32 / 64
         msi_path = os.path.join(OPENSC_DIR, OPENSC_MSI % arch)
-        os.system('msiexec /i "%s" /passive /norestart' % msi_path)
+        os.system('msiexec /i "%s" /passive /norestart REMOVE=OpenSC_menu' % msi_path)
         return MoreConfig.openscPath()
 
     # WinSSH 代理 ==============================================================

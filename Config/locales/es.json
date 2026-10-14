@@ -265,5 +265,17 @@
   "msg_set_ssh_start": "Iniciar el agente WinSSH",
   "msg_set_ssh_tip": "El agente WinSSH permite que los certificados de tarjeta inteligente autentiquen sesiones SSH. La instalación usa Chocolatey y requiere red y permisos de administrador.",
   "msg_set_ssh_missing": "No se encontró SSHCardAgent.exe; instálelo primero.",
-  "msg_set_installing": "Instalando, espere por favor..."
+  "msg_set_installing": "Instalando, espere por favor...",
+  "msg_tray_show": "Mostrar ventana principal",
+  "msg_tray_exit": "Salir",
+  "msg_tray_hidden": "La aplicación está en la bandeja: haz clic en el icono para mostrar la ventana y clic derecho para salir.",
+  "msg_set_startup": "Inicio y bandeja",
+  "msg_set_startup_tip": "Si se activa, la aplicación se inicia al iniciar sesión y se minimiza en la bandeja (sin mostrar la ventana principal). Como necesita permisos de administrador, el inicio automático se registra como tarea programada, por lo que no aparece el aviso de UAC.",
+  "msg_set_startup_app": "Iniciar esta aplicación al iniciar sesión (minimizada en la bandeja)",
+  "msg_set_startup_agent": "Iniciar el agente WinSSH al iniciar sesión",
+  "msg_set_startup_task": "Activado: se inicia al iniciar sesión (tarea programada, sin UAC)",
+  "msg_set_startup_run": "Activado: se inicia al iniciar sesión (clave Run del registro, un aviso de UAC)",
+  "msg_set_startup_on": "Activado",
+  "msg_set_startup_off": "No activado",
+  "msg_set_startup_fail": "No se pudo cambiar el inicio automático. Comprueba que la aplicación se ejecuta como administrador y que las tareas programadas no están bloqueadas."
 }

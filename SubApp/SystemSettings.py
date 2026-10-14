@@ -10,6 +10,8 @@
   与界面语言，应用后由调用方重建主界面（``self.changed``）；
 * 「OpenSC」「WinSSH 代理」把原来挂在工具条上的安装/启动操作收进设置
   （安装耗时，放在子线程执行，避免设置窗口卡死）；
+* 「启动与托盘」管理本程序与 WinSSH 代理的开机自启（见 Module/AutoStart.py：
+  需要提权的本程序注册成登录触发的计划任务，登录时不会弹 UAC）；
 * 「版本更新」优先读取 GitHub Release API，被限流时回退到
   ``/releases/latest`` 的 302 跳转解析 Tag（不依赖 API 配额）。
 """
@@ -25,6 +27,7 @@ from tkinter import messagebox
 
 import ttkbootstrap as ttk
 
+from Module import AutoStart
 from Module import Theme
 from Module.I18n import get_i18n
 from Module.TPMSmartCard import TPMSmartCard
@@ -114,10 +117,11 @@ class SystemSettings:
         self.check_result = None
         # TPM 状态
         self.tpm_values = dict()
-        # 后台任务（安装 OpenSC / WinSSH 代理）
+        # 后台任务（安装 OpenSC / WinSSH 代理 / 注册自启计划任务）
         self.task_running = False
         self.task_ready = False
         self.task_finish = None
+        self.task_result = None
         self.page = ttk.Toplevel(in_root)
         self.page.resizable(False, False)
         try:
@@ -136,6 +140,7 @@ class SystemSettings:
         self.notebook = ttk.Notebook(self.page)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=12, pady=(12, 6))
         self.view_appearance(ttk.Frame(self.notebook, padding=16), self.t("msg_set_appearance"))
+        self.view_startup(ttk.Frame(self.notebook, padding=16), self.t("msg_set_startup"))
         self.view_osc(ttk.Frame(self.notebook, padding=16), self.t("msg_set_osc"))
         self.view_ssh(ttk.Frame(self.notebook, padding=16), self.t("msg_set_ssh"))
         self.view_tpm(ttk.Frame(self.notebook, padding=16), self.t("msg_set_tpm"))
@@ -256,6 +261,91 @@ class SystemSettings:
             self.i18n.set_language(language)
             self.changed = True
         self.close()
+        return None
+
+    # 页签：启动与托盘 =========================================================
+    def view_startup(self, page, title):
+        """开机自启：本程序（登录后直接缩到托盘）与 WinSSH 代理。"""
+        self.notebook.add(page, text=title)
+        ttk.Label(page, bootstyle="secondary", justify=tk.LEFT, wraplength=self.wrap,
+                  text=self.t("msg_set_startup_tip")).pack(anchor=tk.W)
+        # 本程序自启 -----------------------------------------------------------
+        self.appstart_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(page, text=self.t("msg_set_startup_app"),
+                        variable=self.appstart_var,
+                        command=self.toggle_app_startup).pack(anchor=tk.W, pady=(16, 0))
+        self.appstart_state = tk.StringVar()
+        ttk.Label(page, bootstyle="secondary", textvariable=self.appstart_state,
+                  justify=tk.LEFT, wraplength=self.wrap).pack(anchor=tk.W, padx=26, pady=(2, 0))
+        # WinSSH 代理自启 ------------------------------------------------------
+        self.agent_path = MoreConfig.sshAgentPath()
+        self.agentstart_var = tk.BooleanVar(value=False)
+        self.agentstart_box = ttk.Checkbutton(page, text=self.t("msg_set_startup_agent"),
+                                              variable=self.agentstart_var,
+                                              command=self.toggle_agent_startup)
+        self.agentstart_box.pack(anchor=tk.W, pady=(16, 0))
+        self.agent_state = tk.StringVar()
+        ttk.Label(page, bootstyle="secondary", textvariable=self.agent_state,
+                  justify=tk.LEFT, wraplength=self.wrap).pack(anchor=tk.W, padx=26, pady=(2, 0))
+        self.refresh_startup()
+
+    def startup_state(self, in_entry):
+        """自启状态文案：计划任务（登录不弹 UAC）/ 启动项（登录弹一次 UAC）/ 未启用。"""
+        if in_entry.has_task():
+            return self.t("msg_set_startup_task")
+        if in_entry.run_value():
+            return self.t("msg_set_startup_run")
+        return self.t("msg_set_startup_off")
+
+    def refresh_startup(self):
+        """刷新两个自启开关；代理未随程序安装时禁用它的开关。"""
+        entry = AutoStart.app_entry()
+        self.appstart_var.set(entry.is_enabled())
+        self.appstart_state.set(self.startup_state(entry))
+        if not self.agent_path:
+            self.agentstart_box.config(state=tk.DISABLED)
+            self.agentstart_var.set(False)
+            self.agent_state.set(self.t("msg_set_ssh_missing"))
+            return None
+        agent = AutoStart.agent_entry(self.agent_path)
+        enabled = agent.is_enabled()
+        self.agentstart_box.config(state=tk.NORMAL)
+        self.agentstart_var.set(enabled)
+        self.agent_state.set(self.t("msg_set_startup_on") if enabled
+                             else self.t("msg_set_startup_off"))
+        return None
+
+    def toggle_app_startup(self):
+        """开关本程序自启；注册计划任务要起 PowerShell，放到子线程里执行。"""
+        entry = AutoStart.app_entry()
+        if not self.appstart_var.get():
+            entry.disable()
+            self.refresh_startup()
+            return None
+        self.task_result = None
+        if self.run_task(entry.enable, self.after_app_startup):
+            self.appstart_state.set(self.t("msg_set_installing"))
+        return None
+
+    def after_app_startup(self):
+        """自启注册结束：失败时明确提示，成功/失败都重新读一次真实状态。"""
+        if not self.task_result:
+            messagebox.showwarning(self.t("msg_set_title"), self.t("msg_set_startup_fail"))
+        self.refresh_startup()
+        return None
+
+    def toggle_agent_startup(self):
+        """开关 WinSSH 代理自启（写 HKCU 启动项，代理本身不需要提权）。"""
+        if not self.agent_path:
+            self.refresh_startup()
+            return None
+        agent = AutoStart.agent_entry(self.agent_path)
+        if self.agentstart_var.get():
+            if not agent.enable():
+                messagebox.showwarning(self.t("msg_set_title"), self.t("msg_set_startup_fail"))
+        else:
+            agent.disable()
+        self.refresh_startup()
         return None
 
     # 后台任务（安装耗时，放到子线程，结束后回主线程刷新）======================

@@ -265,5 +265,17 @@
   "msg_set_ssh_start": "啟動 WinSSH 代理",
   "msg_set_ssh_tip": "WinSSH 代理讓智慧卡憑證參與 SSH 認證。安裝透過 Chocolatey 完成，需要網路連線並以系統管理員身分執行程式。",
   "msg_set_ssh_missing": "找不到 SSHCardAgent.exe，請先完成安裝。",
-  "msg_set_installing": "正在安裝，請稍候..."
+  "msg_set_installing": "正在安裝，請稍候...",
+  "msg_tray_show": "顯示主程式",
+  "msg_tray_exit": "結束",
+  "msg_tray_hidden": "程式已縮到系統匣：單擊系統匣圖示可顯示主視窗，右鍵可結束。",
+  "msg_set_startup": "啟動與系統匣",
+  "msg_set_startup_tip": "開啟後登入 Windows 時會自動啟動，並直接縮到系統匣（不顯示主視窗）。本程式需要管理員權限，因此自啟以「工作排程」註冊，登入時不會再跳出 UAC。",
+  "msg_set_startup_app": "開機自動啟動本程式（登入後縮到系統匣）",
+  "msg_set_startup_agent": "開機自動啟動 WinSSH 代理",
+  "msg_set_startup_task": "已啟用：登入時自動啟動（工作排程，不跳 UAC）",
+  "msg_set_startup_run": "已啟用：登入時自動啟動（啟動項，登入時會跳一次 UAC）",
+  "msg_set_startup_on": "已啟用",
+  "msg_set_startup_off": "未啟用",
+  "msg_set_startup_fail": "自啟設定失敗。請確認程式以管理員身分執行、且系統未限制工作排程，然後重試。"
 }

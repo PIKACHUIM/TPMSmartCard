@@ -266,5 +266,17 @@
   "msg_set_ssh_start": "WinSSH 에이전트 시작",
   "msg_set_ssh_tip": "WinSSH 에이전트는 스마트 카드 인증서로 SSH 인증을 수행합니다. 설치에는 Chocolatey가 사용되며 네트워크 연결과 관리자 권한이 필요합니다.",
   "msg_set_ssh_missing": "SSHCardAgent.exe를 찾을 수 없습니다. 먼저 설치해 주세요.",
-  "msg_set_installing": "설치 중입니다. 잠시만 기다려 주세요..."
+  "msg_set_installing": "설치 중입니다. 잠시만 기다려 주세요...",
+  "msg_tray_show": "기본 창 표시",
+  "msg_tray_exit": "종료",
+  "msg_tray_hidden": "트레이로 최소화되었습니다. 트레이 아이콘을 클릭하면 창이 표시되고, 오른쪽 버튼으로 종료할 수 있습니다.",
+  "msg_set_startup": "시작 및 트레이",
+  "msg_set_startup_tip": "사용하면 Windows 로그온 시 자동으로 실행되어 바로 트레이로 최소화됩니다(기본 창은 표시되지 않음). 관리자 권한이 필요하므로 자동 시작은 작업 스케줄러에 등록되어 로그온할 때 UAC 창이 나타나지 않습니다.",
+  "msg_set_startup_app": "로그온 시 이 프로그램 자동 실행(트레이로 최소화)",
+  "msg_set_startup_agent": "로그온 시 WinSSH 에이전트 자동 실행",
+  "msg_set_startup_task": "사용 중: 로그온 시 자동 실행(작업 스케줄러, UAC 없음)",
+  "msg_set_startup_run": "사용 중: 로그온 시 자동 실행(시작 프로그램, 로그온 시 UAC 1회)",
+  "msg_set_startup_on": "사용 중",
+  "msg_set_startup_off": "사용 안 함",
+  "msg_set_startup_fail": "자동 시작 설정에 실패했습니다. 관리자 권한으로 실행 중인지, 작업 스케줄러가 제한되지 않았는지 확인한 뒤 다시 시도하세요."
 }

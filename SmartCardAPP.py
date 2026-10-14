@@ -31,6 +31,7 @@ from Module.I18n import get_i18n
 from Module.TPMSmartCard import TPMSmartCard
 from Module import Theme
 from Module import TPMBackup
+from Module.TrayIcon import TrayIcon
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 
 from SubApp.CertImport import CertImport
@@ -39,6 +40,9 @@ from SubApp.SystemSettings import SystemSettings
 
 # 界面默认字体；语言包里的 _font 可为特定语言覆盖（如韩语需要 Hangul 字体）
 FONT_NAME_DEFAULT = "MapleMono SC NF"
+
+# 登录自启的启动参数（见 Module/AutoStart.py）：带它就只常驻托盘，不显示主窗口
+TRAY_FLAG = "--minimized"
 
 # 界面主题与配色来自 Config/themes.json（可在「系统设置 - 外观」里切换），
 # 下面的常量是配置缺省或读取失败时的兜底值
@@ -77,6 +81,14 @@ LABEL_ROW_HEIGHT = 20          # 详情标签行高
 class SmartCardAPP:
     def __init__(self):
         self.root = tk.Tk()
+        # 登录自启（--minimized）时不显示主窗口，直接常驻托盘
+        self.startup_hidden = self.has_flag(TRAY_FLAG)
+        self.tray = None
+        self.tray_hinted = False
+        self.checked = False
+        # 主窗口是否已经真正显示过 / 是否被用户主动收进托盘（见 on_unmap / ensure_visible）
+        self.window_shown = False
+        self.window_hidden = False
         self.conf = dict()
         self.read_config()
         # 界面语言：用户设置 > TPMSMART_LANG > 系统语言 > 默认（语言包见 Config/locales）
@@ -87,6 +99,9 @@ class SmartCardAPP:
         self.root.iconbitmap("Config/iconer/icon02.ico")
         self.size = self.get_screens()
         self.root.geometry(f"+{self.size[0]}+{self.size[1]}")
+        if self.startup_hidden:
+            # 先藏起来，避免启动过程闪一下窗口（随后只留托盘图标）
+            self.root.withdraw()
         self.data = SmartCardAPI()
         self.tpms = TPMSmartCard()
         pyglet.font.add_file("Config/myfont/MapleMono-SC-NF-Regular.ttf")
@@ -97,7 +112,10 @@ class SmartCardAPP:
         }
         self.setup_fonts()
         self.build_ui()
-        self.check_datas()
+        # 托盘先建好：后面的启动检查、状态刷新如果弹框，用户也能从托盘找回窗口
+        self.setup_tray()
+        if not self.startup_hidden:
+            self.check_datas()
         self.load_status()
         # 双击 .tsb（文件类型关联）时由启动参数直接进入还原流程
         self.open_backup()
@@ -112,8 +130,116 @@ class SmartCardAPP:
             return None
         if not os.path.isfile(package):
             return None
+        if self.startup_hidden:
+            # 带着备份文件启动时必须看得见界面，不能把窗口留在托盘里
+            self.show_window()
         # 等主窗口建好、首次状态刷新完成后再弹还原确认框
         self.root.after(300, lambda: self.card_restore(package))
+        return None
+
+    @staticmethod
+    def has_flag(in_flag):
+        """命令行里是否带指定开关（登录自启由 Module/AutoStart.py 传 --minimized）。"""
+        return any(str(arg).strip().lower() == in_flag for arg in sys.argv[1:])
+
+    # 托盘常驻 ================================================================
+    @property
+    def tray_ready(self):
+        """托盘是否可用；不可用时不拦截关闭，否则窗口关不掉、程序也退不出。"""
+        return self.tray is not None and self.tray.is_alive
+
+    def setup_tray(self):
+        """建立托盘图标：关闭/最小化到托盘，右键菜单「显示主程序 / 退出」。"""
+        if self.tray is not None:
+            return self.tray
+        self.tray = TrayIcon(self.root,
+                             os.path.join("Config", "iconer", "icon02.ico"),
+                             self.i18n("main_text"),
+                             self.i18n("msg_tray_show"),
+                             self.i18n("msg_tray_exit"),
+                             self.show_window, self.quit_app)
+        if not self.tray.start():
+            print("SmartCardAPP: 托盘图标不可用：%s" % self.tray.error)
+            self.tray = None
+            return None
+        self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
+        self.root.bind("<Map>", self.on_map)
+        self.root.bind("<Unmap>", self.on_unmap)
+        # 启动后兜底一次：正常启动却没显示出主窗口时把它拉回来
+        self.root.after(1500, self.ensure_visible)
+        return self.tray
+
+    def on_map(self, in_event=None):
+        """记录主窗口已经真正显示过（用来区分启动时序与用户点最小化）。"""
+        if in_event is None or in_event.widget is self.root:
+            if self.root.winfo_viewable():
+                self.window_shown = True
+        return None
+
+    def on_unmap(self, in_event=None):
+        """点最小化（主窗口进入 iconic）时收进托盘。
+
+        窗口真正显示过之后才认这个动作：Tk 建顶层窗口的过程中状态可能短暂变成
+        iconic，若跟着收进托盘，用户看到的就是「启动后没有窗口」。
+        另外子控件取消映射也会触发 <Unmap>，所以还要看主窗口自己的状态；
+        自己调用 withdraw() 时状态是 withdrawn，也不会反复触发。
+        """
+        if not self.tray_ready or not self.window_shown:
+            return None
+        try:
+            if self.root.state() == "iconic":
+                self.hide_window()
+        except tk.TclError:
+            pass
+        return None
+
+    def ensure_visible(self):
+        """兜底：正常启动（非登录自启）却没显示出主窗口时，把它拉回前台。
+
+        只在启动阶段做一次；用户之后自己收进托盘不会被再拉出来。
+        """
+        if self.startup_hidden or self.window_hidden or self.window_shown:
+            return None
+        print("SmartCardAPP: 启动后主窗口未显示，主动恢复显示")
+        self.show_window()
+        return None
+
+    def hide_window(self):
+        """隐藏主窗口到托盘；首次隐藏用气泡提示怎么找回、怎么退出。"""
+        if not self.tray_ready:
+            # 托盘不可用时不能把窗口藏起来（否则找不回、也退不出），直接退出
+            self.quit_app()
+            return None
+        self.window_hidden = True
+        self.root.withdraw()
+        if not self.tray_hinted:
+            self.tray_hinted = True
+            self.tray.notify(self.i18n("main_text"), self.i18n("msg_tray_hidden"))
+        return None
+
+    def show_window(self):
+        """从托盘恢复主窗口（登录自启时跳过的启动检查在这里补一次）。"""
+        self.window_shown = True
+        self.window_hidden = False
+        self.root.deiconify()
+        self.root.lift()
+        try:
+            self.root.focus_force()
+        except tk.TclError:
+            pass
+        if not self.checked:
+            self.check_datas()
+        return None
+
+    def quit_app(self):
+        """退出程序：先摘掉托盘图标，再销毁主窗口（mainloop 随之结束）。"""
+        if self.tray is not None:
+            self.tray.stop()
+            self.tray = None
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
         return None
 
     def setup_fonts(self, in_create=True):
@@ -359,9 +485,15 @@ class SmartCardAPP:
         }
         self.setup_fonts(in_create=False)
         self.build_ui()
+        if self.tray is not None:
+            # 托盘提示与右键菜单文案同样跟随界面语言
+            self.tray.set_texts(self.i18n("main_text"), self.i18n("msg_tray_show"),
+                                self.i18n("msg_tray_exit"))
         self.load_status()
 
     def check_datas(self):
+        # 启动检查只做一次：登录自启时跳过，第一次从托盘打开窗口时补做
+        self.checked = True
         # TPM --------------------------------------------------------------------------------
         tpm_status = self.check_tpm_h(out=False)
         if tpm_status == 1:

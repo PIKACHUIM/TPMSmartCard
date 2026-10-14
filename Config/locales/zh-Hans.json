@@ -265,5 +265,17 @@
   "msg_set_ssh_start": "启动 WinSSH 代理",
   "msg_set_ssh_tip": "WinSSH 代理让智能卡证书参与 SSH 认证。安装通过 Chocolatey 完成，需要联网并以管理员身份运行程序。",
   "msg_set_ssh_missing": "未找到 SSHCardAgent.exe，请先完成安装。",
-  "msg_set_installing": "正在安装，请稍候..."
+  "msg_set_installing": "正在安装，请稍候...",
+  "msg_tray_show": "显示主程序",
+  "msg_tray_exit": "退出",
+  "msg_tray_hidden": "程序已最小化到托盘：单击托盘图标可显示主窗口，右键可退出。",
+  "msg_set_startup": "启动与托盘",
+  "msg_set_startup_tip": "开启后登录 Windows 时自动启动，并直接最小化到托盘（不显示主窗口）。本程序需要管理员权限，因此自启以「计划任务」注册，登录时不会再弹 UAC。",
+  "msg_set_startup_app": "开机自动启动本程序（登录后最小化到托盘）",
+  "msg_set_startup_agent": "开机自动启动 WinSSH 代理",
+  "msg_set_startup_task": "已启用：登录时自动启动（计划任务，不弹 UAC）",
+  "msg_set_startup_run": "已启用：登录时自动启动（启动项，登录时会弹一次 UAC）",
+  "msg_set_startup_on": "已启用",
+  "msg_set_startup_off": "未启用",
+  "msg_set_startup_fail": "自启设置失败。请确认程序以管理员身份运行、且系统未限制计划任务，然后重试。"
 }

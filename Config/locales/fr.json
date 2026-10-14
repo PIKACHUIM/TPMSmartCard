@@ -265,5 +265,17 @@
   "msg_set_ssh_start": "Démarrer l'agent WinSSH",
   "msg_set_ssh_tip": "L'agent WinSSH permet aux certificats de carte à puce d'authentifier les sessions SSH. L'installation utilise Chocolatey et nécessite un accès réseau et des droits administrateur.",
   "msg_set_ssh_missing": "SSHCardAgent.exe est introuvable ; installez-le d'abord.",
-  "msg_set_installing": "Installation en cours, veuillez patienter..."
+  "msg_set_installing": "Installation en cours, veuillez patienter...",
+  "msg_tray_show": "Afficher la fenêtre principale",
+  "msg_tray_exit": "Quitter",
+  "msg_tray_hidden": "L'application est réduite dans la zone de notification : cliquez sur l'icône pour afficher la fenêtre, clic droit pour quitter.",
+  "msg_set_startup": "Démarrage et zone de notification",
+  "msg_set_startup_tip": "Si activé, l'application démarre automatiquement à l'ouverture de session et se réduit dans la zone de notification (sans afficher la fenêtre principale). Comme elle nécessite des droits d'administrateur, le démarrage automatique est enregistré comme tâche planifiée : aucune invite UAC n'apparaît.",
+  "msg_set_startup_app": "Lancer cette application à l'ouverture de session (réduite dans la zone de notification)",
+  "msg_set_startup_agent": "Lancer l'agent WinSSH à l'ouverture de session",
+  "msg_set_startup_task": "Activé : démarre à l'ouverture de session (tâche planifiée, sans UAC)",
+  "msg_set_startup_run": "Activé : démarre à l'ouverture de session (clé Run du registre, une invite UAC)",
+  "msg_set_startup_on": "Activé",
+  "msg_set_startup_off": "Non activé",
+  "msg_set_startup_fail": "Impossible de modifier le démarrage automatique. Vérifiez que l'application s'exécute en tant qu'administrateur et que les tâches planifiées ne sont pas bloquées."
 }

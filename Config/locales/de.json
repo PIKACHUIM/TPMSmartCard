@@ -265,5 +265,17 @@
   "msg_set_ssh_start": "WinSSH-Agent starten",
   "msg_set_ssh_tip": "Der WinSSH-Agent ermöglicht die SSH-Authentifizierung mit Smartcard-Zertifikaten. Die Installation erfolgt über Chocolatey und erfordert Netzwerkzugriff und Administratorrechte.",
   "msg_set_ssh_missing": "SSHCardAgent.exe wurde nicht gefunden; bitte zuerst installieren.",
-  "msg_set_installing": "Installation läuft, bitte warten..."
+  "msg_set_installing": "Installation läuft, bitte warten...",
+  "msg_tray_show": "Hauptfenster anzeigen",
+  "msg_tray_exit": "Beenden",
+  "msg_tray_hidden": "Das Programm läuft im Infobereich: Klick auf das Symbol zeigt das Fenster, Rechtsklick beendet es.",
+  "msg_set_startup": "Autostart und Infobereich",
+  "msg_set_startup_tip": "Wenn aktiviert, startet das Programm bei der Anmeldung automatisch und minimiert sich direkt in den Infobereich (ohne Hauptfenster). Da Administratorrechte nötig sind, wird der Autostart als geplante Aufgabe registriert – es erscheint keine UAC-Abfrage.",
+  "msg_set_startup_app": "Dieses Programm bei der Anmeldung starten (in den Infobereich minimiert)",
+  "msg_set_startup_agent": "WinSSH-Agent bei der Anmeldung starten",
+  "msg_set_startup_task": "Aktiviert: Start bei der Anmeldung (geplante Aufgabe, keine UAC-Abfrage)",
+  "msg_set_startup_run": "Aktiviert: Start bei der Anmeldung (Autostart-Eintrag, eine UAC-Abfrage)",
+  "msg_set_startup_on": "Aktiviert",
+  "msg_set_startup_off": "Nicht aktiviert",
+  "msg_set_startup_fail": "Autostart-Einstellung konnte nicht geändert werden. Prüfen Sie, ob das Programm als Administrator läuft und geplante Aufgaben erlaubt sind."
 }

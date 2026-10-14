@@ -265,5 +265,17 @@
   "msg_set_ssh_start": "Start WinSSH Agent",
   "msg_set_ssh_tip": "The WinSSH agent lets smart card certificates authenticate SSH sessions. Installation uses Chocolatey and requires network access and administrator rights.",
   "msg_set_ssh_missing": "SSHCardAgent.exe was not found; please install it first.",
-  "msg_set_installing": "Installing, please wait..."
+  "msg_set_installing": "Installing, please wait...",
+  "msg_tray_show": "Show main window",
+  "msg_tray_exit": "Exit",
+  "msg_tray_hidden": "The app is minimized to the tray: click the tray icon to show the window, right-click it to exit.",
+  "msg_set_startup": "Startup & Tray",
+  "msg_set_startup_tip": "When enabled the app starts automatically at logon and goes straight to the tray (the main window is not shown). Because it needs administrator rights, autostart is registered as a scheduled task so no UAC prompt appears at logon.",
+  "msg_set_startup_app": "Start this app at logon (minimized to tray)",
+  "msg_set_startup_agent": "Start the WinSSH agent at logon",
+  "msg_set_startup_task": "Enabled: starts at logon (scheduled task, no UAC prompt)",
+  "msg_set_startup_run": "Enabled: starts at logon (registry Run key, one UAC prompt)",
+  "msg_set_startup_on": "Enabled",
+  "msg_set_startup_off": "Not enabled",
+  "msg_set_startup_fail": "Could not change the autostart setting. Make sure the app runs as administrator and that scheduled tasks are not blocked, then try again."
 }

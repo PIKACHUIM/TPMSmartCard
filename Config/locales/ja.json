@@ -265,5 +265,17 @@
   "msg_set_ssh_start": "WinSSH エージェントを起動",
   "msg_set_ssh_tip": "WinSSH エージェントはスマートカード証明書で SSH 認証を行うための機能です。インストールには Chocolatey を使用し、ネットワーク接続と管理者権限が必要です。",
   "msg_set_ssh_missing": "SSHCardAgent.exe が見つかりません。先にインストールしてください。",
-  "msg_set_installing": "インストール中です。しばらくお待ちください..."
+  "msg_set_installing": "インストール中です。しばらくお待ちください...",
+  "msg_tray_show": "メインウィンドウを表示",
+  "msg_tray_exit": "終了",
+  "msg_tray_hidden": "トレイに最小化しました：トレイアイコンをクリックするとウィンドウが表示され、右クリックで終了できます。",
+  "msg_set_startup": "起動とトレイ",
+  "msg_set_startup_tip": "有効にすると Windows サインイン時に自動起動し、そのままトレイに最小化されます（メインウィンドウは表示しません）。管理者権限が必要なため、自動起動はタスクスケジューラに登録され、サインイン時に UAC は表示されません。",
+  "msg_set_startup_app": "サインイン時に本アプリを自動起動（トレイに最小化）",
+  "msg_set_startup_agent": "サインイン時に WinSSH エージェントを自動起動",
+  "msg_set_startup_task": "有効：サインイン時に自動起動（タスクスケジューラ、UAC なし）",
+  "msg_set_startup_run": "有効：サインイン時に自動起動（スタートアップ、UAC が 1 回表示されます）",
+  "msg_set_startup_on": "有効",
+  "msg_set_startup_off": "無効",
+  "msg_set_startup_fail": "自動起動の設定に失敗しました。管理者として実行しているか、タスクスケジューラが制限されていないかを確認して再試行してください。"
 }

@@ -17,21 +17,27 @@
 ;  权限：PrivilegesRequired=admin —— 安装包必须由管理员运行（写入 Program Files、
 ;        静默安装 OpenSC 的 MSI 都需要），双击时由 Windows 直接弹出 UAC 提权。
 ;        主程序 SmartCardAPP.exe 自带 requireAdministrator 清单（建卡要管理员），
-;        因此安装完成后启动它还会再弹一次 UAC；SSH 密钥代理属于托盘程序，
+;        因此安装完成后启动它还会再弹一次 UAC（对应 [Run] 条目必须带 shellexec）；
+;        SSH 密钥代理属于托盘程序，
 ;        按原用户身份启动、不继承管理员权限。
 ;
-;  安装过程会自动完成：
-;    1) 静默安装随包分发的 OpenSC（OpenSC-0.25.1_win64-Light.msi）
-;    2) 缺少时静默安装 Visual C++ 2015-2022 x64 运行库（随包分发）
-;    3) 部署随包分发的 SSH 密钥代理 WinCryptSSHAgent（SSHCardAgent.exe），
-;       并按需创建开机自启快捷方式、安装完成后启动
+;  组件（向导里可勾选，见 [Components]）：
+;    · OpenSC（默认勾选）：静默安装随包分发的 OpenSC-0.25.1_win64-Light.msi，
+;      并跳过它的开始菜单快捷方式（REMOVE=OpenSC_menu）。程序读卡用到的
+;      {app}\OpenSC 工具目录与这个 MSI 无关，始终随程序主体安装；
+;    · WinCryptSSHAgent（默认不勾选）：部署随包分发的 SSH 密钥代理
+;      （SSHCardAgent.exe）。它的快捷方式不默认创建、安装后也不默认启动，
+;      开机自启改由程序「系统设置 - 启动与托盘」管理；
+;    · Visual C++ 2015-2022 x64 运行库（随包分发）：缺少时始终静默安装。
+;
+;  安装完成后可勾选（都默认不勾）：访问项目主页（GitHub）；主程序默认勾选。
 ;
 ;  需要 Inno Setup 6.5 或更高版本（UTF-8 无 BOM 脚本 + x64compatible；
 ;  ChineseSimplified.isl 与编译器自带的 Default.isl 同为 “6.5.0+” 语言文件级别，
 ;  用更低版本的编译器会出现语言文件版本不匹配的告警/错误）
 ; =============================================================================
 
-#define AppName "TPM 虚拟智能卡管理工具"
+#define AppName "TPM VSC管理"
 #define AppNameEn "TPM Virtual Smart Card Manager"
 #define AppPublisher "Pikachu Ren"
 #define AppUrl "https://github.com/PIKACHUIM/TPMSmartCard"
@@ -95,6 +101,8 @@ WizardStyle=modern
 AllowNoIcons=yes
 DisableProgramGroupPage=yes
 DisableWelcomePage=yes
+; 默认安装类型 = Full（见 [Types]）：OpenSC 默认勾选、SSH 代理默认不勾选
+DefaultType=full
 ; 安装 OpenSC / 写入 Program Files 都需要管理员
 PrivilegesRequired=admin
 ; 本产物基于 Python 3.11 x64 构建，实际需要 Windows 8.1 及以上
@@ -115,9 +123,14 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 english.AppShortcut=TPM Virtual Smart Card Manager
 english.AgentShortcut=SSH Key Agent
 english.GroupTasks=Additional tasks:
-english.TaskAgentStartup=Start the SSH key agent at logon
+english.TaskAgentIcon=Create Start Menu and desktop shortcuts for the SSH key agent
 english.RunAgent=Start the SSH key agent
 english.RunApp=Run TPM Virtual Smart Card Manager
+english.RunGithub=Open the project home page (GitHub)
+english.TypeFull=Full installation
+english.TypeCustom=Custom installation
+english.CompOpenSc=OpenSC smart card middleware (recommended)
+english.CompAgent=SSH key agent (WinCryptSSHAgent)
 english.StatusVcRedist=Installing Microsoft Visual C++ 2015-2022 runtime...
 english.StatusOpenSc=Installing OpenSC (smart card middleware)...
 english.ItemLine=%1: %2
@@ -126,14 +139,20 @@ english.ItemOpenSc=OpenSC
 english.StateSkipped=already installed, skipped
 english.StateInstalled=installed
 english.StateFailed=installation failed (exit code %1)
+english.StateUnselected=not selected, skipped
 english.PrereqWarnTitle=Some dependencies were not installed
 english.PrereqWarnBody=Setup will continue. You can retry from the app's Settings page after installation, or run the installer manually (OpenSC is in the OpenSC folder of the app directory).
 chinesesimplified.AppShortcut={#AppName}
 chinesesimplified.AgentShortcut=SSH 密钥代理
 chinesesimplified.GroupTasks=附加任务：
-chinesesimplified.TaskAgentStartup=开机时自动启动 SSH 密钥代理（WinCryptSSHAgent）
+chinesesimplified.TaskAgentIcon=创建 SSH 密钥代理的开始菜单与桌面快捷方式
 chinesesimplified.RunAgent=启动 SSH 密钥代理
 chinesesimplified.RunApp=运行 {#AppName}
+chinesesimplified.RunGithub=访问项目主页（GitHub）
+chinesesimplified.TypeFull=完整安装
+chinesesimplified.TypeCustom=自定义安装
+chinesesimplified.CompOpenSc=OpenSC 智能卡中间件（推荐）
+chinesesimplified.CompAgent=SSH 密钥代理（WinCryptSSHAgent）
 chinesesimplified.StatusVcRedist=正在安装 Visual C++ 2015-2022 运行库...
 chinesesimplified.StatusOpenSc=正在安装 OpenSC（智能卡中间件）...
 chinesesimplified.ItemLine=%1：%2
@@ -142,16 +161,32 @@ chinesesimplified.ItemOpenSc=OpenSC
 chinesesimplified.StateSkipped=已安装，跳过
 chinesesimplified.StateInstalled=安装完成
 chinesesimplified.StateFailed=安装失败（退出码 %1）
+chinesesimplified.StateUnselected=未选择安装，跳过
 chinesesimplified.PrereqWarnTitle=部分依赖未能自动安装
 chinesesimplified.PrereqWarnBody=安装程序将继续。安装完成后可在程序「系统设置」中重试，或手动运行安装包（OpenSC 位于程序目录的 OpenSC 文件夹）。
 
+[Types]
+; 默认类型是 Full（见 [Setup] DefaultType）；带 iscustom 的 Custom 让用户仍可
+; 手动勾选/取消组件（勾选 SSH 代理时 Setup 会自动切到「自定义」）。
+Name: "full"; Description: "{cm:TypeFull}"
+Name: "custom"; Description: "{cm:TypeCustom}"; Flags: iscustom
+
+[Components]
+; OpenSC 属于 Full 类型 → 默认勾选；SSH 代理不属于任何类型 → 默认不勾选
+Name: "opensc"; Description: "{cm:CompOpenSc}"; Types: full
+Name: "agent"; Description: "{cm:CompAgent}"
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "agentstartup"; Description: "{cm:TaskAgentStartup}"; GroupDescription: "{cm:GroupTasks}"; Flags: checkedonce
+; 代理的快捷方式默认不创建（选了「SSH 密钥代理」组件才可选）；
+; 开机自启不再由安装包创建启动文件夹快捷方式，改由程序「系统设置 - 启动与托盘」管理
+Name: "agenticon"; Description: "{cm:TaskAgentIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Components: agent; Flags: unchecked
 
 [Files]
-; 程序主体（cx_Freeze 输出）
-Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; 程序主体（cx_Freeze 输出）；SSH 代理是可选项，单独作为一条目的（见下）
+Source: "{#BuildDir}\*"; Excludes: "SSHCardAgent.exe"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; SSH 密钥代理：勾选「SSH 密钥代理」组件时才复制
+Source: "{#BuildDir}\SSHCardAgent.exe"; DestDir: "{app}"; Components: agent; Flags: ignoreversion skipifsourcedoesntexist
 ; TPMImport：程序运行时以相对路径调用 Import\TPMImport.exe
 ; 只收顶层运行时文件（不递归，避免把 Import\TPMImport 源码工程一起打进去）
 Source: "Import\TPMImport.exe"; DestDir: "{app}\Import"; Flags: ignoreversion skipifsourcedoesntexist
@@ -163,12 +198,11 @@ Source: "{#VcRedistPath}"; DestDir: "{tmp}"; Flags: dontcopy
 
 [Icons]
 Name: "{group}\{cm:AppShortcut}"; Filename: "{app}\SmartCardAPP.exe"; WorkingDir: "{app}"
-Name: "{group}\{cm:AgentShortcut} (WinCryptSSHAgent)"; Filename: "{app}\SSHCardAgent.exe"; WorkingDir: "{app}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{cm:AppShortcut}"; Filename: "{app}\SmartCardAPP.exe"; WorkingDir: "{app}"; Tasks: desktopicon
-Name: "{autodesktop}\{cm:AgentShortcut}"; Filename: "{app}\SSHCardAgent.exe"; WorkingDir: "{app}"; Tasks: desktopicon
-; 开机自启：与旧安装包（Advanced Installer 的 StartupFolder 快捷方式）行为一致
-Name: "{commonstartup}\{cm:AgentShortcut}"; Filename: "{app}\SSHCardAgent.exe"; WorkingDir: "{app}"; Tasks: agentstartup
+; SSH 代理的快捷方式：要「装了代理」且「勾了创建快捷方式」两条都满足才创建
+Name: "{group}\{cm:AgentShortcut} (WinCryptSSHAgent)"; Filename: "{app}\SSHCardAgent.exe"; WorkingDir: "{app}"; Components: agent; Tasks: agenticon
+Name: "{autodesktop}\{cm:AgentShortcut}"; Filename: "{app}\SSHCardAgent.exe"; WorkingDir: "{app}"; Components: agent; Tasks: agenticon
 
 [Registry]
 ; .tsb（智能卡备份文件）的文件类型关联中与安装路径相关的部分：
@@ -181,16 +215,29 @@ Root: HKA; Subkey: "TPMSmartCard.Backup\shell\open\command"; ValueType: string; 
 
 [Run]
 ; 合并 .tsb 文件类型注册（Config\tsb.reg）
-Filename: "{cmd}"; Parameters: "/c reg import ""{app}\Config\tsb.reg"""; Flags: runhidden; RunOnceId: "RegisterTsbFileType"
-; SSH 密钥代理是托盘程序，按原用户身份启动（不继承管理员权限）
-Filename: "{app}\SSHCardAgent.exe"; Description: "{cm:RunAgent}"; Flags: postinstall nowait runasoriginaluser
-; 主程序自带 requireAdministrator 清单，这里按原用户启动，由 Windows 弹 UAC 提权
-Filename: "{app}\SmartCardAPP.exe"; Description: "{cm:RunApp}"; Flags: postinstall nowait runasoriginaluser
+Filename: "{cmd}"; Parameters: "/c reg import ""{app}\Config\tsb.reg"""; Flags: runhidden
+; 主程序自带 requireAdministrator 清单（BuildPackage.py 里 uac_admin=True）：
+; runasoriginaluser 只表示「以原用户身份」，shellexec 才让条目经过 Windows 外壳
+; （AppInfo 服务）——由外壳负责弹 UAC 完成提权。
+; 少了 shellexec 会走 CreateProcess 路径：对清单要求提升的程序直接失败（错误 740，
+; ERROR_ELEVATION_REQUIRED，不会弹 UAC），表现为「安装完成后点启动没反应 / 没有管理员权限」。
+Filename: "{app}\SmartCardAPP.exe"; Description: "{cm:RunApp}"; Flags: postinstall nowait runasoriginaluser shellexec
+; SSH 密钥代理是托盘程序，按原用户身份启动（不继承管理员权限）；
+; 默认不勾选，且没勾选「SSH 密钥代理」组件（没装代理）时直接跳过
+Filename: "{app}\SSHCardAgent.exe"; Description: "{cm:RunAgent}"; Components: agent; Flags: postinstall nowait runasoriginaluser unchecked skipifdoesntexist
+; 项目主页：默认不勾选，勾选后交给外壳用默认浏览器打开（shellexec 支持 URL）
+Filename: "{#AppUrl}"; Description: "{cm:RunGithub}"; Flags: postinstall nowait shellexec unchecked
 
 [UninstallRun]
-; 代理与 Web 服务常驻后台，卸载前先结束，避免文件占用
+; 主程序常驻托盘、代理与 Web 服务常驻后台：卸载前先结束，避免文件占用
+Filename: "{sys}\taskkill.exe"; Parameters: "/f /im SmartCardAPP.exe"; Flags: runhidden; RunOnceId: "StopSmartCardApp"
 Filename: "{sys}\taskkill.exe"; Parameters: "/f /im SSHCardAgent.exe"; Flags: runhidden; RunOnceId: "StopSshAgent"
 Filename: "{sys}\taskkill.exe"; Parameters: "/f /im SmartCardWEB.exe"; Flags: runhidden; RunOnceId: "StopWebServer"
+; 清理「系统设置 - 启动与托盘」写入的自启（计划任务与启动项；不存在时忽略）
+Filename: "{cmd}"; Parameters: "/c schtasks /delete /tn ""TPMSmartCard"" /f"; Flags: runhidden; RunOnceId: "DelAppStartTask"
+Filename: "{cmd}"; Parameters: "/c schtasks /delete /tn ""WinCryptSSHAgent"" /f"; Flags: runhidden; RunOnceId: "DelAgentStartTask"
+Filename: "{cmd}"; Parameters: "/c reg delete ""HKCU\Software\Microsoft\Windows\CurrentVersion\Run"" /v TPMSmartCard /f"; Flags: runhidden; RunOnceId: "DelAppStartRun"
+Filename: "{cmd}"; Parameters: "/c reg delete ""HKCU\Software\Microsoft\Windows\CurrentVersion\Run"" /v WinCryptSSHAgent /f"; Flags: runhidden; RunOnceId: "DelAgentStartRun"
 ; 移除 .tsb 文件类型关联（.tsb 是本工具自己的备份格式）
 Filename: "{cmd}"; Parameters: "/c reg delete ""HKCR\TPMSmartCard.Backup"" /f"; Flags: runhidden; RunOnceId: "UnregisterTsbProgId"
 Filename: "{cmd}"; Parameters: "/c reg delete ""HKCR\.tsb"" /f"; Flags: runhidden; RunOnceId: "UnregisterTsbExt"
@@ -330,14 +377,18 @@ begin
       PrereqFailed := True;
   end;
 
-  { 2) OpenSC（智能卡中间件） }
-  if IsOpenScInstalled() then
+  { 2) OpenSC（智能卡中间件）：没勾选组件时跳过，之后可在程序「系统设置」里安装 }
+  if not WizardIsComponentSelected('opensc') then
+    PrereqLog := PrereqLog + PrereqNote(CM('ItemOpenSc'), CM('StateUnselected'))
+  else if IsOpenScInstalled() then
     PrereqLog := PrereqLog + PrereqNote(CM('ItemOpenSc'), CM('StateSkipped'))
   else
   begin
     ExtractTemporaryFile('{#OpenScMsi}');
+    { REMOVE=OpenSC_menu：不创建 OpenSC 的开始菜单快捷方式（其余功能照常安装） }
     Code := RunPrereqFile(ExpandConstant('{sys}\msiexec.exe'),
       '/i "' + ExpandConstant('{tmp}\') + '{#OpenScMsi}' + '" /qn /norestart' +
+      ' REMOVE=OpenSC_menu' +
       ' /l*v "' + ExpandConstant('{tmp}\opensc-install.log') + '"',
       CM('StatusOpenSc'));
     PrereqLog := PrereqLog + PrereqNote(CM('ItemOpenSc'), PrereqState(Code));

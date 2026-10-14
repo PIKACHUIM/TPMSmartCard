@@ -6,7 +6,7 @@ name: Build Client Release
 #
 # 构建内容（Windows x64）：
 #   - cx_Freeze 绿色版 zip
-#   - Inno Setup 安装包（自动安装 OpenSC、VC++ 运行库、SSH 密钥代理）
+#   - Inno Setup 安装包（VC++ 运行库与 OpenSC 默认安装；SSH 密钥代理可在安装时勾选）
 on:
   push:
     branches: [ main ]
@@ -334,7 +334,7 @@ jobs:
           cat > notes.md <<EOF
           自动构建的 Beta 测试版，每次推送到 \`main\` 分支都会覆盖更新。
 
-          - 安装包：\`$SETUP\`（自动安装 OpenSC 与 SSH 密钥代理）
+          - 安装包：\`$SETUP\`（默认安装 OpenSC；SSH 密钥代理可在安装时勾选）
           - 免安装绿色版：\`$PACKAGE\`
           - 提交：\`$GITHUB_SHA\`
           - 触发方式：${{ github.event_name }}
@@ -378,7 +378,7 @@ jobs:
           cat > notes.md <<EOF
           ## TPM 虚拟智能卡管理工具 V${VERSION}
 
-          - 安装包：\`$SETUP\`（安装过程中自动安装 OpenSC 与 SSH 密钥代理，推荐）
+          - 安装包：\`$SETUP\`（默认安装 OpenSC；SSH 密钥代理可在安装时勾选，推荐）
           - 免安装绿色版：\`$PACKAGE\`（解压后运行 \`SmartCardAPP.exe\`）
           - 使用前请先安装 [OpenSC](https://github.com/OpenSC/OpenSC/releases)
           - 构建提交：\`$GITHUB_SHA\`
