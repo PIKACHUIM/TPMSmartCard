@@ -1190,22 +1190,26 @@ def register_card_device(uid="", friendly_name=""):
     info = setupapi.SetupDiCreateDeviceInfoList(ctypes.byref(class_guid), None)
     if not info or info == ctypes.c_void_p(-1).value:
         return False, failed("SetupDiCreateDeviceInfoList 失败")
+    # HDEVINFO 是 64 位句柄：不声明 argtypes 时 ctypes 会把 Python int 当 C int（32 位）
+    # 转换，句柄值超过 2^31 就抛 OverflowError: int too long to convert，
+    # 所以这里统一用 c_void_p 包一层再传给其它 API。
+    handle = ctypes.c_void_p(info)
     try:
         data = _SP_DEVINFO_DATA()
         data.cbSize = ctypes.sizeof(_SP_DEVINFO_DATA)
-        if not setupapi.SetupDiCreateDeviceInfoW(info, device_name, ctypes.byref(class_guid),
+        if not setupapi.SetupDiCreateDeviceInfoW(handle, device_name, ctypes.byref(class_guid),
                                                  friendly_name or None, None, 0,
                                                  ctypes.byref(data)):
             return False, failed("SetupDiCreateDeviceInfoW(%s) 失败" % device_name)
         hardware = _wide_multi(VSC_READER_HARDWARE_ID)
         if not setupapi.SetupDiSetDeviceRegistryPropertyW(
-                info, ctypes.byref(data), SPDRP_HARDWAREID, hardware, len(hardware)):
+                handle, ctypes.byref(data), SPDRP_HARDWAREID, hardware, len(hardware)):
             return False, failed("写入 HardwareID 失败")
         if friendly_name:
             label = _wide_multi(friendly_name)
             setupapi.SetupDiSetDeviceRegistryPropertyW(
-                info, ctypes.byref(data), SPDRP_FRIENDLYNAME, label, len(label))
-        if not setupapi.SetupDiCallClassInstaller(DIF_REGISTERDEVICE, info, ctypes.byref(data)):
+                handle, ctypes.byref(data), SPDRP_FRIENDLYNAME, label, len(label))
+        if not setupapi.SetupDiCallClassInstaller(DIF_REGISTERDEVICE, handle, ctypes.byref(data)):
             return False, failed("DIF_REGISTERDEVICE 失败")
         reboot = ctypes.c_int(0)
         if not newdev.UpdateDriverForPlugAndPlayDevicesW(None, VSC_READER_HARDWARE_ID,
@@ -1219,7 +1223,7 @@ def register_card_device(uid="", friendly_name=""):
                          "/v", "FriendlyName", "/t", "REG_SZ", "/d", friendly_name, "/f"])
         return True, "已用 SetupDi 注册设备 %s（需要重启=%s）" % (device_name, bool(reboot.value))
     finally:
-        setupapi.SetupDiDestroyDeviceInfoList(info)
+        setupapi.SetupDiDestroyDeviceInfoList(handle)
 
 
 def _guid_raw(text):
@@ -1248,18 +1252,25 @@ def _setupapi_props():
 
 
 def _open_device(setupapi, devinfo, uid):
-    """打开设备实例，返回 ``(设备信息集, 设备信息结构)``；失败返回 ``(None, None)``。"""
+    """打开设备实例，返回 ``(设备信息集句柄, 设备信息结构)``；失败返回 ``(None, None)``。
+
+    句柄用 ``ctypes.c_void_p`` 包一层再传：``HDEVINFO`` 是 64 位句柄，不声明
+    ``argtypes`` 时 ctypes 会把 Python int 当 C ``int``（32 位）转换，句柄值超过
+    2^31 就抛 ``OverflowError: int too long to convert``（备份时必现，因为每张卡都
+    要走这里读设备属性）。
+    """
     import ctypes
     info = setupapi.SetupDiCreateDeviceInfoList(None, None)
     if not info or info == ctypes.c_void_p(-1).value:
         return None, None
+    handle = ctypes.c_void_p(info)
     data = devinfo()
     data.cbSize = ctypes.sizeof(devinfo)
-    if not setupapi.SetupDiOpenDeviceInfoW(info, "ROOT\\SMARTCARDREADER\\%s" % instance_id(uid),
+    if not setupapi.SetupDiOpenDeviceInfoW(handle, "ROOT\\SMARTCARDREADER\\%s" % instance_id(uid),
                                           None, 0, ctypes.byref(data)):
-        setupapi.SetupDiDestroyDeviceInfoList(info)
+        setupapi.SetupDiDestroyDeviceInfoList(handle)
         return None, None
-    return info, data
+    return handle, data
 
 
 def _property_entries(setupapi, devinfo, propkey, info, data):
