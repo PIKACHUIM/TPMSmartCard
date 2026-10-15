@@ -101,8 +101,7 @@ WizardStyle=modern
 AllowNoIcons=yes
 DisableProgramGroupPage=yes
 DisableWelcomePage=yes
-; 默认安装类型 = Full（见 [Types]）：OpenSC 默认勾选、SSH 代理默认不勾选
-DefaultType=full
+; 默认安装类型 = Full：Inno 取 [Types] 第一个条目作为默认类型（Full 在首位），
 ; 安装 OpenSC / 写入 Program Files 都需要管理员
 PrivilegesRequired=admin
 ; 本产物基于 Python 3.11 x64 构建，实际需要 Windows 8.1 及以上
@@ -166,8 +165,8 @@ chinesesimplified.PrereqWarnTitle=部分依赖未能自动安装
 chinesesimplified.PrereqWarnBody=安装程序将继续。安装完成后可在程序「系统设置」中重试，或手动运行安装包（OpenSC 位于程序目录的 OpenSC 文件夹）。
 
 [Types]
-; 默认类型是 Full（见 [Setup] DefaultType）；带 iscustom 的 Custom 让用户仍可
-; 手动勾选/取消组件（勾选 SSH 代理时 Setup 会自动切到「自定义」）。
+; 默认类型是第一个条目 Full（Inno 没有单独的 DefaultType 指令）；带 iscustom 的
+; Custom 让用户仍可手动勾选/取消组件（勾选 SSH 代理时 Setup 会自动切到「自定义」）。
 Name: "full"; Description: "{cm:TypeFull}"
 Name: "custom"; Description: "{cm:TypeCustom}"; Flags: iscustom
 
