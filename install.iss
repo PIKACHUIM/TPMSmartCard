@@ -35,6 +35,16 @@
 ;  需要 Inno Setup 6.5 或更高版本（UTF-8 无 BOM 脚本 + x64compatible；
 ;  ChineseSimplified.isl 与编译器自带的 Default.isl 同为 “6.5.0+” 语言文件级别，
 ;  用更低版本的编译器会出现语言文件版本不匹配的告警/错误）
+;
+;  代码签名（Certum 云签名，SimplySign）：
+;    Inno 的 [Setup] SignTool 只接受「签名工具名」，命令必须由 IDE 或命令行
+;    （ISCC /S<名字>=<命令>）注入，因此本脚本不写死签名命令：
+;      · 调用方设置 TPMSMART_SIGNTOOL=<名字> 并传 /S<名字>=<命令> 时，才会声明
+;        SignTool / SignedUninstaller，Inno 会签名「卸载器 + setup.exe」，
+;        并自行校验签名是否真的生效；
+;      · 没有该变量时完全不签名（本地无证书/调试时直接 iscc install.iss 仍可用）。
+;    推荐用 Builds\Build-Installer.ps1 编译，它会解析证书、组装签名命令并注入；
+;    签名本身由 Builds\Sign-Windows.ps1 完成（signtool + Certum TSA 时间戳）。
 ; =============================================================================
 
 #define AppName "TPM VSC管理"
@@ -70,6 +80,22 @@
 #define OpenScMsi "OpenSC-0.25.1_win64-Light.msi"
 #define VcRedistExe "VC_redist.x64.exe"
 #define VcRedistPath "Setups\Visual C++ Redistributable for Visual Studio 2015-2022 x64\VC_redist.x64.exe"
+
+; ---- 代码签名 -------------------------------------------------------------
+; 由 Builds\Build-Installer.ps1（或 CI）设置；非空即表示启用签名，值 = 签名工具名
+; （对应 ISCC /S<名字>=<命令> 里定义的那个工具，见文件头部说明）
+#define InnoSignToolName GetEnv("TPMSMART_SIGNTOOL")
+
+; ---- Import 运行时的来源目录 ----------------------------------------------
+; 默认取仓库里的 Import\；启用签名时 Builds\Build-Installer.ps1 会把 Import 顶层文件
+; 复制到临时目录、先给 TPMImport.exe 签好名，再把这个变量指过去。
+; 这样做是因为 [Files] 的 SignTool 参数要求 Inno 6.5+（本机 6.4.2 会报
+; "Unrecognized parameter name"），而且签名条目不压缩会白白撑大安装包；
+; 让构建脚本在打包前签好，安装包本体仍可正常压缩。
+#define ImportDir GetEnv("TPMSMART_IMPORTDIR")
+#if Len(ImportDir) == 0
+  #define ImportDir "Import"
+#endif
 
 [Setup]
 ; AppId 保持恒定，后续版本才能正确覆盖升级
@@ -111,6 +137,18 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; 注册 .tsb 文件类型关联后需要通知外壳刷新（否则资源管理器不会立刻认图标）
 ChangesAssociations=yes
 SetupLogging=yes
+; ---- 代码签名（Certum 云签名） --------------------------------------------
+; 只有调用方通过 ISCC /S 定义并设置了 TPMSMART_SIGNTOOL 时才声明签名工具：
+; Inno 会在签名工具执行后校验「文件确实带上了数字签名」，所以拿不到证书时
+; 不能走「跳过签名」的路子，必须在编译前就决定签还是不签（见 Builds\Build-Installer.ps1）。
+; SignedUninstaller=yes 让卸载器 uninst*.exe 也参与签名（否则它仍是未签名程序）。
+#if Len(InnoSignToolName) > 0
+SignTool={#InnoSignToolName}
+SignedUninstaller=yes
+; Certum 云签名走的是网络签名，失败多来自网络/时间戳抖动，给足重试
+SignToolRetryCount=3
+SignToolRetryDelay=1000
+#endif
 
 [Languages]
 ; 中文放在第一位：Inno 会按系统 UI 语言自动匹配，匹配不到时才弹语言选择框
@@ -188,9 +226,10 @@ Source: "{#BuildDir}\*"; Excludes: "SSHCardAgent.exe"; DestDir: "{app}"; Flags: 
 Source: "{#BuildDir}\SSHCardAgent.exe"; DestDir: "{app}"; Components: agent; Flags: ignoreversion skipifsourcedoesntexist
 ; TPMImport：程序运行时以相对路径调用 Import\TPMImport.exe
 ; 只收顶层运行时文件（不递归，避免把 Import\TPMImport 源码工程一起打进去）
-Source: "Import\TPMImport.exe"; DestDir: "{app}\Import"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "Import\*.dll"; DestDir: "{app}\Import"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "Import\*.json"; DestDir: "{app}\Import"; Flags: ignoreversion skipifsourcedoesntexist
+; 来源目录默认 Import\，带签名构建时由 Builds\Build-Installer.ps1 改成「已签名的临时目录」
+Source: "{#ImportDir}\TPMImport.exe"; DestDir: "{app}\Import"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "{#ImportDir}\*.dll"; DestDir: "{app}\Import"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "{#ImportDir}\*.json"; DestDir: "{app}\Import"; Flags: ignoreversion skipifsourcedoesntexist
 ; 依赖安装包：不在安装阶段复制，由 [Code] 按需解包后静默安装
 Source: "OpenSC\{#OpenScMsi}"; DestDir: "{tmp}"; Flags: dontcopy
 Source: "{#VcRedistPath}"; DestDir: "{tmp}"; Flags: dontcopy

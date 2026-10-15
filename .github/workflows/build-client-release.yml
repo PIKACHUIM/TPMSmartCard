@@ -30,6 +30,18 @@ on:
 permissions:
   contents: write
 
+# Certum 云签名（Certum SimplySign）所需的凭据，全部走 Repository Secrets：
+#   CERTUM_USERNAME            SimplySign 登录账号
+#   CERTUM_OTP_URI             otpauth:// URI（含 TOTP 密钥），用于无人值守登录
+#   CERTUM_CERTIFICATE_SHA1    云证书指纹（= Tauri 的 certificateThumbprint）
+# 三个都配齐才会签名；缺任何一个都只构建不签名（并给出警告），不会让流水线失败。
+# 签名资源来自参考项目 OpenListTeam/OpenList-Desktop 的 Windows 签名方案：
+# 装 SimplySign Desktop → 注册表预配置 → TOTP 自动登录 → signtool 用证书指纹签名。
+env:
+  CERTUM_OTP_URI: ${{ secrets.CERTUM_OTP_URI }}
+  CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+  CERTUM_CERTIFICATE_SHA1: ${{ secrets.CERTUM_CERTIFICATE_SHA1 }}
+
 concurrency:
   # 推送触发的 beta 构建只保留最新一次；手动发布单独分组，避免被取消
   group: ${{ github.event_name == 'push' && 'client-beta-build' || 'client-release-build' }}
@@ -96,9 +108,26 @@ jobs:
     env:
       # 与 install.aip 中引用的 build/exe.win-amd64-3.11 保持一致，方便把 CI 产物继续用于本地打安装包
       PYTHON_VERSION: '3.11'
+      # runner 控制台是 cp1252，显式 UTF-8 输出，避免签名/构建日志里的中文变乱码
+      PYTHONIOENCODING: utf-8
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # 三个 CERTUM_* Secrets 齐了才启用签名；同时把「必须签名成功」打开，
+      # 避免某次认证失败后静默发布未签名产物
+      - name: Detect Certum signing secrets
+        id: signing
+        shell: pwsh
+        run: |
+          if ($env:CERTUM_CERTIFICATE_SHA1 -and $env:CERTUM_OTP_URI -and $env:CERTUM_USERNAME) {
+            "TPMSMART_SIGN_ENABLED=1" >> $env:GITHUB_ENV
+            "TPMSMART_SIGN_REQUIRED=1" >> $env:GITHUB_ENV
+            Write-Host "Certum 云签名已启用（证书指纹 $env:CERTUM_CERTIFICATE_SHA1）"
+          } else {
+            "TPMSMART_SIGN_ENABLED=0" >> $env:GITHUB_ENV
+            Write-Host "::warning title=未启用代码签名::缺少 CERTUM_USERNAME / CERTUM_OTP_URI / CERTUM_CERTIFICATE_SHA1 Secrets，本次产物不带数字签名"
+          }
 
       - name: Ensure OpenSC installer
         shell: pwsh
@@ -179,6 +208,26 @@ jobs:
             "name=TPMSmartCard-$version-win64" >> $env:GITHUB_OUTPUT
           }
 
+      # ---- Certum 云签名环境（移植自参考项目 OpenListTeam/OpenList-Desktop）----
+      # 1) 装 SimplySign Desktop + 注册表预配置（登录框自动弹出、断开后不注销证书）
+      - name: Setup Certum SimplySign
+        if: env.TPMSMART_SIGN_ENABLED == '1'
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File Builds/Sign-SetupCertum.ps1 -Install -ConfigureRegistry
+
+      # 2) 用 TOTP 自动登录，直到云证书挂进证书库（弹窗式登录偶发失败，重试 3 次）
+      - name: Authenticate Certum
+        if: env.TPMSMART_SIGN_ENABLED == '1'
+        shell: pwsh
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            pwsh -NoProfile -ExecutionPolicy Bypass -File Builds/Sign-SetupCertum.ps1 -Connect -Verify
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "Certum 认证第 $attempt 次失败，10 秒后重试"
+            Start-Sleep -Seconds 10
+          }
+          throw 'Certum 云签名认证失败（3 次重试都没能把云证书挂到证书库）'
+
       - name: Build with cx_Freeze
         env:
           TPMSMART_VERSION: ${{ steps.naming.outputs.version }}
@@ -206,6 +255,18 @@ jobs:
             $importStage = Join-Path $stage 'Import'
             New-Item -ItemType Directory -Force -Path $importStage | Out-Null
             Get-ChildItem -Path 'Import' -File | Copy-Item -Destination $importStage -Force
+
+            # 绿色版里的 Import 组件也要带签名。主程序 exe 在 cx_Freeze 构建阶段已经签好，
+            # 这里只补 Import 的副本（仓库里的 Import\ 保持原样，不就地签名）。
+            if ($env:TPMSMART_SIGN_ENABLED -eq '1') {
+              $importTargets = @(Get-ChildItem -Path $importStage -File |
+                  Where-Object { $_.Name -in @('TPMImport.exe', 'TPMImport.dll') } |
+                  ForEach-Object { $_.FullName })
+              if ($importTargets.Count) {
+                & (Join-Path $PWD 'Builds/Sign-Windows.ps1') -Path ($importTargets -join ';')
+                if ($LASTEXITCODE -ne 0) { throw "signing Import components failed ($LASTEXITCODE)" }
+              }
+            }
           }
 
           @(
@@ -289,13 +350,41 @@ jobs:
           if (-not $iscc) { throw 'ISCC.exe not found' }
           Write-Host "using $iscc (language level $level)"
 
-          & $iscc 'install.iss'
+          # 交给 Builds\Build-Installer.ps1 编译：解析 signtool 与 Certum 云证书、
+          # 给 Import 组件先行签名、再通过 ISCC /S 注入签名工具（安装包 + 卸载器签名）
+          & (Join-Path $PWD 'Builds/Build-Installer.ps1') -Iscc $iscc
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed ($LASTEXITCODE)" }
 
           $setup = Get-ChildItem 'dist' -Filter '*-setup.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $setup) { throw 'installer executable was not produced' }
           Write-Host ("created {0} ({1:N1} MB)" -f $setup.Name, ($setup.Length / 1MB))
           "setup=$($setup.Name)" >> $env:GITHUB_OUTPUT
+
+      # 签名兜底校验：确认产物真的由那张 Certum 云证书签了名（并且带时间戳链是有效的），
+      # 避免「构建成功但产物没签上」被静默发布
+      - name: Verify signatures
+        if: env.TPMSMART_SIGN_ENABLED == '1'
+        shell: pwsh
+        env:
+          NAME: ${{ steps.naming.outputs.name }}
+        run: |
+          $expected = ($env:CERTUM_CERTIFICATE_SHA1 -replace '[^0-9a-fA-F]', '').ToUpperInvariant()
+          $targets = @(Get-ChildItem -Path (Join-Path 'staging' $env:NAME) -Filter '*.exe' -File -ErrorAction SilentlyContinue)
+          $targets += @(Get-ChildItem -Path 'dist' -Filter '*-setup.exe' -File -ErrorAction SilentlyContinue)
+          if (-not $targets.Count) { throw 'no signed artifacts found to verify' }
+
+          $bad = @()
+          foreach ($file in $targets) {
+            $sig = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            $thumb = if ($sig.SignerCertificate) { ($sig.SignerCertificate.Thumbprint -replace '[^0-9a-fA-F]', '').ToUpperInvariant() } else { '' }
+            $ok = ($thumb -eq $expected) -and ($sig.Status -eq 'Valid')
+            Write-Host ("{0,-40} {1,-12} {2}" -f $file.Name, $sig.Status, $thumb)
+            if (-not $ok) { $bad += $file.FullName }
+          }
+          if ($bad.Count) {
+            throw ("以下产物签名不正确（期望指纹 $expected）：`n" + ($bad -join "`n"))
+          }
+          Write-Host "全部 $($targets.Count) 个产物的签名校验通过"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
