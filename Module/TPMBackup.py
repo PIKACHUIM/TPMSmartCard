@@ -58,6 +58,19 @@ PnP 的**内存设备树**里并没有这个节点，因此卡片不会自己出
 注册表后会再调用 ``CM_Reenumerate_DevNode``（等价于设备管理器里的
 「扫描检测硬件改动」）让 PnP 重新枚举 ROOT 总线上的设备并启动驱动，从而无需
 重启即可看到卡片；若系统拒绝重新枚举，则只能重启系统后才可见。
+
+「卡片没有出现」的四种原因（还原日志里逐条给出结论）
+====================================================
+1. 注册表没真正写进去（``reg import`` 失败只在日志里可见，界面原先看不到）；
+2. PnP 没把设备节点建出来——``reg import`` 返回成功**不等于**设备存在，
+   用 ``devnode_state()``（``CM_Locate_DevNode``）作为硬判据；
+3. 设备属性里的「store 目录」绑定没写回：驱动不知道卡片数据在哪个目录，
+   读卡器会出现但显示无卡（``Card=No``）。注意 ``CM_Set_DevNode_Property`` 写
+   字符串属性时缓冲区长度**必须含结尾 NUL**，否则会被判 ``CR_INVALID_DATA``；
+4. 卡片数据与 TPM 密钥不匹配（换机 / 清过 TPM 时私钥无法恢复）。
+
+还原日志同时落盘到 ``%APPDATA%\\TPMSmartCard\\logs\\restore-<时间戳>.log``，
+并在界面弹窗里给出路径与逐条结论，用户反馈问题时可直接提供现场信息。
 """
 
 from __future__ import annotations
@@ -115,6 +128,40 @@ VSC_READER_KEY = r"HKLM\SOFTWARE\Microsoft\Cryptography\Calais\Readers"
 
 # TPM 卡所在服务
 CARD_SERVICE = "SCardSvr"
+
+# 重新创建设备节点所需参数：智能卡读卡器设备类 + 虚拟读卡器硬件 ID + 驱动 INF。
+# ROOT\SMARTCARDREADER 下的设备是 SetupDi 注册出来的（devcon install 的那套），
+# 光把 Enum 注册表项写回磁盘并不会让 PnP 创建它。
+VSC_READER_CLASS_GUID = "{50DD5230-BA8A-11D1-BF5D-0000F805F530}"
+VSC_READER_HARDWARE_ID = "VirtualSmartcardReader\\reader"
+VSC_READER_INF = os.path.join(SYSTEM_ROOT, "inf", "tpmvsc.inf")
+
+# setupapi / newdev 常量
+DIF_REGISTERDEVICE = 0x00000019
+SPDRP_HARDWAREID = 0x00000001
+SPDRP_FRIENDLYNAME = 0x0000000C
+INSTALLFLAG_FORCE = 0x00000001
+
+# TPM 密钥索引（PCP 密钥元数据，``*.PCPKEY``）的候选目录。
+#
+# 卡片私钥是 TPM 里的持久对象；而「KSP 密钥名 → TPM 对象」的映射**在操作系统侧**，
+# 既不在 store 目录里，也不在设备注册表里。少了这部分，换系统 / 重装后即使设备
+# 节点被建出来、store 也写回去了，驱动仍然打不开卡片密钥 —— 读卡器根本不会被
+# 发布到 PC/SC（``SCardListReaders`` 返回 SCARD_E_NO_READERS_AVAILABLE），
+# 系统还会顺手把 ``Calais\\Readers`` 里的读卡器条目清空。
+#
+# 实测（Win10 19044，同一台 VM 换系统还原）：卡片 ``keymaps`` 里记着 KSP 密钥名
+# （固定为 ``TPMVSC``），但本机 LocalService 的 PCPKSP 目录根本不存在，卡片起不来。
+VSC_PCP_DIRS = (
+    os.path.join(SYSTEM_ROOT, "ServiceProfiles", "LocalService", "AppData", "Local",
+                 "Microsoft", "Crypto", "PCPKSP"),
+    os.path.join(SYSTEM_ROOT, "System32", "config", "systemprofile", "AppData", "Local",
+                 "Microsoft", "Crypto", "PCPKSP"),
+    os.path.join(os.environ.get("ProgramData") or r"C:\ProgramData",
+                 "Microsoft", "Crypto", "PCPKSP"),
+)
+# 备份包内 TPM 密钥索引的目录名（``pcp/<索引>/<原相对路径>``）
+PCP_DIR = "pcp"
 
 # reg.exe 输出里提取 FriendlyName
 _FRIENDLY_RE = re.compile(r"^\s*FriendlyName\s+REG_SZ\s+(.*?)\s*$", re.MULTILINE)
@@ -417,6 +464,46 @@ def card_store_guid(uid=""):
     return tail if re.match(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-", tail) else ""
 
 
+def devnode_state(uid=""):
+    """读取卡片设备节点在 PnP 里的真实状态，返回 ``(state, text)``。
+
+    state 取值：
+
+        ``missing``  设备节点不存在（``reg import`` 只写了磁盘，PnP 还没创建它）
+        ``started``  设备节点已创建且驱动已启动（DN_STARTED）
+        ``present``  设备节点存在但驱动未启动
+        ``problem``  设备节点存在但报错（附问题码）
+        ``unknown``  查询失败（cfgmgr32 不可用等）
+
+    这是判断「注册表写回去了、设备到底有没有被创建出来」的硬判据，也是区分
+    「读卡器根本没出现」与「读卡器在、但卡片没加载」的前提。
+    """
+    uid = instance_id(uid)
+    if not uid:
+        return "unknown", "没有实例编号，无法查询设备节点"
+    try:
+        import ctypes
+        cfgmgr32 = ctypes.WinDLL("cfgmgr32.dll")
+    except Exception as err:
+        return "unknown", "cfgmgr32 不可用: %s" % err
+    node = ctypes.c_uint32(0)
+    if cfgmgr32.CM_Locate_DevNodeW(ctypes.byref(node),
+                                   "ROOT\\SMARTCARDREADER\\%s" % uid, 0) != 0:
+        return "missing", ("PnP 设备树里没有 ROOT\\SMARTCARDREADER\\%s "
+                           "（注册表项存在不代表设备已被创建）" % uid)
+    status = ctypes.c_uint32(0)
+    problem = ctypes.c_uint32(0)
+    if cfgmgr32.CM_Get_DevNode_Status(ctypes.byref(status), ctypes.byref(problem),
+                                      node, 0) != 0:
+        return "present", "设备节点存在，但状态查询失败"
+    # DN_STARTED = 0x8
+    if status.value & 0x00000008:
+        return "started", "设备节点已创建且驱动已启动"
+    if problem.value:
+        return "problem", "设备节点存在但报错（问题码 0x%X）" % problem.value
+    return "present", "设备节点存在但驱动未启动"
+
+
 def set_device_store_path(uid="", store_path=""):
     """把卡片的 store 路径写回设备属性，修复「设备实例 → store 目录」的绑定。
 
@@ -424,36 +511,42 @@ def set_device_store_path(uid="", store_path=""):
     保护的 ``Properties`` 子键。设备节点不存在时（例如系统重装后尚未重启）写不进去，
     调用方应提示用户重启系统后再执行一次还原。
 
-    :return: True 表示写入成功
+    :return: ``(ok, text)``：是否写入成功，以及可直接放进日志的说明
     """
     uid = instance_id(uid)
     store_path = str(store_path or "")
     if not uid or not store_path:
-        return False
+        return False, "缺少实例编号或 store 路径，未写回设备属性"
     try:
         import ctypes
         cfgmgr32 = ctypes.WinDLL("cfgmgr32.dll")
     except Exception as err:
-        print("Set Device Property Error:", err)
-        return False
+        return False, "cfgmgr32 不可用: %s" % err
     node = ctypes.c_uint32(0)
     if cfgmgr32.CM_Locate_DevNodeW(ctypes.byref(node),
                                    "ROOT\\SMARTCARDREADER\\%s" % uid, 0) != 0:
-        print("设备节点不存在，无法写回 store 路径")
-        return False
+        return False, ("设备节点 ROOT\\SMARTCARDREADER\\%s 还没有被 PnP 创建出来，"
+                       "现在写不进设备属性" % uid)
     if not store_path.endswith("\\"):
         store_path += "\\"
     raw = uuid.UUID(VSC_DEVPROP_SET).bytes_le + VSC_DEVPROP_STORE_PID.to_bytes(4, "little")
     prop = (ctypes.c_ubyte * len(raw)).from_buffer_copy(raw)
     encoded = store_path.encode("utf-16-le")
     buffer = ctypes.create_string_buffer(encoded + b"\x00\x00")
+    # DEVPROP_TYPE_STRING 的缓冲区长度必须**含结尾的 NUL**：少 2 字节会被判为
+    # CR_INVALID_DATA(0x1F) 而写入失败；即使侥幸写进去，没有终止符的字符串也会
+    # 被驱动读成乱码路径，卡片依然起不来。
     code = cfgmgr32.CM_Set_DevNode_PropertyW(node, ctypes.byref(prop),
                                              DEVPROP_TYPE_STRING, buffer,
-                                             ctypes.c_uint32(len(encoded)), 0)
+                                             ctypes.c_uint32(len(encoded) + 2), 0)
     if code != 0:
-        print("写回设备属性失败: code=%s" % code)
-        return False
-    return True
+        return False, ("写回设备属性失败: CONFIGRET=%s"
+                       "（0x1F=数据无效、0x33=权限不足）" % code)
+    # 回读校验：写入接口返回成功不等于驱动能读到正确路径
+    back = device_store_path(uid)
+    if back.replace("/", "\\").rstrip("\\").lower() != store_path.rstrip("\\").lower():
+        return False, "设备属性写入后回读不一致（读到 %r），绑定可能未生效" % back
+    return True, "属性回读校验通过"
 
 
 def list_cards():
@@ -696,6 +789,25 @@ def create_backup(dest_path, name="", uid=""):
     else:
         log.append("卡片数据目录不存在，跳过文件备份: %s" % VSC_STORE_DIR)
 
+    # ---- 1b. TPM 密钥索引（PCP 密钥元数据）-------------------------------- #
+    # 换系统 / 重装后卡片能不能起来，取决于这份「KSP 密钥名 → TPM 对象」的索引；
+    # 它不在 store 目录里，必须单独收进备份。
+    pcp = []
+    for index, folder in enumerate(VSC_PCP_DIRS):
+        if not os.path.isdir(folder):
+            log.append("TPM 密钥索引目录不存在（跳过）: %s" % folder)
+            continue
+        try:
+            picked = _collect_files(folder, "%s/%d" % (PCP_DIR, index))
+        except (PermissionError, OSError) as err:
+            log.append("读取 TPM 密钥索引目录失败（跳过）: %s (%s)" % (folder, err))
+            continue
+        copied.extend(picked)
+        pcp.append({"index": index, "dir": folder, "files": len(picked)})
+        log.append("已备份 TPM 密钥索引: %s（%d 个文件）" % (folder, len(picked)))
+    if not pcp:
+        log.append("警告: 没有备份到任何 TPM 密钥索引，换系统 / 重装后卡片将无法启动")
+
     # 数据目录清单（诊断用，便于确认目录内部布局）
     index_lines = store_index()
 
@@ -758,11 +870,15 @@ def create_backup(dest_path, name="", uid=""):
                     "index": "store-index.txt",
                 },
                 "registry": registry,
+                "pcp": pcp,
                 "files": [{"path": rel, "size": size, "sha256": sha}
                           for rel, _, size, sha in copied],
                 "notes": [
-                    "备份只包含卡片数据目录（Tpm）与设备注册表，不含 TPM 内部的密钥材料；"
-                    "卡片私钥由 TPM 保护，磁盘上只有 TPM 封装后的数据。",
+                    "备份包含三部分：卡片数据目录（Tpm）、设备注册表、TPM 密钥索引"
+                    "（PCPKSP 下的 *.PCPKEY）；不含 TPM 内部的密钥材料。",
+                    "卡片私钥由 TPM 保护，磁盘上只有 TPM 封装后的数据；"
+                    "TPM 密钥索引只记录「KSP 密钥名 → TPM 对象」的映射，"
+                    "少了它换系统 / 重装后卡片起不来（读卡器都不会出现）。",
                     "仅在「同一台电脑 + 同一 TPM（未清除）」上可以还原；换机、清除 TPM、"
                     "删除卡片后再还原都可能无法恢复私钥，请同时保留卡片名称、PIN、PUK 与管理密码。",
                 ] + ([warning] if warning else []),
@@ -945,7 +1061,126 @@ def _service(action):
     return "智能卡服务 %s %s: %s" % (CARD_SERVICE, action, detail)
 
 
-def _rescan_devices(uid=""):
+def _wide_multi(text):
+    """REG_MULTI_SZ 形态的 UTF-16LE 缓冲区（以双 NUL 结尾）。"""
+    return (str(text) + "\0\0").encode("utf-16-le")
+
+
+def drop_orphan_enum_key(uid=""):
+    """删掉「只存在于注册表、没有设备节点」的孤儿 Enum 项（先导出留底）。
+
+    重建之前必须先删：``SetupDiCreateDeviceInfo`` 遇到已存在的实例会返回
+    ``SPAPI_E_DEVINST_ALREADY_EXISTS(0xE0000205)``。项里除了设备描述之外都是
+    INF 能重新生成的，卡片数据在 store 目录里，不受影响。
+
+    :return: ``(ok, text)``
+    """
+    uid = instance_id(uid)
+    if not uid:
+        return False, "缺少实例编号，无法清理孤儿注册表项"
+    key = "%s\\%s" % (VSC_ENUM_KEY, uid)
+    code, _ = run_command(["reg", "query", key])
+    if code != 0:
+        return True, "Enum 项 %s 不存在，无需清理" % key
+    keep = os.path.join(log_dir(), "enum-orphan-%s.reg" % uid)
+    run_command(["reg", "export", key, keep, "/y"])
+    code, output = run_command(["reg", "delete", key, "/f"])
+    if code != 0:
+        return False, ("删除孤儿 Enum 项失败（%s）: %s"
+                       % (key, output.strip().splitlines()[0] if output.strip() else code))
+    return True, "已删除没有设备节点的 Enum 项 %s（原内容留底 %s）" % (key, keep)
+
+
+def register_card_device(uid="", friendly_name=""):
+    """用 Windows 自己的设备注册接口把 ``ROOT\\SMARTCARDREADER\\<uid>`` 设备节点建出来。
+
+    为什么必须走到这里：``reg import`` 只是把 Enum 项写回了磁盘，PnP 的**内存设备树**
+    里并没有这个节点。实测（Win10 19044，同机换系统还原的场景）仅靠
+    ``CM_Reenumerate_DevNode`` 或 ``pnputil /scan-devices`` 都**不会**把它创建出来，
+    于是读卡器永远不出现。创建 ROOT 设备的正规做法就是 ``devcon install`` 用的那套：
+
+    1. ``SetupDiCreateDeviceInfo``（显式指定实例号，保证读卡器名 ``Microsoft Virtual
+       Smart Card <n>`` 与备份里的实例一致）
+    2. ``SetupDiSetDeviceRegistryProperty`` 写 HardwareID（可选 FriendlyName）
+    3. ``SetupDiCallClassInstaller(DIF_REGISTERDEVICE)``
+    4. ``UpdateDriverForPlugAndPlayDevices`` 用 ``%SystemRoot%\\inf\\tpmvsc.inf`` 装驱动
+
+    这样会顺带生成 ``Driver``、``Device Parameters\\WUDF\\DriverList``、``Properties``
+    等键（``reg import`` 带不回来的那部分），驱动起来后即可用 ``set_device_store_path``
+    把 store 绑定写回。
+
+    :return: ``(ok, text)``
+    """
+    uid = instance_id(uid)
+    if not uid:
+        return False, "缺少实例编号，无法注册设备"
+    try:
+        import ctypes
+        setupapi = ctypes.WinDLL("setupapi.dll", use_last_error=True)
+        newdev = ctypes.WinDLL("newdev.dll", use_last_error=True)
+    except Exception as err:
+        return False, "setupapi/newdev 不可用: %s" % err
+
+    class _GUID(ctypes.Structure):
+        _fields_ = [("Data1", ctypes.c_uint32), ("Data2", ctypes.c_uint16),
+                    ("Data3", ctypes.c_uint16), ("Data4", ctypes.c_ubyte * 8)]
+
+    class _SP_DEVINFO_DATA(ctypes.Structure):
+        _fields_ = [("cbSize", ctypes.c_uint32), ("ClassGuid", _GUID),
+                    ("DevInst", ctypes.c_uint32), ("Reserved", ctypes.c_void_p)]
+
+    def guid_of(text):
+        value = uuid.UUID(str(text).strip("{}"))
+        guid = _GUID()
+        guid.Data1 = value.time_low
+        guid.Data2 = value.time_mid
+        guid.Data3 = value.time_hi_version
+        for index, byte in enumerate(value.bytes[8:]):
+            guid.Data4[index] = byte
+        return guid
+
+    def failed(message):
+        return "%s（错误码 %s）" % (message, ctypes.get_last_error())
+
+    setupapi.SetupDiCreateDeviceInfoList.restype = ctypes.c_void_p
+    class_guid = guid_of(VSC_READER_CLASS_GUID)
+    device_name = "ROOT\\SMARTCARDREADER\\%s" % uid
+    info = setupapi.SetupDiCreateDeviceInfoList(ctypes.byref(class_guid), None)
+    if not info or info == ctypes.c_void_p(-1).value:
+        return False, failed("SetupDiCreateDeviceInfoList 失败")
+    try:
+        data = _SP_DEVINFO_DATA()
+        data.cbSize = ctypes.sizeof(_SP_DEVINFO_DATA)
+        if not setupapi.SetupDiCreateDeviceInfoW(info, device_name, ctypes.byref(class_guid),
+                                                 friendly_name or None, None, 0,
+                                                 ctypes.byref(data)):
+            return False, failed("SetupDiCreateDeviceInfoW(%s) 失败" % device_name)
+        hardware = _wide_multi(VSC_READER_HARDWARE_ID)
+        if not setupapi.SetupDiSetDeviceRegistryPropertyW(
+                info, ctypes.byref(data), SPDRP_HARDWAREID, hardware, len(hardware)):
+            return False, failed("写入 HardwareID 失败")
+        if friendly_name:
+            label = _wide_multi(friendly_name)
+            setupapi.SetupDiSetDeviceRegistryPropertyW(
+                info, ctypes.byref(data), SPDRP_FRIENDLYNAME, label, len(label))
+        if not setupapi.SetupDiCallClassInstaller(DIF_REGISTERDEVICE, info, ctypes.byref(data)):
+            return False, failed("DIF_REGISTERDEVICE 失败")
+        reboot = ctypes.c_int(0)
+        if not newdev.UpdateDriverForPlugAndPlayDevicesW(None, VSC_READER_HARDWARE_ID,
+                                                         VSC_READER_INF, INSTALLFLAG_FORCE,
+                                                         ctypes.byref(reboot)):
+            return False, failed("UpdateDriverForPlugAndPlayDevices 失败")
+        # SPDRP_FRIENDLYNAME 写的是 PnP 属性存储，不会生成老式 FriendlyName 的
+        # REG_SZ；卡片名要能被 read_card_info / 界面读出来，得显式补一个
+        if friendly_name:
+            run_command(["reg", "add", "%s\\%s" % (VSC_ENUM_KEY, uid),
+                         "/v", "FriendlyName", "/t", "REG_SZ", "/d", friendly_name, "/f"])
+        return True, "已用 SetupDi 注册设备 %s（需要重启=%s）" % (device_name, bool(reboot.value))
+    finally:
+        setupapi.SetupDiDestroyDeviceInfoList(info)
+
+
+def _rescan_devices(uid="", attempts=3):
     """让 PnP 重新枚举设备，使还原后的虚拟智能卡无需重启即可出现。
 
     还原只是把 ``Enum\\ROOT\\SMARTCARDREADER\\<uid>`` 注册表项写了回去，
@@ -953,10 +1188,20 @@ def _rescan_devices(uid=""):
     这张卡（等价于设备管理器里的「扫描检测硬件改动」），否则要重启系统才能在
     读卡器列表里看到它。
 
-    返回日志行列表，并附带设备节点的实际状态。
+    依次做三件事，并且**每一步之后都复核设备节点是否真的出现了**（``reg import``
+    返回成功并不代表设备已被创建）：
+
+    1. ``CM_Reenumerate_DevNode(设备树根节点)``，最多重试 ``attempts`` 次；
+    2. 第一次重试后仍没节点时，用 ``pnputil /scan-devices`` 兜底（部分环境下
+       上一条不会重新创建仅存在于注册表里的 ROOT 设备）；
+    3. 节点出现后，再强制重新枚举该节点一次，让驱动重新加载并重新读取卡片数据
+       （否则驱动里可能还停留在「卡片已被删除」的旧状态，读卡器会显示无卡）。
+
+    返回日志行列表。
     """
     import ctypes
 
+    uid = instance_id(uid)
     try:
         cfgmgr32 = ctypes.WinDLL("cfgmgr32.dll")
     except Exception as err:
@@ -994,14 +1239,27 @@ def _rescan_devices(uid=""):
         return ["定位设备树根节点失败，已跳过设备重新枚举"]
 
     log = []
-    code = cfgmgr32.CM_Reenumerate_DevNode(root, sync)
-    log.append("重新枚举设备（等效于「扫描检测硬件改动」）: %s" %
-               ("成功" if code == 0 else "失败(code=%s)" % code))
+    node = None
+    for attempt in range(1, attempts + 1):
+        code = cfgmgr32.CM_Reenumerate_DevNode(root, sync)
+        log.append("第 %d 次重新枚举设备（等效于「扫描检测硬件改动」）: %s" %
+                   (attempt, "成功" if code == 0 else "失败(code=%s)" % code))
+        if not uid:
+            return log
+        node = locate("ROOT\\SMARTCARDREADER\\%s" % uid)
+        if node is not None:
+            break
+        if attempt == 1:
+            # 兜底扫描：Win10 1903+ 的 pnputil 与上面这条 API 走的不是同一条路径
+            code, output = run_command(["pnputil", "/scan-devices"], timeout=120)
+            detail = "成功" if code == 0 else (output.splitlines()[0] if output else str(code))
+            log.append("pnputil /scan-devices 兜底扫描: %s" % detail)
+        time.sleep(1)
 
-    uid = instance_id(uid)
-    node = locate("ROOT\\SMARTCARDREADER\\%s" % uid) if uid else None
     if node is None:
-        log.append("卡片设备尚未被系统创建，需重启系统后才会出现在列表中")
+        log.append("PnP 仍未创建 ROOT\\SMARTCARDREADER\\%s：设备节点建不出来时，"
+                   "只能等重启系统后由系统重新枚举，重启后再执行一次还原即可完成绑定"
+                   % uid)
         return log
     # 设备节点已存在也要重新枚举一次：让驱动重新加载并重新读取卡片数据，
     # 否则驱动里可能还停留在「卡片已被删除」的旧状态，读卡器会显示无卡。
@@ -1009,7 +1267,8 @@ def _rescan_devices(uid=""):
     if wait_started(node, 8):
         log.append("卡片设备已就绪: ROOT\\SMARTCARDREADER\\%s" % uid)
     else:
-        log.append("卡片设备已创建但未启动，需重启系统后才会出现在列表中")
+        state, text = devnode_state(uid)
+        log.append("卡片设备状态: %s（%s）" % (state, text))
     return log
 
 
@@ -1057,21 +1316,27 @@ def _card_key_objects(uid=""):
     return "卡片私钥对象: %s" % "; ".join(keys[:3])
 
 
-def _reader_state(uid=""):
-    """报告读卡器 / 卡片当前是否已被系统识别（与界面读卡器列表同一来源：OpenSC）。
+def reader_state(uid=""):
+    """报告读卡器 / 卡片当前是否已被系统识别，返回 ``(state, text)``。
 
-    需要智能卡服务在运行，因此放在还原流程最后调用；输出用于区分
-    「设备没建出来」与「设备在、但卡片没加载」两种情况。
+    与界面读卡器列表同一来源（OpenSC），因此需要智能卡服务在运行。state 取值：
+
+        ``card``        读卡器已出现且卡片可识别（Card=Yes）
+        ``reader_only`` 读卡器已出现但没有卡片（Card=No）
+        ``absent``      读卡器尚未出现
+        ``unknown``     无法判定（缺 OpenSC 或命令调用失败）
+
+    用于区分「设备没建出来」「设备在、但卡片没加载」两种情况。
     """
     uid = instance_id(uid)
     if not uid:
-        return "读卡器状态未知：备份里没有实例编号"
+        return "unknown", "读卡器状态未知：备份里没有实例编号"
     tool = _opensc_tool("opensc-tool.exe")
     if not tool:
-        return "读卡器状态未知：未找到 OpenSC\\opensc-tool.exe"
+        return "unknown", "读卡器状态未知：未找到 OpenSC\\opensc-tool.exe"
     code, output = run_command([tool, "--list-readers"], timeout=60)
     if code != 0 and not output:
-        return "读卡器状态未知：调用 %s 失败(%s)" % (tool, code)
+        return "unknown", "读卡器状态未知：调用 %s 失败(%s)" % (tool, code)
     name = "Microsoft Virtual Smart Card %d" % int(uid)
     pattern = re.compile(re.escape(name) + r"(?!\d)")
     for line in output.splitlines():
@@ -1081,11 +1346,198 @@ def _reader_state(uid=""):
         # pcsc 输出中卡片列固定为 Yes / No，位于读卡器名之前
         flag = line[:matched.start()].rstrip().lower()
         if flag.endswith("yes"):
-            return "读卡器已出现且卡片可识别: %s" % name
+            return "card", "读卡器已出现且卡片可识别: %s" % name
         if flag.endswith("no"):
-            return "读卡器已出现但没有卡片: %s（设备或卡片数据未正确加载）" % name
-        return "读卡器已出现: %s" % name
-    return "读卡器尚未出现: %s" % name
+            return "reader_only", "读卡器已出现但没有卡片: %s（设备或卡片数据未正确加载）" % name
+        return "reader_only", "读卡器已出现: %s（无法确认卡片是否加载）" % name
+    return "absent", "读卡器尚未出现: %s" % name
+
+
+def _reader_state(uid=""):
+    """兼容接口：等价于 ``reader_state(uid)[1]``，只返回文本。"""
+    return reader_state(uid)[1]
+
+
+def pcp_dir_of(rel):
+    """``pcp/<索引>/...`` → 本机对应的 TPM 密钥索引目录；越界或格式不对返回空串。"""
+    parts = str(rel or "").replace("\\", "/").split("/")
+    if len(parts) < 3 or parts[0] != PCP_DIR:
+        return ""
+    try:
+        index = int(parts[1])
+    except ValueError:
+        return ""
+    if not 0 <= index < len(VSC_PCP_DIRS):
+        return ""
+    return VSC_PCP_DIRS[index]
+
+
+def _restore_pcp_entry(reader, rel, item, log):
+    """还原一个 TPM 密钥索引文件；已存在的同名文件不覆盖。
+
+    换系统 / 重装场景下这张卡在**本机**根本没有索引，所以正常是"新建"；一旦同名
+    文件已存在，说明本机已有同名 TPM 密钥索引，贸然覆盖可能弄坏本机其它 TPM 密钥
+    （例如 Windows AIK），因此保留原样并记录。
+
+    :return: 1 表示写入成功，0 表示跳过
+    """
+    folder = pcp_dir_of(rel)
+    if not folder:
+        log.append("跳过无法识别的 TPM 密钥索引条目: %s" % rel)
+        return 0
+    inner = "/".join(rel.replace("\\", "/").split("/")[2:])
+    if not inner:
+        return 0
+    target = os.path.join(folder, *inner.split("/"))
+    if os.path.exists(target):
+        log.append("TPM 密钥索引已存在，按原样保留（未覆盖）: %s" % target)
+        return 0
+    try:
+        data = reader.read(rel)
+    except (KeyError, OSError) as err:
+        log.append("读取备份里的 TPM 密钥索引失败，已跳过: %s (%s)" % (rel, err))
+        return 0
+    expect = str(item.get("sha256") or "")
+    if expect and hashlib.sha256(data).hexdigest() != expect:
+        log.append("TPM 密钥索引校验不通过，已跳过: %s" % rel)
+        return 0
+    try:
+        # 复用卡片数据目录那套写入逻辑：创建父目录、去只读、必要时接管 ACL
+        _write_data(data, target, log)
+    except BackupError as err:
+        log.append("写入 TPM 密钥索引失败，已跳过: %s (%s)" % (target, err))
+        return 0
+    log.append("已还原 TPM 密钥索引: %s" % target)
+    return 1
+
+
+def pcp_index_lines():
+    """列出本机各候选目录下的 TPM 密钥索引文件（诊断用）。"""
+    lines = []
+    for index, folder in enumerate(VSC_PCP_DIRS):
+        if not os.path.isdir(folder):
+            lines.append("TPM 密钥索引目录[%d] 不存在: %s" % (index, folder))
+            continue
+        names = []
+        for root, _, files in os.walk(folder):
+            for name in sorted(files):
+                if name.upper().endswith(".PCPKEY"):
+                    names.append(os.path.relpath(os.path.join(root, name), folder))
+        lines.append("TPM 密钥索引目录[%d] %s: %d 个 .PCPKEY %s"
+                     % (index, folder, len(names), ", ".join(names[:6])))
+    return lines
+
+
+def _binding_ok(bound, guid):
+    """判断设备当前的 store 绑定是否可用：绑定的目录必须真实存在，且（已知 GUID 时）
+    必须就是备份里这张卡的 GUID。
+
+    换系统（双系统 / 重装）后，注册表里可能残留旧的 store 路径（例如指向另一个
+    系统盘的 ``...\\SmartCard\\Tpm\\<旧GUID>``），这时不能认为"已绑定"就跳过修复。
+    """
+    bound = str(bound or "")
+    if not bound:
+        return False
+    tail = bound.replace("/", "\\").rstrip("\\").split("\\")[-1].lower()
+    if guid and tail != str(guid).lower():
+        return False
+    return os.path.isdir(bound)
+
+
+def _service_state(name=CARD_SERVICE):
+    """读服务当前状态（``sc query``），失败返回空串。"""
+    code, output = run_command(["sc", "query", name])
+    matched = re.search(r"^\s*STATE\s*:\s*\d+\s+(\S+)", output, re.MULTILINE)
+    return matched.group(1) if matched else ""
+
+
+def log_dir():
+    """还原 / 备份日志目录：``%APPDATA%\\TPMSmartCard\\logs``（与语言设置同一处）。
+
+    装在 Program Files 下的程序目录通常不可写，用户目录才是稳妥位置。
+    """
+    base = os.environ.get("APPDATA")
+    if not base:
+        base = os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "TPMSmartCard", "logs")
+
+
+def save_log(lines, tag="restore"):
+    """把日志行写入 ``%APPDATA%\\TPMSmartCard\\logs\\<tag>-<时间戳>.log``。
+
+    GUI 程序没有控制台，``print`` 出来的还原 / 备份日志用户根本看不到，
+    出问题时无法定位是「注册表没写进去」「设备没建出来」还是「绑定没写回」。
+    落盘后界面把路径一并给出，用户可以直接把文件发出来。
+    返回文件路径；写入失败返回空串。
+    """
+    try:
+        folder = log_dir()
+        os.makedirs(folder, exist_ok=True)
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        path = os.path.join(folder, "%s-%s.log" % (tag, stamp))
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(str(item) for item in lines))
+            handle.write("\n")
+        return path
+    except OSError as err:
+        print("Save Log Error:", err)
+        return ""
+
+
+def _diagnostics(uid="", guid=""):
+    """还原后的现场诊断：注册表项、数据目录、服务状态与目录清单。
+
+    只做只读查询，任何一步失败都输出结论而不是抛异常——诊断本身不能打断还原。
+    """
+    uid = instance_id(uid)
+    lines = ["---- 现场诊断 ----"]
+    if uid:
+        enum_key = "%s\\%s" % (VSC_ENUM_KEY, uid)
+        code, _ = run_command(["reg", "query", enum_key])
+        lines.append("设备枚举注册表项 %s: %s" % (enum_key, "存在" if code == 0 else "不存在"))
+        reader_key = "%s\\Microsoft Virtual Smart Card %d" % (VSC_READER_KEY, int(uid))
+        code, _ = run_command(["reg", "query", reader_key])
+        lines.append("读卡器注册项 %s: %s" % (reader_key, "存在" if code == 0 else "不存在"))
+    else:
+        lines.append("备份里没有实例编号，跳过注册表项检查")
+    lines.append("卡片数据目录 %s: %s"
+                 % (VSC_STORE_DIR, {"ok": "可访问", "missing": "不存在",
+                                    "denied": "无法访问（需要管理员权限）"}[store_state()]))
+    if guid:
+        target = os.path.join(VSC_STORE_DIR, guid)
+        if os.path.isdir(target):
+            names = sorted(os.listdir(target))
+            lines.append("卡片数据目录 %s: 存在，含 %d 个条目 %s"
+                         % (target, len(names), ", ".join(names[:8])))
+        else:
+            lines.append("卡片数据目录 %s: 不存在（备份未写进去）" % target)
+    lines.append("智能卡服务 %s: %s" % (CARD_SERVICE, _service_state() or "查询失败"))
+    state, text = devnode_state(uid)
+    lines.append("设备节点 ROOT\\SMARTCARDREADER\\%s: %s（%s）" % (uid, state, text))
+    lines.append("设备绑定的 store 路径: %s" % (device_store_path(uid) or "（空）"))
+    lines.extend(pcp_index_lines())
+    return lines
+
+
+def _restore_verdict(dev_state, reader_code_, bound, guid):
+    """把设备节点状态 / 读卡器状态 / store 绑定合成一句可执行的结论。"""
+    if reader_code_ == "card":
+        return "成功：读卡器已出现且卡片可识别，可以直接使用（建议用 PIN 做一次签名验证私钥）"
+    if dev_state == "missing":
+        return ("设备节点没能建出来：注册表已写回，但系统没有把它枚举成设备"
+                "（工具已尝试用 SetupDi 重建，结果见日志）。请把日志发出来定位；"
+                "重启系统后再执行一次还原也可能完成")
+    if reader_code_ == "reader_only":
+        if not _binding_ok(bound, guid):
+            return ("读卡器已出现但卡片没加载：设备到 store 目录的绑定没有生效。"
+                    "重启系统后再执行一次还原即可完成绑定")
+        return ("读卡器已出现但卡片没加载：store 绑定正常，问题在卡片数据或 TPM 密钥。"
+                "请确认备份与 TPM 均来自同一台机器（换机 / 清过 TPM 时私钥无法恢复）")
+    if reader_code_ == "absent":
+        return ("读卡器未出现（设备节点状态 %s）：设备建出来了但读卡器没注册到 PC/SC。"
+                "最常见原因是本机缺少该卡片的 TPM 密钥索引 —— 换系统 / 重装时需要备份里"
+                "带上它（见诊断里的「TPM 密钥索引目录」）。请把日志发出来定位" % dev_state)
+    return "无法判定结果，请查看下方日志与诊断信息"
 
 
 def restore_backup(package, force=False):
@@ -1093,8 +1545,10 @@ def restore_backup(package, force=False):
 
     :param package: ``.tsb`` 备份文件路径
     :param force: TPM 指纹与本机不一致时是否强制还原（界面确认后传 True）
-    :return: 报告字典 ``{"card", "instance", "file_count", "reg_count",
-             "stale", "tpm_state", "log"}``
+    :return: 报告字典 ``{"card", "instance", "file_count", "reg_count", "stale",
+             "tpm_state", "key_state", "dev_state", "reader_state", "bound",
+             "verdict", "log_file", "log"}``。其中 ``log`` 是「结论 + 逐条日志 +
+             现场诊断」的完整列表（界面直接展示），并已落盘到 ``log_file``。
     :raises BackupError: 权限不足 / 备份无效 / TPM 不一致且未强制 / 写入失败
     """
     if not is_admin():
@@ -1122,6 +1576,7 @@ def restore_backup(package, force=False):
             # 因此固定还原到本机数据目录，避免备份记录的是别的机器路径。
             stale = []
             file_count = 0
+            pcp_count = 0
             entries = manifest.get("files") or []
             if entries:
                 if store_state() == "denied":
@@ -1129,6 +1584,10 @@ def restore_backup(package, force=False):
                                       % VSC_STORE_DIR)
                 for item in entries:
                     rel = str(item.get("path") or "").replace("\\", "/")
+                    if rel.startswith(PCP_DIR + "/"):
+                        # TPM 密钥索引：换系统 / 重装后卡片能不能起来靠它
+                        pcp_count += _restore_pcp_entry(reader, rel, item, log)
+                        continue
                     if not rel.startswith(FILES_DIR + "/"):
                         continue
                     inner = rel[len(FILES_DIR) + 1:]
@@ -1142,6 +1601,8 @@ def restore_backup(package, force=False):
                     _write_data(data, target, log)
                     file_count += 1
                 log.append("已还原卡片数据文件: %d 个" % file_count)
+                if pcp_count:
+                    log.append("已还原 TPM 密钥索引文件: %d 个" % pcp_count)
             else:
                 log.append("备份中没有卡片数据文件，仅还原注册表")
 
@@ -1171,41 +1632,80 @@ def restore_backup(package, force=False):
             log.append(_service("start"))
 
     # ---- 4. 让 PnP 重新枚举设备：注册表项只是写回了磁盘，PnP 的内存设备树上
-    # 还没有这个节点，必须重新枚举（扫描检测硬件改动）卡片才会真正出现 ------ #
+    # 还没有这个节点，必须先重新枚举（扫描检测硬件改动） -------------------- #
     log.extend(_rescan_devices(uid))
+
+    # ---- 4b. 重新枚举建不出来就自己建：实测（同机换系统还原）光有 Enum 项，
+    # CM_Reenumerate_DevNode / pnputil /scan-devices 都不会创建该设备节点，
+    # 读卡器于是永远不出现；改用 SetupDi 设备注册接口重建（devcon install 那套）-- #
+    dev_state, dev_text = devnode_state(uid)
+    if dev_state == "missing":
+        log.append("PnP 没有创建 ROOT\\SMARTCARDREADER\\%s 设备节点（%s），"
+                   "改用 SetupDi 设备注册接口重建" % (uid, dev_text))
+        cleaned, text = drop_orphan_enum_key(uid)
+        log.append(text)
+        if cleaned:
+            made, text = register_card_device(uid, card_name)
+            log.append(text)
+            if made:
+                log.extend(_rescan_devices(uid))
+                dev_state, dev_text = devnode_state(uid)
+                log.append("重建后设备节点状态: %s（%s）" % (dev_state, dev_text))
+    else:
+        log.append("设备节点状态: %s（%s）" % (dev_state, dev_text))
 
     # ---- 5. 设备就绪后再重启一次服务，刷新读卡器列表 ---------------------- #
     log.append(_service("stop"))
     log.append(_service("start"))
 
     # ---- 6. 报告读卡器 / 卡片的真实状态（与界面同一来源） ------------------ #
-    log.append(_reader_state(uid))
+    reader_code, reader_text = reader_state(uid)
+    log.append(reader_text)
 
     # ---- 7. 修复「设备实例 → store 目录」绑定 ------------------------------ #
     # 该绑定是设备属性（存在 Enum 下受 ACL 保护的 Properties 子键里），注册表备份
     # 里通常没有它；设备节点已存在时可以用 PnP 属性接口直接写回，写完让驱动重新加载。
     guid = str((manifest.get("store") or {}).get("guid") or "") or card_store_guid(uid)
     bound = device_store_path(uid)
-    if bound:
+    if _binding_ok(bound, guid):
         log.append("设备已绑定 store: %s" % bound)
-    elif guid:
-        target = os.path.join(VSC_STORE_DIR, guid) + os.sep
-        if set_device_store_path(uid, target):
-            log.append("已写回设备属性（store 路径）: %s" % target)
-            log.extend(_rescan_devices(uid))
-            log.append(_reader_state(uid))
-        else:
-            log.append("设备节点还不存在，无法写回 store 路径；"
-                       "重启系统后再执行一次还原即可完成绑定")
-    else:
+    elif not guid:
         log.append("备份里没有 store GUID，跳过设备绑定修复")
+    else:
+        target = os.path.join(VSC_STORE_DIR, guid) + os.sep
+        if bound:
+            # 换系统后注册表里可能残留旧路径，绑定到别的系统盘或别的卡时必须纠正
+            log.append("设备当前绑定的 store 不是备份里的这张卡（%s），按备份写回: %s"
+                       % (bound, target))
+        ok, text = set_device_store_path(uid, target)
+        if ok:
+            log.append("已写回设备属性（store 路径）: %s（%s）" % (target, text))
+            log.extend(_rescan_devices(uid))
+            reader_code, reader_text = reader_state(uid)
+            log.append(reader_text)
+        else:
+            log.append("未能写回设备属性（store 路径）: %s" % text)
+    bound = device_store_path(uid)
 
     # ---- 8. 自检：卡片上的私钥对象（数据层）+ TPM 密钥（信息，不下负面断言） -- #
     log.append(_card_key_objects(uid))
     key_state, key_text = tpm_key_report(guid)
     log.append("TPM 密钥自检: %s" % key_text)
 
-    print("\n".join(log))
+    # ---- 9. 结论 + 现场诊断 + 日志落盘 ------------------------------------ #
+    # 界面是 GUI，没有控制台；只弹一句「已完成」的话，用户完全不知道失败在哪一步
+    # （注册表没写进去 / 设备没建出来 / 绑定没写回 / 卡片没加载），因此这里把结论、
+    # 逐条日志与诊断信息一起返回，并落盘成文件。
+    dev_state, dev_text = devnode_state(uid)
+    log.append("设备节点状态: %s（%s）" % (dev_state, dev_text))
+    verdict = _restore_verdict(dev_state, reader_code, bound, guid)
+    report_log = ["还原结论: %s" % verdict, "备份文件: %s" % os.path.abspath(str(package))]
+    report_log.extend(log)
+    report_log.extend(_diagnostics(uid, guid))
+    log_file = save_log(report_log, tag="restore")
+    report_log.append("还原日志文件: %s" % (log_file or "（写入失败）"))
+
+    print("\n".join(report_log))
     return {
         "card": card_name,
         "instance": uid,
@@ -1214,7 +1714,12 @@ def restore_backup(package, force=False):
         "stale": stale,
         "tpm_state": tpm_state,
         "key_state": key_state,
-        "log": log,
+        "dev_state": dev_state,
+        "reader_state": reader_code,
+        "bound": bound,
+        "verdict": verdict,
+        "log_file": log_file,
+        "log": report_log,
     }
 
 

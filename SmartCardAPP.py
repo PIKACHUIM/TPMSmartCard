@@ -78,6 +78,17 @@ LABEL_WIDTH = 60               # 详情标签列宽度
 LABEL_GAP = 5                  # 标签与取值之间的间距
 LABEL_ROW_HEIGHT = 20          # 详情标签行高
 
+# 还原结果弹窗最多展示多少字符：完整日志同时落盘到文件，弹窗只保证可读
+RESTORE_DIALOG_LIMIT = 7000
+
+
+def fit_dialog_text(text, limit=RESTORE_DIALOG_LIMIT):
+    """裁剪过长的提示文本：Tk 消息框在超长文本下排版很差，超出部分给出日志文件提示。"""
+    text = str(text or "")
+    if len(text) <= limit:
+        return text
+    return "%s\n\n…（日志过长已截断，完整内容见上面的日志文件路径）" % text[:limit]
+
 
 class SmartCardAPP:
     def __init__(self):
@@ -1031,7 +1042,15 @@ class SmartCardAPP:
                                            str(report["reg_count"]))
         if report.get("warning"):
             result += "\n\n" + report["warning"]
-        messagebox.showinfo(self.i18n("msg_bak_title"), result)
+        # 备份日志一并展示并落盘：清单里的 store.guid 与备份范围（单卡 / 整目录）
+        # 直接决定还原时能否把「设备 → store 目录」绑定写回去，出问题要看得到。
+        detail = report.get("log") or []
+        if detail:
+            log_file = TPMBackup.save_log(detail, tag="backup")
+            result += "\n\n" + "\n".join(str(line) for line in detail)
+            if log_file:
+                result += "\n\n备份日志文件: %s" % log_file
+        messagebox.showinfo(self.i18n("msg_bak_title"), fit_dialog_text(result))
         return None
 
     def card_restore(self, package=None):
@@ -1092,7 +1111,13 @@ class SmartCardAPP:
                                             str(report["reg_count"]))
         if report.get("stale"):
             result += "\n" + self.i18n("msg_rec_stale") % str(len(report["stale"]))
-        messagebox.showinfo(self.i18n("msg_rec_title"), result)
+        # 还原的结论、逐条日志与现场诊断一并展示：GUI 下没有控制台，只提示
+        # 「已完成」的话，出问题时（注册表没写进去 / 设备没建出来 / 绑定没写回 /
+        # 卡片没加载）用户无从判断，也无法反馈。完整日志同时落盘到 log_file。
+        detail = report.get("log") or []
+        if detail:
+            result += "\n\n" + "\n".join(str(line) for line in detail)
+        messagebox.showinfo(self.i18n("msg_rec_title"), fit_dialog_text(result))
         self.load_status()
         return None
 

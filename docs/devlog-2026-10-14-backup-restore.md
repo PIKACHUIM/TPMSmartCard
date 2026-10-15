@@ -208,3 +208,127 @@ foreach ($n in @("<卡片 GUID>")) {
 - 备份是「TPM 密文 + 设备注册表」的快照，**不是密钥备份**；对 BitLocker/EFS 这类依赖卡上私钥的数据，恢复方案必须是数据层的恢复密钥（BitLocker 恢复密钥、EFS DRA），不是卡。
 - 同一台机器 + 同一颗 TPM（未清除）是硬前提；清除 TPM / 更换 TPM / 更换主板后，`.tsb` 无法救回私钥。
 - 文档中卡片 GUID、主机名等已按前缀省略，完整值可从本地备份清单获得，请勿随仓库外发。
+
+---
+
+## 10. 2026-10-15 补充：用户实测「系统 A 备份 → 系统 B 还原，卡片没出现」
+
+现场：系统 A 备份智能卡 → **未清除 TPM** 时切到系统 B（换系统，同机同 TPM）→ 还原 → 卡片没出现在列表里。
+原实现的盲区是**失败了也看不出来**：`restore_backup` 全程只 `print` 日志，界面只弹一句
+「还原完成，数据文件 N 个」，用户与开发者都拿不到「卡在哪一步」的信息。
+
+### 10.1 本次修复
+
+1. **`CM_Set_DevNode_PropertyW` 写入长度补上字符串结尾 NUL**（`Module/TPMBackup.py`）。
+   写 `DEVPROP_TYPE_STRING` 时缓冲区长度必须含结尾 NUL（少 2 字节会被判 `CR_INVALID_DATA(0x1F)`；
+   即使侥幸写入，没有终止符的路径也会被驱动读成乱码）。原实现传的是 `len(encoded)`，
+   而 `set_device_store_path` 的失败分支**统一**报「设备节点还不存在」——把"属性写入被系统拒绝"
+   误报成"节点不存在"，是误导性最强的一处。现改为返回 `(ok, text)` 并**回读校验**。
+2. **不再"有绑定就跳过"**：新增 `_binding_ok(bound, guid)`，绑定目录不存在、或绑的是**别的**
+   GUID（换系统后注册表里残留旧路径，例如指向另一个系统盘）时按备份写回。
+3. **重新枚举加强**：`_rescan_devices` 改为「多次 `CM_Reenumerate_DevNode(根)` + 首次失败时
+   `pnputil /scan-devices` 兜底 + 每次复核节点是否真的出现」。`reg import` 返回成功**不等于**
+   设备已存在，这一点原先只靠 `CM_Locate_DevNode` 的返回值顺手判断。
+4. **可观测性**：新增 `devnode_state()`（`missing/started/present/problem`）、`reader_state()`
+   （`card/reader_only/absent/unknown`）、`_restore_verdict()`、`_diagnostics()`；还原日志
+   「结论 + 逐条日志 + 现场诊断」整体返回给界面，并落盘到
+   `%APPDATA%\TPMSmartCard\logs\restore-<stamp>.log`（备份同理写 `backup-*.log`）。
+   界面弹窗直接展示结论与日志路径。
+
+### 10.2 结论：还原要成功需同时满足四件事
+
+| # | 条件 | 判据 / 失败表现 |
+|---|---|---|
+| 1 | 注册表写进去了 | 日志 `已导入注册表` / `导入注册表失败` |
+| 2 | PnP 真的建出了设备节点 | `devnode_state == missing` ⇒ 读卡器根本不会出现 |
+| 3 | 「设备 → store 目录」绑定写回 | `reader_only`（Card=No）⇒ 驱动不知道卡片数据在哪 |
+| 4 | 卡片数据与 TPM 密钥匹配 | 绑定正常仍 `Card=No` ⇒ 换机/清过 TPM，私钥不可恢复 |
+
+**注意**：`§1` 表里「C 场景 ✅ 支持」是**设计预期**，当时未做管理员端到端验证（见 §6）。
+第 2 条是当前最需要现场日志确认的环节——`reg import` 只写磁盘，设备节点要靠 PnP 重新枚举；
+若实测发现**重启后设备节点仍不会创建**，就说明 `Enum\ROOT\SMARTCARDREADER\<uid>` 的 ROOT
+设备不能只靠注册表恢复，届时的候选方案（按代价排序）：
+
+- 把 `Enum\...\<uid>\Properties` 子键纳入备份（取得所有权后导出/导入，见 §8.1），
+  让设备一被创建就自带 store 绑定；
+- 用 SetupDi 在运行期注册设备（`SetupDiCreateDeviceInfo` + `DIF_REGISTERDEVICE`，
+  即 `devcon install` 的做法），彻底去掉对重启的依赖。
+
+两者都属未实测的高风险改动，等拿到现场日志再定。
+
+---
+
+## 11. 2026-10-15 实机定位：换系统还原为什么一定失败
+
+拿到现场机器（VMware 虚拟机 Win10 19044，vTPM 2.0 已就绪；卡片在系统 A 备份、切到系统 B
+还原）。通过 SSH + 在**交互会话**里跑探针逐项验证，结论如下。
+
+### 11.1 第一个坑（已修）：设备节点根本没被创建
+
+- 现场状态：`Enum\ROOT\SMARTCARDREADER\0000` **在**（`ConfigFlags=0`、`HardwareID`、
+  `Service=WUDFRd`、`Device Parameters\WUDF\DriverList=SmartcardSimulator` 都在，
+  只缺受 ACL 保护的 `Properties` 子键）；`Tpm\<GUID>` 数据文件**也都写回去了**
+  （卡片 store 完好，21 个文件）。
+- 但 `pnputil /enum-devices /class SmartCardReader` **找不到任何设备**：
+  **PnP 从来没有创建这个设备节点**。
+- **决定性实验**：在机器上跑 `pnputil /scan-devices`（"扫描检测硬件改动"）后，
+  设备**依旧不存在**。⇒ `reg import` + 重新枚举**不可能**恢复 ROOT 设备。
+  §8.6 里"重启系统后再执行一次还原"这条猜测也不成立（连扫描都不建，重启更没有理由建）。
+
+### 11.2 已实现并实测可行的修复：用 SetupDi 注册设备
+
+`devcon install` 用的那套才是创建 ROOT 设备的正规做法，实测有效：
+
+1. 删掉没有设备节点的"孤儿" Enum 项（先 `reg export` 留底）；
+2. `SetupDiCreateDeviceInfo("ROOT\SMARTCARDREADER\<uid>")`（显式实例号，保证读卡器名
+   `Microsoft Virtual Smart Card <n>` 与备份一致）；
+3. `SetupDiSetDeviceRegistryProperty(HardwareID=VirtualSmartcardReader\reader)`；
+4. `SetupDiCallClassInstaller(DIF_REGISTERDEVICE)`；
+5. `UpdateDriverForPlugAndPlayDevices(%SystemRoot%\inf\tpmvsc.inf, INSTALLFLAG_FORCE)`。
+
+现场结果：设备节点建成、`Status=OK / Problem=CM_PROB_NONE`、WUDF 宿主加载
+（`WUDFHost.exe` PID 与 `WUDFDiagnosticInfo\HostPid` 一致）、
+`Driver`、`Device Parameters\WUDF\DriverList`、`Properties` 等键由 INF 自动生成，
+随后 `CM_Set_DevNode_Property(store)` 返回 **CONFIGRET=0**（这条也顺带验证了
+`DEVPROP_TYPE_STRING` 必须把结尾 NUL 计入长度）。
+
+注意：`SetupDi` 的 `SPDRP_FRIENDLYNAME` 不生成老式 `FriendlyName` REG_SZ，
+所以代码里额外 `reg add ... /v FriendlyName` 补一份（界面读的是这个值）。
+
+### 11.3 第二个坑（本次新发现，尚未验证修复）：TPM 密钥索引不在备份范围里
+
+设备建好之后，读卡器**仍然没有出现在 PC/SC**：交互会话里 `SCardListReaders` 返回
+`0x8010002E (SCARD_E_NO_READERS_AVAILABLE)`（两个作用域都一样），而
+`Calais\Readers\Microsoft Virtual Smart Card 0` 的 `Device`/`Groups` 值被**系统自己清空**
+——说明那串注册表是**派生状态**，不是配置，光 `reg import` 回来没有意义。
+
+根因在于卡片的 TPM 密钥索引：
+
+- `Tpm\<GUID>\keymaps` 的十六进制里能看到 KSP 密钥名是固定字符串 **`TPMVSC`**
+  （`54 00 50 00 4D 00 56 00 53 00 43 00`），私钥材料是 KSP 加密后放在 `blobs\*`。
+- 「KSP 密钥名 → TPM 持久对象」的映射（`*.PCPKEY`）存在**操作系统侧**：
+  `C:\ProgramData\Microsoft\Crypto\PCPKSP\<id>\`、`C:\Windows\System32\config\systemprofile\
+  AppData\Local\Microsoft\Crypto\PCPKSP\<id>\`、以及账号 profile 下（LocalService）。
+  实测：新建一个机器作用域 PCP 密钥，就会在 `ProgramData\...\PCPKSP\<id>\` 多出一个
+  `.PCPKEY`。
+- 现场：`%SystemRoot%\ServiceProfiles\LocalService\...\Crypto\PCPKSP` **目录根本不存在**，
+  `certutil -key -csp "Microsoft Platform Crypto Provider"` 也只列出本机自己的密钥。
+  ⇒ 系统 B 上没有这张卡的密钥索引，驱动打不开卡片密钥，卡片起不来，读卡器不被发布。
+
+**结论**：`store + 注册表` 的备份范围**不足以**支撑"换系统 / 重装（TPM 未清除）"场景，
+必须把 TPM 密钥索引一起备份（§8.1 只提到了 `Properties` 子键，漏了这一块）。
+本次已把 `PCPKSP` 候选目录纳入备份 / 还原（`VSC_PCP_DIRS` / `PCP_DIR`，
+还原时同名文件不覆盖），**但"索引文件跨系统安装是否可移植"尚未验证** ——
+需要按新代码在系统 A 重新备份一次再还原才能确认。
+若验证通过，则 §1 表的 C 场景结论成立的前提是"备份里必须含 TPM 密钥索引"。
+
+### 11.4 顺带记录的现场事实
+
+- `tpmvscmgr create` 在 SSH 会话里报 `0x80070005 拒绝访问`（非控制台会话限制）；
+  但**同一会话里机器作用域 PCP 密钥可以创建成功** ⇒ TPM 本身在系统 B 上完全可用
+  （`Get-Tpm`: `TpmReady/TpmOwned=True`、`ManagedAuthLevel=Full`），
+  所以这一条**不是** TPM 障碍。
+- SSH 的 session 0 里 `SCardListReaders` 返回 `ERROR_ACCESS_DENIED(5)`，
+  读卡器枚举必须在交互会话里查（用计划任务 `/it` 跑探针）。
+- 现场机器上辅助测试留下的东西：计划任务 `ScProbe`（已禁用）、
+  `C:\Windows\Temp\scprobe.ps1|scprobe.txt`（可删）。
