@@ -209,8 +209,8 @@ Name: "{autodesktop}\{cm:AgentShortcut}"; Filename: "{app}\SSHCardAgent.exe"; Wo
 ;   · 双击打开 = 用主程序还原（主程序收到 "%1" 后直接进入还原流程）。
 ; 与安装路径无关的部分（.tsb -> ProgID、Content Type 等）在 Config\tsb.reg，
 ; 安装时用 reg import 合并（见下面 [Run] 段）。
-Root: HKA; Subkey: "TPMSmartCard.Backup\DefaultIcon"; ValueType: string; ValueData: "{app}\Config\iconer\icon02.ico"; Flags: uninsdeletevalue
-Root: HKA; Subkey: "TPMSmartCard.Backup\shell\open\command"; ValueType: string; ValueData: """{app}\SmartCardAPP.exe"" ""%1"""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\TPMSmartCard.Backup\DefaultIcon"; ValueType: string; ValueData: "{app}\Config\iconer\icon02.ico"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\TPMSmartCard.Backup\shell\open\command"; ValueType: string; ValueData: """{app}\SmartCardAPP.exe"" ""%1"""; Flags: uninsdeletevalue
 
 [Run]
 ; 合并 .tsb 文件类型注册（Config\tsb.reg）
