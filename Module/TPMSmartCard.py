@@ -3,6 +3,8 @@ import subprocess
 import time
 from winpty import PtyProcess
 
+from Module import Paths
+
 
 class TPMSmartCard:
     def __init__(self):
@@ -175,24 +177,65 @@ class TPMSmartCard:
         print(result)
         return "\n".join(result[2:8])
 
+    # certutil 的「证书已经在存储中」提示码：只是跳过重复添加，命令本身仍是成功的
+    CERT_EXISTS_CODE = "0x80092005"
+
+    @staticmethod
+    def decodeOutput(in_raw):
+        """解码系统命令的输出。
+
+        certutil / certreq 等按本机 ANSI 代码页输出（简体中文为 GBK），
+        一旦系统开启了「Beta: 使用 UTF-8 提供全球语言支持」，用 locale 解码就会
+        变成乱码，导致日志与成败判定都不可读。
+        """
+        if in_raw is None:
+            return ""
+        if isinstance(in_raw, str):
+            return in_raw
+        for encoding in ("mbcs", "gbk", "utf-8"):
+            try:
+                return in_raw.decode(encoding)
+            except (LookupError, UnicodeDecodeError):
+                continue
+        return in_raw.decode("utf-8", "replace")
+
+    @staticmethod
+    def runCommand(in_command):
+        """执行系统命令，返回 ``(输出文本, 是否成功)``。
+
+        成败一律以退出码为准（语言无关），不要靠输出里的关键字判断：
+        certutil 导入已存在的证书时会打印 CRYPT_E_EXISTS，但退出码仍是 0。
+        """
+        print(in_command)
+        process = subprocess.run(in_command, capture_output=True)
+        result = TPMSmartCard.decodeOutput(process.stdout)
+        if not result.strip():
+            # 少数失败场景信息只出现在 stderr
+            result = TPMSmartCard.decodeOutput(process.stderr)
+        print(result)
+        return result, process.returncode == 0
+
     @staticmethod
     def initCerts(in_path,
                   in_pass="",
                   in_csp=None):
+        """导入 PFX（证书 + 私钥）到智能卡并写入证书存储。
+
+        返回 ``(输出文本, 是否成功)``。注意 ``CERT_EXISTS_CODE``：证书此前已导入时
+        certutil 会提示「对象或属性已经存在」，这不是失败（退出码为 0，私钥与证书
+        本就已就位），调用方需按退出码区分。
+        """
         if in_csp is None:
             in_csp = "Microsoft Base Smart Card Crypto Provider"
-        command = ["certutil", "-csp", in_csp, "-p", in_pass, "-importpfx", in_path]
-        print(command)
         # 用参数列表调用：密码/路径含引号、& 等字符时不会被 shell 解析破坏
-        process = subprocess.run(command, text=True, capture_output=True)
-        result = process.stdout
-        print(result)
-        return result
+        return TPMSmartCard.runCommand(
+            ["certutil", "-csp", in_csp, "-p", in_pass, "-importpfx", in_path])
 
     @staticmethod
     def baseCerts(in_data,
                   in_pass=""):
-        command = ["Import/TPMImport.exe", "-user", "-b", in_data, in_pass]
+        # 随包分发在 Import\ 下（install.iss 装到 {app}\Import），按程序根目录定位
+        command = [Paths.resource("Import", "TPMImport.exe"), "-user", "-b", in_data, in_pass]
         print(command)
         process = subprocess.run(command, text=True, capture_output=True)
         result = process.stdout
@@ -268,11 +311,7 @@ class TPMSmartCard:
 
     @staticmethod
     def loadCerts(in_path):
-        command = ["CertReq", "-Accept", "-machine", in_path]
+        """导入 CA 签发的证书文件（.p7b/.cer），返回 ``(输出文本, 是否成功)``。"""
         # command = ('certutil -csp "Microsoft Base Smart Card Crypto Provider" '
         #            ' -importcert "%s"' % in_path)
-        print(command)
-        process = subprocess.run(command, text=True, capture_output=True)
-        result = process.stdout
-        print(result)
-        return result
+        return TPMSmartCard.runCommand(["CertReq", "-Accept", "-machine", in_path])

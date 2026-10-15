@@ -177,6 +177,7 @@
   "msg_reader_not_found": "Lecteur introuvable : actualisez la liste des cartes via Recharger, puis réessayez.",
   "msg_file_not_exist": "Le fichier n'existe pas",
   "msg_select_file_fp": "Chemin du certificat",
+  "msg_import_exists": "Ce certificat a déjà été importé dans le magasin de certificats ; il n'a donc pas été ajouté une nouvelle fois (importation réussie).",
   "msg_import_results": "\nRemarque : après l'importation, la clé privée ne peut plus être exportée ni sauvegardée depuis le TPM d'aucune manière\nPour sauvegarder, conservez le fichier PFX d'origine et son mot de passe, sinon vous risquez de perdre des données",
   "msg_no_cert": "(Certificat introuvable)",
   "msg_empty": "(Vide)",

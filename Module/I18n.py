@@ -39,6 +39,8 @@ import sys
 import threading
 import warnings
 
+from Module import Paths
+
 # 默认语言（词条最完整，作为最终回退）与兜底语言
 DEFAULT_LANGUAGE = "zh-Hans"
 FALLBACK_LANGUAGE = "en"
@@ -115,20 +117,8 @@ _I18N = None         # 当前语言管理器（单例）
 # 路径与设置
 # --------------------------------------------------------------------------- #
 def project_root():
-    """程序根目录（存在 Config 子目录的那个目录）。"""
-    override = os.environ.get("TPMSMART_HOME")
-    if override and os.path.isdir(override):
-        return os.path.abspath(override)
-    if getattr(sys, "frozen", False):
-        # cx_Freeze / PyInstaller 打包后以可执行文件所在目录为准
-        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
-        if os.path.isdir(os.path.join(exe_dir, "Config")):
-            return exe_dir
-    here = os.path.dirname(os.path.abspath(__file__))
-    root = os.path.dirname(here)
-    if os.path.isdir(os.path.join(root, "Config")):
-        return root
-    return os.getcwd()
+    """程序根目录（存在 Config 子目录的那个目录），实现见 ``Module.Paths``。"""
+    return Paths.project_root()
 
 
 def locales_dir():

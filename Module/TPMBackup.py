@@ -76,6 +76,7 @@ import time
 import uuid
 import zipfile
 
+from Module import Paths
 from Module.Version import VERSION
 
 # 备份包格式版本（后续结构变化时递增，还原时校验）
@@ -1013,14 +1014,9 @@ def _rescan_devices(uid=""):
 
 
 def _opensc_tool(name):
-    """定位随包分发的 OpenSC 工具（工作目录可能不是程序目录，做一次兜底）。"""
-    paths = (os.path.join("OpenSC", name),
-             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                          "OpenSC", name))
-    for path in paths:
-        if os.path.isfile(path):
-            return path
-    return ""
+    """定位随包分发的 OpenSC 工具（按程序根目录解析，见 ``Module.Paths``）。"""
+    path = Paths.resource("OpenSC", name)
+    return path if os.path.isfile(path) else ""
 
 
 def _reader_index(uid=""):

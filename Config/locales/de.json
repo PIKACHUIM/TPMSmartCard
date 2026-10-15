@@ -177,6 +177,7 @@
   "msg_reader_not_found": "Leser nicht gefunden: Kartenliste über Neu laden aktualisieren und erneut versuchen.",
   "msg_file_not_exist": "Datei existiert nicht",
   "msg_select_file_fp": "Zertifikatspfad",
+  "msg_import_exists": "Dieses Zertifikat wurde bereits in den Zertifikatsspeicher importiert und daher nicht erneut hinzugefügt (Import erfolgreich).",
   "msg_import_results": "\nHinweis: Nach dem Import kann der private Schlüssel auf keine Weise mehr aus dem TPM exportiert oder gesichert werden\nBewahren Sie für eine Sicherung die ursprüngliche PFX-Datei samt Kennwort auf, sonst können Daten verloren gehen",
   "msg_no_cert": "(Zertifikat nicht gefunden)",
   "msg_empty": "(Leer)",

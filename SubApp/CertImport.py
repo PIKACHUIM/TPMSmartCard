@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X
 from ttkbootstrap import *
 import ttkbootstrap as ttk
 
+from Module import Paths
 from Module import Theme
 from Module.AppConfigure import AppConfigure
 from Module.Cryptography import Crypto
@@ -30,7 +31,7 @@ class CertImport:
         if self.page is None:
             self.page = tk.Tk()
             self.apps = True
-            self.page.iconbitmap("Config/iconer/icon02.ico")
+            self.page.iconbitmap(Paths.resource("Config", "iconer", "icon02.ico"))
         else:
             self.page = ttk.Toplevel(in_root)
         if self.main is None:
@@ -261,7 +262,10 @@ class CertImport:
         self.page.attributes('-topmost', True)
 
     def import_decrypted(self, in_pfx, in_pass):
-        """把解密得到的 PFX 写入临时文件 → 导入卡片 → 覆写销毁临时文件。"""
+        """把解密得到的 PFX 写入临时文件 → 导入卡片 → 覆写销毁临时文件。
+
+        返回 ``(输出文本, 是否成功)``（见 ``TPMSmartCard.initCerts``）。
+        """
         tmp = hashlib.sha256(in_pfx).hexdigest()
         cert_path = os.path.join(os.getenv('APPDATA') or os.path.expanduser("~"), tmp + ".pfx")
         try:
@@ -271,7 +275,7 @@ class CertImport:
                 outcome = TPMSmartCard.initCerts(cert_path, in_pass, self.csp_provider())
             except Exception as err:
                 print("Import Cert Error:", err)
-                outcome = "Error: %s" % err
+                outcome = ("Error: %s" % err, False)
         finally:
             # 无论导入成功与否都覆写销毁临时文件（内含私钥），避免残留
             try:
@@ -282,6 +286,24 @@ class CertImport:
                 print("Clean Temp Cert Error:", err)
         self.main.load_status()
         return outcome
+
+    def result_text(self, in_result):
+        """把导入命令的结果整理成给用户看的结论文案。
+
+        ``initCerts`` / ``loadCerts`` 返回 ``(输出文本, 是否成功)``：
+        * 失败：前面标注「错误」，避免用户对着 certutil 原文自己猜；
+        * 成功但带 CRYPT_E_EXISTS：证书此前已导入（certutil 只是跳过重复添加，
+          退出码仍为 0），要明确说明而不是让用户以为导入失败；
+        * 其余成功场景：原样展示命令输出（含「命令成功完成」）。
+        """
+        if not isinstance(in_result, tuple):
+            return str(in_result)
+        text, is_ok = in_result
+        if not is_ok:
+            return "%s：\n%s" % (self.main.i18n("fail"), text)
+        if TPMSmartCard.CERT_EXISTS_CODE in text:
+            return "%s\n%s" % (self.main.i18n("msg_import_exists"), text)
+        return text
 
     @staticmethod
     def format_tips(in_template, in_data):
@@ -418,14 +440,16 @@ class CertImport:
                         result = TPMSmartCard.loadCerts(self.path_txt.get())
                 except Exception as import_err:
                     print("Import Cert Error:", import_err)
-                    result = "Error: %s" % import_err
+                    result = ("Error: %s" % import_err, False)
                 self.main.load_status()
                 self.close()
         messagebox.showinfo(
             self.main.i18n("msg_import") + self.main.i18n("msg_cert") + self.main.i18n("msg_result"),
-            result + self.main.i18n("msg_import_results"))
+            self.result_text(result) + self.main.i18n("msg_import_results"))
 
 
 if __name__ == "__main__":
+    # 单独打包成 CertImport.exe 后可能从任意工作目录启动，先切回程序根目录
+    Paths.ensure_workdir()
     apps = CertImport("pfx")
     apps.page.mainloop()

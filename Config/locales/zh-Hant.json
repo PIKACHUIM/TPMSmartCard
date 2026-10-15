@@ -177,6 +177,7 @@
   "msg_reader_not_found": "讀卡器未找到：請點「重新載入」重新整理卡片清單後重試。",
   "msg_file_not_exist": "檔案不存在",
   "msg_select_file_fp": "憑證路徑",
+  "msg_import_exists": "該憑證先前已匯入憑證存放區，本次未重複加入（匯入成功）。",
   "msg_import_results": "\n注意：憑證匯入後，私密金鑰無法再透過任何方式從TPM匯出或備份\n如需備份，請保留原始的PFX檔案以及密碼，否則可能會遺失資料",
   "msg_no_cert": "(未找到憑證)",
   "msg_empty": "(空)",

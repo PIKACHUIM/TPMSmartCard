@@ -1,5 +1,6 @@
 import json
 
+from Module import Paths
 from Module.I18n import get_i18n
 
 
@@ -16,8 +17,10 @@ class AppConfigure:
         self.lang = self.i18n_data.language
 
     def read(self):
+        # 路径按程序根目录解析（工作目录可能不是程序目录，见 Module/Paths）
         for conf_name in ["tables", "frames", "button", "labels", "cncode"]:
-            with open("Config/%s.json" % conf_name, "r", encoding="utf8") as conf_file:
+            with open(Paths.resource("Config", "%s.json" % conf_name), "r",
+                      encoding="utf8") as conf_file:
                 self.conf[conf_name] = json.loads(conf_file.read())
 
     @property

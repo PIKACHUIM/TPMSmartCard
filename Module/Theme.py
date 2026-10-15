@@ -8,10 +8,11 @@
 
 import json
 
+from Module import Paths
 from Module.I18n import read_user_settings, write_user_settings
 
-# 主题配置文件（相对程序根目录，与 Config 下其它布局配置一致）
-THEME_FILE = "Config/themes.json"
+# 主题配置文件（按程序根目录解析，与 Config 下其它布局配置一致，不依赖工作目录）
+THEME_FILE = Paths.resource("Config", "themes.json")
 
 _cache = None
 

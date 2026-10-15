@@ -11,15 +11,18 @@ from flask_classful import FlaskView, route
 from Module.Cryptography import Crypto
 from Module.I18n import (available_languages, get_i18n, language_from_header,
                          language_label, normalize_language, translator)
+from Module.Paths import ensure_workdir, resource
 
 app = Flask(__name__)
-app.template_folder = os.path.abspath('.') + '/templates'
+# 模板与静态资源都按程序根目录解析，不依赖工作目录（见 Module/Paths）
+app.template_folder = resource("templates")
+app.static_folder = resource("static")
 app.config['cert'] = dict()
 app.config['lock'] = threading.Lock()
 
 
 class SmartCardWeb(FlaskView):
-    save_path = "Caches/PullCerts.pkl"
+    save_path = resource("Caches", "PullCerts.pkl")
     route_base = '/'
 
     def __init__(self):
@@ -162,9 +165,12 @@ class SmartCardWeb(FlaskView):
 
 SmartCardWeb.register(app)
 if __name__ == '__main__':
+    # 工作目录可能不是程序目录（自启 / 关联文件启动），统一切回程序根目录
+    ensure_workdir()
     print(os.getcwd())
-    if not os.path.exists("Caches"):
-        os.mkdir("Caches")
+    cache_dir = resource("Caches")
+    if not os.path.exists(cache_dir):
+        os.mkdir(cache_dir)
     web = SmartCardWeb()
     os.startfile("http://127.0.0.1:1080/web/cert")
     web.apps.run(debug=True,

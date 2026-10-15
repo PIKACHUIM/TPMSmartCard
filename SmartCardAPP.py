@@ -28,6 +28,7 @@ from tkinter import messagebox, filedialog, font
 import tkinter.ttk as ttk_plain
 from Module.SmartCardAPI import SmartCardAPI
 from Module.I18n import get_i18n
+from Module.Paths import ensure_workdir, resource
 from Module.TPMSmartCard import TPMSmartCard
 from Module import Theme
 from Module import TPMBackup
@@ -96,7 +97,7 @@ class SmartCardAPP:
         self.lang = self.i18n_data.language
         # 设置主窗口宽度和高度
         self.root.geometry("1080x540")
-        self.root.iconbitmap("Config/iconer/icon02.ico")
+        self.root.iconbitmap(resource("Config", "iconer", "icon02.ico"))
         self.size = self.get_screens()
         self.root.geometry(f"+{self.size[0]}+{self.size[1]}")
         if self.startup_hidden:
@@ -104,8 +105,8 @@ class SmartCardAPP:
             self.root.withdraw()
         self.data = SmartCardAPI()
         self.tpms = TPMSmartCard()
-        pyglet.font.add_file("Config/myfont/MapleMono-SC-NF-Regular.ttf")
-        pyglet.font.add_file("Config/myfont/NotoSerifCJKsc-Regular.otf")
+        pyglet.font.add_file(resource("Config", "myfont", "MapleMono-SC-NF-Regular.ttf"))
+        pyglet.font.add_file(resource("Config", "myfont", "NotoSerifCJKsc-Regular.otf"))
         self.pick = {
             "card": "",
             "cert": ""
@@ -153,7 +154,7 @@ class SmartCardAPP:
         if self.tray is not None:
             return self.tray
         self.tray = TrayIcon(self.root,
-                             os.path.join("Config", "iconer", "icon02.ico"),
+                             resource("Config", "iconer", "icon02.ico"),
                              self.i18n("main_text"),
                              self.i18n("msg_tray_show"),
                              self.i18n("msg_tray_exit"),
@@ -511,8 +512,7 @@ class SmartCardAPP:
         if not MoreConfig.openscPath():
             if messagebox.askquestion(self.i18n("sc_title"), self.i18n("sc_datas")) == 'yes':
                 self.install_osc()
-                os.startfile(sys.executable)
-                exit(0)
+                self.restart_app()
 
     def get_screens(self):
         # 获取窗口的宽度和高度
@@ -530,9 +530,10 @@ class SmartCardAPP:
 
     def read_config(self):
         # 界面文案已独立到 Config/locales，这里的配置只负责布局与表格列
+        # 路径按程序根目录解析：双击 .tsb 关联文件、登录自启时工作目录不是程序目录
         for conf_name in ["tables", "frames", "button",
                           "labels", "cncode"]:
-            with open("Config/%s.json" % conf_name, "r",
+            with open(resource("Config", "%s.json" % conf_name), "r",
                       encoding="utf8") as conf_file:
                 conf_data = conf_file.read()
                 self.conf[conf_name] = json.loads(conf_data)
@@ -1106,7 +1107,8 @@ class SmartCardAPP:
                         # 文件类型过滤器
                         filetypes=[(self.i18n("msg_dlg_cert_files"), "*.crt"),
                                    (self.i18n("msg_dlg_all_files"), "*.*")],
-                        initialdir="~",  # 初始目录，对于Windows系统，你可能想要设置为os.path.expanduser('~')
+                        # 初始目录：展开 ~ ，与启动方式（工作目录）无关
+                        initialdir=os.path.expanduser("~"),
                         initialfile="%s.crt" % str(now_cert.sc_cert.SerialNums),  # 初始文件名
                         title=self.i18n("msg_dlg_save_as")  # 对话框标题
                     )
@@ -1269,6 +1271,24 @@ class SmartCardAPP:
     def install_osc(self):
         """安装随程序分发的 OpenSC（安装逻辑统一放在 MoreConfig 中）。"""
         return MoreConfig.installOpenSC()
+
+    def restart_app(self):
+        """安装 OpenSC 后重启自身，让新装的驱动/服务在新进程里生效。
+
+        注意：不能使用内置的 ``exit()`` / ``quit()``，它们由 ``site`` 模块注入，
+        而 cx_Freeze 冻结后的解释器不会执行 site 初始化，会抛 NameError: name 'exit' is not defined。
+        统一改用 ``sys.exit()``（sys 已导入，任何环境都存在）。
+        """
+        if getattr(sys, "frozen", False):
+            # 打包后 sys.executable 就是应用本体
+            os.startfile(sys.executable)
+        else:
+            # 源码运行：exe 是 python.exe，需要把脚本路径一并传过去
+            os.startfile(sys.executable, "open",
+                         '"%s"' % os.path.abspath(sys.argv[0]))
+        # 先正常收尾（摘托盘、销毁主窗口），再退出当前进程
+        self.quit_app()
+        sys.exit(0)
 
     def card_change(self, in_type="pin"):
         if not self.pick["card"] or self.pick["card"] not in self.data.cards:
@@ -1814,7 +1834,7 @@ class SmartCardAPP:
                 # 文件类型过滤器
                 filetypes=[(self.i18n("msg_dlg_csr_files"), "*.csr"),
                            (self.i18n("msg_dlg_all_files"), "*.*")],
-                initialdir="~",  # 初始目录
+                initialdir=os.path.expanduser("~"),  # 初始目录（展开 ~）
                 initialfile="%s.csr" % cn,  # 初始文件名
                 title=self.i18n("msg_dlg_save_as")  # 对话框标题
             )
@@ -2169,4 +2189,7 @@ class SmartCardAPP:
 
 
 if __name__ == "__main__":
+    # 双击 .tsb 关联文件 / 登录自启时的工作目录不是程序目录，先切回程序根目录，
+    # 后面所有相对路径（含第三方库与 subprocess 调用）才和常规启动一致
+    ensure_workdir()
     app = SmartCardAPP()

@@ -177,6 +177,7 @@
   "msg_reader_not_found": "Lettore non trovato: aggiorna l'elenco delle carte con Ricarica e riprova.",
   "msg_file_not_exist": "Il file non esiste",
   "msg_select_file_fp": "Percorso del certificato",
+  "msg_import_exists": "Questo certificato è già stato importato nell'archivio certificati, quindi non è stato aggiunto di nuovo (importazione riuscita).",
   "msg_import_results": "\nNota: dopo l'importazione la chiave privata non può più essere esportata né salvata dal TPM in alcun modo\nPer un backup conserva il file PFX originale e la password, altrimenti potresti perdere i dati",
   "msg_no_cert": "(Certificato non trovato)",
   "msg_empty": "(Vuoto)",

@@ -177,6 +177,7 @@
   "msg_reader_not_found": "Reader not found: click Reload to refresh the card list, then try again.",
   "msg_file_not_exist": "File does not exist",
   "msg_select_file_fp": "Certificate path",
+  "msg_import_exists": "This certificate was already imported into the certificate store, so it was not added again (import succeeded).",
   "msg_import_results": "\nNote: After the certificate is imported, the private key cannot be exported or backed up from the TPM in any way\nTo backup, please keep the original PFX file and password, otherwise data may be lost",
   "msg_no_cert": "(Certificate not found)",
   "msg_empty": "(Empty)",

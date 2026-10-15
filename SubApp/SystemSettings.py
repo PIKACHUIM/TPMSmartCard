@@ -28,6 +28,7 @@ from tkinter import messagebox
 import ttkbootstrap as ttk
 
 from Module import AutoStart
+from Module import Paths
 from Module import Theme
 from Module.I18n import get_i18n
 from Module.TPMSmartCard import TPMSmartCard
@@ -125,7 +126,7 @@ class SystemSettings:
         self.page = ttk.Toplevel(in_root)
         self.page.resizable(False, False)
         try:
-            self.page.iconbitmap("Config/iconer/icon02.ico")
+            self.page.iconbitmap(Paths.resource("Config", "iconer", "icon02.ico"))
         except Exception:
             pass
         self.page.title("%s - %s" % (PRODUCT, self.t("msg_set_title")))
