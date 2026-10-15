@@ -59,15 +59,24 @@ PnP 的**内存设备树**里并没有这个节点，因此卡片不会自己出
 「扫描检测硬件改动」）让 PnP 重新枚举 ROOT 总线上的设备并启动驱动，从而无需
 重启即可看到卡片；若系统拒绝重新枚举，则只能重启系统后才可见。
 
-「卡片没有出现」的四种原因（还原日志里逐条给出结论）
+「卡片没有出现」的五种原因（还原日志里逐条给出结论）
 ====================================================
 1. 注册表没真正写进去（``reg import`` 失败只在日志里可见，界面原先看不到）；
 2. PnP 没把设备节点建出来——``reg import`` 返回成功**不等于**设备存在，
-   用 ``devnode_state()``（``CM_Locate_DevNode``）作为硬判据；
-3. 设备属性里的「store 目录」绑定没写回：驱动不知道卡片数据在哪个目录，
-   读卡器会出现但显示无卡（``Card=No``）。注意 ``CM_Set_DevNode_Property`` 写
-   字符串属性时缓冲区长度**必须含结尾 NUL**，否则会被判 ``CR_INVALID_DATA``；
-4. 卡片数据与 TPM 密钥不匹配（换机 / 清过 TPM 时私钥无法恢复）。
+   用 ``devnode_state()``（``CM_Locate_DevNode``）作为硬判据；且实测
+   ``CM_Reenumerate_DevNode`` / ``pnputil /scan-devices`` 都建不出只存在于
+   注册表里的 ROOT 设备，必须用 ``register_card_device()``（SetupDi 注册）；
+3. **设备属性（卡片身份）没写回**：``Enum\\...\\<实例>\\Properties`` 里的
+   ``{2BEED4A8-...}`` 存着卡片名与**卡片 GUID**、``{2065F23D-...}`` 存着 store
+   路径与模块路径。该子键 ACL 受保护（``reg export`` 读不到），注册表备份带不回来。
+   实测缺了它设备节点照样启动、store 也绑定成功，但驱动不建设备接口、
+   不向 PC/SC 发布读卡器 —— 表现为"还原成功但卡片没出现"；
+4. TPM 密钥索引（PCPKSP 下的 ``*.PCPKEY``）没写回：换系统 / 重装后驱动找不到
+   卡片私钥对应的 TPM 对象；
+5. 卡片数据与 TPM 密钥不匹配（换机 / 清过 TPM 时私钥无法恢复）。
+
+注意 ``CM_Set_DevNode_Property`` 写字符串属性时缓冲区长度**必须含结尾 NUL**，
+否则会被判 ``CR_INVALID_DATA``（写不进去）。
 
 还原日志同时落盘到 ``%APPDATA%\\TPMSmartCard\\logs\\restore-<时间戳>.log``，
 并在界面弹窗里给出路径与逐条结论，用户反馈问题时可直接提供现场信息。
@@ -75,6 +84,7 @@ PnP 的**内存设备树**里并没有这个节点，因此卡片不会自己出
 
 from __future__ import annotations
 
+import base64
 import datetime
 import hashlib
 import json
@@ -162,6 +172,22 @@ VSC_PCP_DIRS = (
 )
 # 备份包内 TPM 密钥索引的目录名（``pcp/<索引>/<原相对路径>``）
 PCP_DIR = "pcp"
+
+# 厂商设备属性集（存在 ``Enum\...\<实例>\Properties`` 里，ACL 受保护，``reg export``
+# 读不到，但 PnP 属性接口可以读写）：
+#   * ``tpmvsc.dll`` 的集合：store 目录路径、tpmvsc.dll 路径
+#   * ``smartcardsimulator.dll``（读卡器 UMDF 驱动）的集合：驱动路径、**卡片名**、
+#     标志位、**卡片 GUID**
+# 实测（Win10 19044 换系统还原）：设备节点已启动、store 也已绑定，但缺了
+# ``{2BEED4A8-...}`` 这组卡片身份属性时，驱动不会向 PC/SC 发布读卡器
+# （``SCardListReaders`` 里看不到这张卡）；补齐后设备接口与读卡器立刻出现。
+# 卡片 GUID 就是驱动用来找 TPM 密钥的标识，所以这份属性必须跟着备份走。
+VSC_PROP_SET_TPMVSC = "{2065F23D-D989-4F8F-B769-4A3D779FAF0B}"
+VSC_PROP_SET_SIMULATOR = "{2BEED4A8-5721-4C27-AF9A-82EC36181B4D}"
+# DEVPROPKEY 占用 20 字节（16 字节 GUID + 4 字节 PID）
+DEVPROPKEY_SIZE = 20
+# DEVPROP_TYPE_STRING / DEVPROP_TYPE_STRING_LIST
+DEVPROP_TYPE_STRING_LIST = 0x00002012
 
 # reg.exe 输出里提取 FriendlyName
 _FRIENDLY_RE = re.compile(r"^\s*FriendlyName\s+REG_SZ\s+(.*?)\s*$", re.MULTILINE)
@@ -808,6 +834,17 @@ def create_backup(dest_path, name="", uid=""):
     if not pcp:
         log.append("警告: 没有备份到任何 TPM 密钥索引，换系统 / 重装后卡片将无法启动")
 
+    # ---- 1c. 设备属性（卡片身份）----------------------------------------- #
+    # tpmvsc 把「卡片名 / 卡片 GUID / store 目录」放在设备属性里（Enum 下受 ACL
+    # 保护的 Properties 子键），注册表导出带不回来；实测缺了它，设备节点即使启动，
+    # 驱动也不会向 PC/SC 发布读卡器，卡片自然就"没有出现"。
+    properties = read_device_properties(card["instance"])
+    vendor_props = vendor_property_count(properties)
+    log.append("已备份设备属性: %d 项（其中厂商卡片身份 %d 项）"
+               % (len(properties), vendor_props))
+    if not vendor_props:
+        log.append("警告: 没读到厂商卡片身份属性，还原后读卡器很可能不会出现")
+
     # 数据目录清单（诊断用，便于确认目录内部布局）
     index_lines = store_index()
 
@@ -871,11 +908,16 @@ def create_backup(dest_path, name="", uid=""):
                 },
                 "registry": registry,
                 "pcp": pcp,
+                "system_root": SYSTEM_ROOT,
+                "device_properties": properties,
                 "files": [{"path": rel, "size": size, "sha256": sha}
                           for rel, _, size, sha in copied],
                 "notes": [
-                    "备份包含三部分：卡片数据目录（Tpm）、设备注册表、TPM 密钥索引"
-                    "（PCPKSP 下的 *.PCPKEY）；不含 TPM 内部的密钥材料。",
+                    "备份包含四部分：卡片数据目录（Tpm）、设备注册表、TPM 密钥索引"
+                    "（PCPKSP 下的 *.PCPKEY）、设备属性（卡片身份：卡片名与卡片 GUID）；"
+                    "不含 TPM 内部的密钥材料。",
+                    "设备属性存在 Enum 下受 ACL 保护的 Properties 子键里，注册表导出"
+                    "带不回来，必须单独备份——少了它驱动不会向 PC/SC 发布读卡器。",
                     "卡片私钥由 TPM 保护，磁盘上只有 TPM 封装后的数据；"
                     "TPM 密钥索引只记录「KSP 密钥名 → TPM 对象」的映射，"
                     "少了它换系统 / 重装后卡片起不来（读卡器都不会出现）。",
@@ -1178,6 +1220,193 @@ def register_card_device(uid="", friendly_name=""):
         return True, "已用 SetupDi 注册设备 %s（需要重启=%s）" % (device_name, bool(reboot.value))
     finally:
         setupapi.SetupDiDestroyDeviceInfoList(info)
+
+
+def _guid_raw(text):
+    """GUID 字符串 → ``DEVPROPKEY.fmtid`` 需要的 16 字节小端内存布局。"""
+    return uuid.UUID(str(text).strip("{}")).bytes_le
+
+
+def _setupapi_props():
+    """准备 setupapi 的设备属性接口，返回 ``(setupapi, SP_DEVINFO_DATA, DEVPROPKEY)``。
+
+    用 SetupAPI 而不是直接读注册表：``Properties`` 子键的 ACL 连管理员都不给读，
+    但 PnP 属性接口可以正常读写。
+    """
+    import ctypes
+    setupapi = ctypes.WinDLL("setupapi.dll", use_last_error=True)
+    setupapi.SetupDiCreateDeviceInfoList.restype = ctypes.c_void_p
+
+    class _DevInfo(ctypes.Structure):
+        _fields_ = [("cbSize", ctypes.c_uint32), ("ClassGuid", ctypes.c_byte * 16),
+                    ("DevInst", ctypes.c_uint32), ("Reserved", ctypes.c_void_p)]
+
+    class _PropKey(ctypes.Structure):
+        _fields_ = [("fmtid", ctypes.c_byte * 16), ("pid", ctypes.c_uint32)]
+
+    return setupapi, _DevInfo, _PropKey
+
+
+def _open_device(setupapi, devinfo, uid):
+    """打开设备实例，返回 ``(设备信息集, 设备信息结构)``；失败返回 ``(None, None)``。"""
+    import ctypes
+    info = setupapi.SetupDiCreateDeviceInfoList(None, None)
+    if not info or info == ctypes.c_void_p(-1).value:
+        return None, None
+    data = devinfo()
+    data.cbSize = ctypes.sizeof(devinfo)
+    if not setupapi.SetupDiOpenDeviceInfoW(info, "ROOT\\SMARTCARDREADER\\%s" % instance_id(uid),
+                                          None, 0, ctypes.byref(data)):
+        setupapi.SetupDiDestroyDeviceInfoList(info)
+        return None, None
+    return info, data
+
+
+def _property_entries(setupapi, devinfo, propkey, info, data):
+    """枚举设备上的 PnP 属性，返回 ``[(键, 类型, 原始字节)]``。"""
+    import ctypes
+    needed = ctypes.c_uint32(0)
+    setupapi.SetupDiGetDevicePropertyKeys(info, ctypes.byref(data), None, 0,
+                                          ctypes.byref(needed), 0)
+    if needed.value <= 0:
+        return []
+    buffer = ctypes.create_string_buffer(needed.value * DEVPROPKEY_SIZE)
+    if not setupapi.SetupDiGetDevicePropertyKeys(info, ctypes.byref(data), buffer,
+                                                 needed.value, ctypes.byref(needed), 0):
+        return []
+    results = []
+    for index in range(needed.value):
+        raw = buffer.raw[index * DEVPROPKEY_SIZE:(index + 1) * DEVPROPKEY_SIZE]
+        if len(raw) < DEVPROPKEY_SIZE:
+            break
+        key = propkey.from_buffer_copy(raw)
+        ptype = ctypes.c_uint32(0)
+        required = ctypes.c_uint32(0)
+        setupapi.SetupDiGetDevicePropertyW(info, ctypes.byref(data), ctypes.byref(key),
+                                           ctypes.byref(ptype), None, 0,
+                                           ctypes.byref(required), 0)
+        size = required.value
+        if size <= 0 or size > 65536:
+            continue
+        blob = ctypes.create_string_buffer(size)
+        if not setupapi.SetupDiGetDevicePropertyW(info, ctypes.byref(data), ctypes.byref(key),
+                                                  ctypes.byref(ptype), blob, size,
+                                                  ctypes.byref(required), 0):
+            continue
+        results.append((key, ptype.value, blob.raw[:required.value]))
+    return results
+
+
+def read_device_properties(uid=""):
+    """读设备的全部 PnP 属性（含 ACL 受保护、``reg export`` 读不到的 ``Properties``）。
+
+    :return: ``[{"fmtid", "pid", "type", "data"}]``，``data`` 是 base64；读不到返回空表
+    """
+    uid = instance_id(uid)
+    if not uid:
+        return []
+    try:
+        setupapi, devinfo, propkey = _setupapi_props()
+    except Exception as err:
+        print("Load setupapi Error:", err)
+        return []
+    info, data = _open_device(setupapi, devinfo, uid)
+    if info is None:
+        return []
+    try:
+        return [{"fmtid": str(uuid.UUID(bytes_le=bytes(key.fmtid))),
+                 "pid": key.pid,
+                 "type": ptype,
+                 "data": base64.b64encode(blob).decode("ascii")}
+                for key, ptype, blob in _property_entries(setupapi, devinfo, propkey, info, data)]
+    finally:
+        setupapi.SetupDiDestroyDeviceInfoList(info)
+
+
+def _rewrite_system_root(blob, ptype, source_root):
+    """把属性里的备份机器 ``%SystemRoot%`` 前缀换成本机的。
+
+    厂商属性里有三处绝对路径（store 目录、``tpmvsc.dll``、``smartcardsimulator.dll``），
+    换系统后盘符/系统目录可能不同，照搬旧值驱动会找不到路径。
+    """
+    if ptype not in (DEVPROP_TYPE_STRING, DEVPROP_TYPE_STRING_LIST):
+        return blob
+    source = str(source_root or "").rstrip("\\")
+    if not source or source.lower() == SYSTEM_ROOT.lower():
+        return blob
+    try:
+        text = blob.decode("utf-16-le")
+    except UnicodeDecodeError:
+        return blob
+    if source.lower() not in text.lower():
+        return blob
+    return re.sub(re.escape(source), lambda match: SYSTEM_ROOT,
+                  text, flags=re.IGNORECASE).encode("utf-16-le")
+
+
+def write_device_properties(uid="", properties=None, source_root=""):
+    """把备份里的 PnP 设备属性写回本机设备。
+
+    只写「本机设备上还没有的」属性：PnP 自己生成的安装信息（``DEVPKEY_Device_*``）
+    本机已经有了，同机还原时属性本来也在，都不动；只有真正缺失的厂商属性会被补齐。
+
+    :param properties: ``read_device_properties()`` 的结果
+    :param source_root: 备份机器的 ``%SystemRoot%``，用于改写属性里的绝对路径
+    :return: 日志行列表
+    """
+    records = properties or []
+    if not records:
+        return ["备份里没有设备属性（老版本备份），跳过补充卡片身份属性"]
+    try:
+        import ctypes
+        setupapi, devinfo, propkey = _setupapi_props()
+    except Exception as err:
+        return ["setupapi 不可用，跳过写回设备属性: %s" % err]
+    info, data = _open_device(setupapi, devinfo, uid)
+    if info is None or data is None:
+        return ["设备节点不存在，跳过写回设备属性（卡片身份属性是驱动认出卡片的关键）"]
+    written = 0
+    skipped = 0
+    failed = []
+    try:
+        existing = set()
+        for key, _, _ in _property_entries(setupapi, devinfo, propkey, info, data):
+            existing.add((str(uuid.UUID(bytes_le=bytes(key.fmtid))).lower(), key.pid))
+        for record in records:
+            fmtid = str(record.get("fmtid") or "").strip().lower()
+            if not fmtid:
+                continue
+            pid = int(record.get("pid") or 0)
+            if (fmtid, pid) in existing:
+                skipped += 1
+                continue
+            try:
+                blob = base64.b64decode(str(record.get("data") or ""))
+                key = propkey.from_buffer_copy(_guid_raw(fmtid) + pid.to_bytes(4, "little"))
+            except (ValueError, TypeError, OverflowError):
+                continue
+            ptype = int(record.get("type") or 0)
+            if not blob or not ptype:
+                continue
+            blob = _rewrite_system_root(blob, ptype, source_root)
+            if setupapi.SetupDiSetDevicePropertyW(info, ctypes.byref(data), ctypes.byref(key),
+                                                  ptype, blob, len(blob), 0):
+                written += 1
+            else:
+                failed.append("%s,%d" % (fmtid, pid))
+    finally:
+        setupapi.SetupDiDestroyDeviceInfoList(info)
+    lines = ["已写回设备属性: %d 项（本机已有 %d 项未改动）" % (written, skipped)]
+    if failed:
+        lines.append("以下设备属性写入失败（不影响其它项）: %s" % ", ".join(failed[:6]))
+    return lines
+
+
+def vendor_property_count(properties=None):
+    """数一下记录里有几项厂商卡片身份属性（用于备份时的自检提示）。"""
+    wanted = (VSC_PROP_SET_TPMVSC, VSC_PROP_SET_SIMULATOR)
+    return sum(1 for item in (properties or [])
+               if str(item.get("fmtid") or "").upper() in wanted)
 
 
 def _rescan_devices(uid="", attempts=3):
@@ -1515,6 +1744,11 @@ def _diagnostics(uid="", guid=""):
     state, text = devnode_state(uid)
     lines.append("设备节点 ROOT\\SMARTCARDREADER\\%s: %s（%s）" % (uid, state, text))
     lines.append("设备绑定的 store 路径: %s" % (device_store_path(uid) or "（空）"))
+    props = read_device_properties(uid)
+    vendor = vendor_property_count(props)
+    lines.append("设备属性: %d 项，其中厂商卡片身份 %d 项%s"
+                 % (len(props), vendor,
+                    "" if vendor else "  ← 缺少卡片身份属性，读卡器不会被发布到 PC/SC"))
     lines.extend(pcp_index_lines())
     return lines
 
@@ -1534,9 +1768,10 @@ def _restore_verdict(dev_state, reader_code_, bound, guid):
         return ("读卡器已出现但卡片没加载：store 绑定正常，问题在卡片数据或 TPM 密钥。"
                 "请确认备份与 TPM 均来自同一台机器（换机 / 清过 TPM 时私钥无法恢复）")
     if reader_code_ == "absent":
-        return ("读卡器未出现（设备节点状态 %s）：设备建出来了但读卡器没注册到 PC/SC。"
-                "最常见原因是本机缺少该卡片的 TPM 密钥索引 —— 换系统 / 重装时需要备份里"
-                "带上它（见诊断里的「TPM 密钥索引目录」）。请把日志发出来定位" % dev_state)
+        return ("读卡器未出现（设备节点状态 %s）：设备建出来了但驱动没有向 PC/SC 发布读卡器。"
+                "最常见原因是缺少该卡片的「卡片身份属性」或「TPM 密钥索引」——"
+                "换系统 / 重装时需要备份里带上它们（见诊断里的「设备属性」「TPM 密钥索引目录」）。"
+                "请把日志发出来定位" % dev_state)
     return "无法判定结果，请查看下方日志与诊断信息"
 
 
@@ -1653,6 +1888,16 @@ def restore_backup(package, force=False):
                 log.append("重建后设备节点状态: %s（%s）" % (dev_state, dev_text))
     else:
         log.append("设备节点状态: %s（%s）" % (dev_state, dev_text))
+
+    # ---- 4c. 写回厂商设备属性（卡片身份：卡片名 + 卡片 GUID）-------------- #
+    # 这些属性在 Enum 下受 ACL 保护的 Properties 子键里，reg import 带不回来；
+    # 实测缺了它们，驱动虽然启动了却不会向 PC/SC 发布读卡器（设备接口都不建），
+    # 表现就是"还原成功但卡片没出现"。写完再重新枚举一次让驱动重新读取。
+    if dev_state != "missing":
+        props = write_device_properties(uid, manifest.get("device_properties"),
+                                        source_root=manifest.get("system_root") or "")
+        log.extend(props)
+        log.extend(_rescan_devices(uid))
 
     # ---- 5. 设备就绪后再重启一次服务，刷新读卡器列表 ---------------------- #
     log.append(_service("stop"))
