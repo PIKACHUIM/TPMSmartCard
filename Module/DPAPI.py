@@ -73,6 +73,21 @@ ACCOUNT_SIDS = {
 # 备份时按这个顺序尝试解密（先本进程身份，再借服务账户令牌）
 DEFAULT_ACCOUNTS = (None, "SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE")
 
+# 借用令牌时优先挑这些进程：长期存在的系统服务进程，令牌干净、可复制。
+#
+# **不要按 pid 顺序扫**：实测（Win10 19044）低 pid 的 `Secure System` / `Registry` /
+# `smss.exe` 都是**受保护进程**，`OpenProcessToken` 直接返回 `ACCESS_DENIED(5)`；
+# 而真正好用的服务进程 pid 往往很大（`services.exe`=736、`winlogon.exe`=692、
+# `lsass.exe`=760），只扫 1..399 会一个都借不到 —— 现象就是备份时 SYSTEM 身份
+# 解密报 `err=5`。名单里没有的进程作为兜底候选（仍会做 SID 校验）。
+ACCOUNT_PROCESS_NAMES = {
+    "SYSTEM": ("services.exe", "winlogon.exe", "lsass.exe", "wininit.exe", "svchost.exe"),
+    "LOCAL SERVICE": ("svchost.exe", "searchindexer.exe"),
+    "NETWORK SERVICE": ("svchost.exe", "msdtc.exe"),
+}
+# 枚举进程 pid 时的上限（够用即可，避免极端情况下分配过大）
+MAX_PROCESS_COUNT = 8192
+
 # 各种受保护数据的主密钥存放位置（还原 / 诊断时用）
 PROTECT_DIRS = (
     os.path.join(os.environ.get("SystemRoot") or r"C:\Windows", "ServiceProfiles",
@@ -187,9 +202,26 @@ class _Structs(object):
                                                  ctypes.POINTER(ctypes.c_uint32)]
         advapi32.ConvertSidToStringSidW.argtypes = [ctypes.c_void_p,
                                                     ctypes.POINTER(ctypes.c_wchar_p)]
+        advapi32.OpenThreadToken.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_int,
+                                             ctypes.POINTER(ctypes.c_void_p)]
+        advapi32.OpenThreadToken.restype = ctypes.c_bool
+        kernel32.GetCurrentThread.restype = ctypes.c_void_p
+        # 进程枚举：K32EnumProcesses（Win7+ 在 kernel32）优先，psapi.EnumProcesses 兜底
+        enum_args = [ctypes.POINTER(ctypes.c_uint32), ctypes.c_uint32,
+                     ctypes.POINTER(ctypes.c_uint32)]
+        kernel32.K32EnumProcesses.argtypes = enum_args
+        kernel32.K32EnumProcesses.restype = ctypes.c_bool
+        psapi = ctypes.WinDLL("psapi.dll", use_last_error=True)
+        psapi.EnumProcesses.argtypes = enum_args
+        psapi.EnumProcesses.restype = ctypes.c_bool
+        kernel32.QueryFullProcessImageNameW.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
+                                                        ctypes.c_wchar_p,
+                                                        ctypes.POINTER(ctypes.c_uint32)]
+        kernel32.QueryFullProcessImageNameW.restype = ctypes.c_bool
         self.crypt32 = crypt32
         self.kernel32 = kernel32
         self.advapi32 = advapi32
+        self.psapi = psapi
 
     def blob_of(self, data):
         """bytes → DATA_BLOB（调用方负责 free）。"""
@@ -236,18 +268,58 @@ def _sid_of_token(token):
         api.kernel32.LocalFree(ctypes.cast(text, ctypes.c_void_p))
 
 
-def _token_of_account(account, max_pids=400):
-    """在进程列表里找以 ``account`` 运行的进程，取其令牌副本。
+def _process_ids():
+    """枚举当前所有进程 pid（比逐个 pid 去试快得多）。"""
+    api = _structs()
+    buffer = (ctypes.c_uint32 * MAX_PROCESS_COUNT)()
+    used = ctypes.c_uint32(0)
+    try:
+        ok = api.kernel32.K32EnumProcesses(buffer, ctypes.sizeof(buffer), ctypes.byref(used))
+    except AttributeError:
+        ok = api.psapi.EnumProcesses(buffer, ctypes.sizeof(buffer), ctypes.byref(used))
+    if not ok:
+        return []
+    return [buffer[index] for index in range(used.value // 4)]
 
-    :return: 复制的令牌句柄（int）或 0
+
+def _process_name(handle):
+    """取进程镜像文件名（小写、不含路径）；失败返回空串。"""
+    api = _structs()
+    size = ctypes.c_uint32(260)
+    buffer = ctypes.create_unicode_buffer(size.value)
+    if not api.kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
+        return ""
+    return os.path.basename(buffer.value).lower()
+
+
+def _token_candidates(account):
+    """按「优先名单 → 其它进程」的顺序产出该账户可用的令牌副本 ``(句柄, 进程名)``。
+
+    候选进程会先按 ``ACCOUNT_PROCESS_NAMES`` 排到前面，再按 pid 兜底；每个候选都要求
+    令牌用户 SID 匹配 ``account``。这样既避开受保护进程（取令牌必 ACCESS_DENIED），
+    也不受 pid 大小影响。
     """
     api = _structs()
-    want = ACCOUNT_SIDS.get(str(account or "").upper())
+    key = str(account or "").upper()
+    want = ACCOUNT_SIDS.get(key)
     if not want:
-        return 0
-    # 直接遍历 pid：为拿"某个账户的令牌"引入 EnumProcesses/Toolhelp 不划算，
-    # 打开进程失败会立刻返回，代价很低。
-    for pid in range(1, max_pids):
+        return
+    preferred = tuple(ACCOUNT_PROCESS_NAMES.get(key, ()))
+    ranked = []
+    for pid in _process_ids():
+        if pid <= 4:                     # 0=Idle、4=内核 System：没有可用的用户态令牌
+            continue
+        handle = api.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            continue
+        try:
+            name = _process_name(handle)
+        finally:
+            api.kernel32.CloseHandle(handle)
+        rank = preferred.index(name) if name in preferred else len(preferred)
+        ranked.append((rank, pid, name))
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    for _, pid, name in ranked:
         handle = api.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
         if not handle:
             continue
@@ -268,12 +340,24 @@ def _token_of_account(account, max_pids=400):
                     continue
                 if not dup.value:
                     continue
-                return dup.value
+                yield dup.value, name
             finally:
                 api.kernel32.CloseHandle(token)
         finally:
             api.kernel32.CloseHandle(handle)
-    return 0
+
+
+def _thread_sid():
+    """当前线程令牌的用户 SID（借用令牌后复核用）；失败返回空串。"""
+    api = _structs()
+    token = ctypes.c_void_p()
+    if not api.advapi32.OpenThreadToken(api.kernel32.GetCurrentThread(), TOKEN_QUERY, 0,
+                                        ctypes.byref(token)):
+        return ""
+    try:
+        return _sid_of_token(token)
+    finally:
+        api.kernel32.CloseHandle(token)
 
 
 def impersonate(account):
@@ -285,14 +369,19 @@ def impersonate(account):
         return False, "非 Windows 环境"
     api = _structs()
     account = str(account or "")
-    token = _token_of_account(account)
-    if not token:
-        return False, "没能找到以 %s 运行的进程（无法借用令牌）" % account
-    if not api.advapi32.SetThreadToken(None, ctypes.c_void_p(token)):
-        api.kernel32.CloseHandle(ctypes.c_void_p(token))
-        return False, "借用 %s 令牌失败（进程可能没有权限）" % account
-    _TOKEN_CACHE["current"] = ctypes.c_void_p(token)
-    return True, "已借用 %s 令牌" % account
+    want = ACCOUNT_SIDS.get(account.upper(), "")
+    for token, name in _token_candidates(account):
+        if not api.advapi32.SetThreadToken(None, ctypes.c_void_p(token)):
+            api.kernel32.CloseHandle(ctypes.c_void_p(token))
+            continue
+        # 借用后复核：确认当前线程真的是目标账户，否则撤回换下一个候选
+        if want and _thread_sid() != want:
+            api.advapi32.RevertToSelf()
+            api.kernel32.CloseHandle(ctypes.c_void_p(token))
+            continue
+        _TOKEN_CACHE["current"] = ctypes.c_void_p(token)
+        return True, "已借用 %s 令牌（来自 %s）" % (account, name or "进程")
+    return False, "没能借用到 %s 的令牌（未找到可用进程或权限不足）" % account
 
 
 def revert():

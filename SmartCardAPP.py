@@ -520,10 +520,10 @@ class SmartCardAPP:
                 self.i18n("msg_tpm_check_none") % self.i18n("msg_tpm_unknown")
             )
         # OpenSC -----------------------------------------------------------------------------
+        # 未检测到 OpenSC 时问一次是否安装；只有装成功才重启（见 install_osc_check）
         if not MoreConfig.openscPath():
             if messagebox.askquestion(self.i18n("sc_title"), self.i18n("sc_datas")) == 'yes':
-                self.install_osc()
-                self.restart_app()
+                self.install_osc_check()
 
     def get_screens(self):
         # 获取窗口的宽度和高度
@@ -1294,8 +1294,24 @@ class SmartCardAPP:
         return status
 
     def install_osc(self):
-        """安装随程序分发的 OpenSC（安装逻辑统一放在 MoreConfig 中）。"""
+        """安装随程序分发的 OpenSC，返回 ``(是否成功, 退出码, 日志路径)``。"""
         return MoreConfig.installOpenSC()
+
+    def install_osc_check(self):
+        """安装 OpenSC，并按安装结果决定是否重启。
+
+        旧实现不看结果就 ``restart_app()``：安装失败（组策略禁止 MSI、找不到安装包等）
+        时程序照样重启，重启后又提示未安装，用户只看到「反复提示 + 什么都没装上」。
+        现在失败会把退出码、原因、日志与手动安装包路径摆出来，并且**不重启**。
+        """
+        ok, code, log_path = self.install_osc()
+        if ok:
+            messagebox.showinfo(self.i18n("sc_title"), self.i18n("msg_osc_installed"))
+            self.restart_app()
+            return True
+        messagebox.showerror(self.i18n("sc_title"),
+                             MoreConfig.installFailText(self.i18n_data, code, log_path))
+        return False
 
     def restart_app(self):
         """安装 OpenSC 后重启自身，让新装的驱动/服务在新进程里生效。

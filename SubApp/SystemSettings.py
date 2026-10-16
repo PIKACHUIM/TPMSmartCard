@@ -123,6 +123,8 @@ class SystemSettings:
         self.task_ready = False
         self.task_finish = None
         self.task_result = None
+        # OpenSC 安装结果：（是否成功, 退出码, 日志路径），由 worker_opensc 写入
+        self.osc_result = None
         self.page = ttk.Toplevel(in_root)
         self.page.resizable(False, False)
         try:
@@ -406,8 +408,23 @@ class SystemSettings:
 
     def install_opensc(self):
         """安装随程序分发的 OpenSC（静默安装，需要管理员权限）。"""
-        if self.run_task(MoreConfig.installOpenSC, self.refresh_osc):
+        self.osc_result = None
+        if self.run_task(self.worker_opensc, self.finish_opensc):
             self.osc_var.set(self.t("msg_set_installing"))
+        return None
+
+    def worker_opensc(self):
+        """在子线程里安装（安装耗时，不能让设置窗口卡死）。"""
+        self.osc_result = MoreConfig.installOpenSC()
+        return self.osc_result
+
+    def finish_opensc(self):
+        """刷新状态；失败时把退出码、原因与日志路径告诉用户。"""
+        ok, code, log_path = self.osc_result or (False, MoreConfig.MSI_NO_START, "")
+        self.refresh_osc()
+        if not ok:
+            messagebox.showerror(self.t("msg_set_osc"),
+                                 MoreConfig.installFailText(self.i18n, code, log_path))
         return None
 
     # 页签：WinSSH 代理 ========================================================
