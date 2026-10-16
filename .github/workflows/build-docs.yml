@@ -86,37 +86,52 @@ jobs:
           DOMAIN="${DOMAIN#https://}"
           DOMAIN="${DOMAIN%%/}"
 
-          # 2) base：手动输入 > 有自定义域名则根路径 > Pages 推导 > 兜底 /<repo>/
-          #    注意：自定义域名若是在 Settings → Pages 里配置的（而不是用仓库变量），
-          #    configure-pages 可能给出空的 base_path，因此再从 base_url 的路径部分兜一层。
-          PAGES_PATH="$(printf '%s' "${PAGES_BASE_URL:-}" | sed -E 's#^[A-Za-z]+://[^/]+##')"
+          # 2) 站点绝对地址（canonical / sitemap / og:image）：
+          #    configure-pages 的 base_url 已经反映了 Pages 的实际配置
+          #    （配了自定义域名时它就是自定义域名，没配时是 <owner>.github.io/<repo>）。
+          ORIGIN="${PAGES_BASE_URL:-}"
+          if [ -n "$DOMAIN" ]; then
+            ORIGIN="https://$DOMAIN"
+          fi
+          if [ -z "$ORIGIN" ]; then
+            ORIGIN="$DEFAULT_ORIGIN/$REPO_NAME"
+          fi
+          ORIGIN="${ORIGIN%/}"
+
+          # 3) 站点是否跑在自定义域名下：看主机名是不是 *.github.io。
+          #    ⚠️ 这一步不能省：只要在 Settings → Pages 里填了 Custom domain，
+          #    站点就发布在「自定义域名的根路径」，此时 configure-pages 仍可能给出
+          #    base_path=/<repo>，照着它构建就会出现"页面能开、但链接与资源全 404"。
+          HOST="$(printf '%s' "$ORIGIN" | sed -E 's#^[A-Za-z]+://([^/]+).*#\1#')"
+          CUSTOM_HOST=""
+          case "$HOST" in
+            "" | *.github.io) ;;
+            *) CUSTOM_HOST="$HOST" ;;
+          esac
+
+          # 4) base：手动输入 > 自定义域名（根路径）> Pages 的 base_path > 兜底 /<repo>/
           if [ -n "${INPUT_BASE:-}" ]; then
             BASE="$INPUT_BASE"
-          elif [ -n "$DOMAIN" ]; then
+          elif [ -n "$CUSTOM_HOST" ]; then
             BASE="/"
           elif [ -n "${PAGES_BASE_PATH:-}" ]; then
             BASE="$PAGES_BASE_PATH"
-          elif [ -n "$PAGES_PATH" ]; then
-            BASE="$PAGES_PATH"
           else
             BASE="/$REPO_NAME"
           fi
           BASE="/${BASE#/}"
           BASE="${BASE%/}/"
 
-          # 3) 站点绝对地址（sitemap / canonical / og:image）
+          # 5) CNAME：把自定义域名写进产物（两种来源都覆盖）
           if [ -n "$DOMAIN" ]; then
-            ORIGIN="https://$DOMAIN"
             printf '%s\n' "$DOMAIN" > docs/public/CNAME
-            echo "::notice title=自定义域名::docs/public/CNAME = $DOMAIN（base = $BASE）"
+          elif [ -n "$CUSTOM_HOST" ]; then
+            printf '%s\n' "$CUSTOM_HOST" > docs/public/CNAME
           else
-            ORIGIN="${PAGES_BASE_URL:-$DEFAULT_ORIGIN/$REPO_NAME}"
             rm -f docs/public/CNAME
-            echo "::notice title=使用默认域名::base = $BASE, origin = $ORIGIN"
           fi
-          ORIGIN="${ORIGIN%/}"
 
-          # 4) 双域名：主构建跑在域名根路径（base=/）时，再准备一份 github.io 项目路径的副本。
+          # 6) 双域名：主构建跑在域名根路径（base=/）时，再准备一份 github.io 项目路径的副本。
           #    副本放在产物的 /<repo>/ 子目录里，自身资源路径自洽，因此
           #    https://<owner>.github.io/<repo>/ 也能独立打开，不依赖平台重定向。
           #    （用户/组织站点 <owner>.github.io 本身就在根路径，不需要副本。）
@@ -132,10 +147,12 @@ jobs:
               ;;
           esac
 
+          echo "::notice title=文档站构建参数::base=$BASE origin=$ORIGIN host=$HOST"
+
           {
             echo "base=$BASE"
             echo "origin=$ORIGIN"
-            echo "domain=$DOMAIN"
+            echo "domain=${DOMAIN:-$CUSTOM_HOST}"
             echo "nested_base=$NESTED_BASE"
             echo "nested_dir=$NESTED_DIR"
           } >> "$GITHUB_OUTPUT"

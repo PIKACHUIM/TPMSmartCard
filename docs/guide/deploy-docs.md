@@ -99,10 +99,18 @@ base 的推导优先级：
 | 优先级 | 来源 | 得到的 base |
 |---|---|---|
 | 1 | `workflow_dispatch` 输入 `base` | 手动指定（调试用） |
-| 2 | 有自定义域名（输入 `custom_domain` 或仓库变量 `DOCS_CUSTOM_DOMAIN`） | `/` |
-| 3 | `configure-pages` 的 `base_path` | 通常是 `/TPMSmartCard` |
-| 4 | `configure-pages` 的 `base_url` 路径部分（Settings 里配了自定义域名时 `base_path` 可能为空，用这里兜底） | `/` 或 `/<repo>` |
+| 2 | **站点是否跑在自定义域名下**：`configure-pages` 的 `base_url` 主机名不是 `*.github.io` | `/` |
+| 3 | 有自定义域名（输入 `custom_domain` 或仓库变量 `DOCS_CUSTOM_DOMAIN`） | `/` |
+| 4 | `configure-pages` 的 `base_path` | 通常是 `/TPMSmartCard` |
 | 5 | 兜底 | `/<仓库名>/` |
+
+::: danger 第 2 条不能省（曾经踩过的坑）
+只要在 **Settings → Pages** 里填了 Custom domain，站点就发布在**自定义域名的根路径**，
+但 `configure-pages` 仍然可能给出 `base_path=/TPMSmartCard`。如果照着 `base_path` 构建，
+就会出现"首页能打开、但所有导航链接与 CSS/JS 资源 404"的症状
+（`https://域名/TPMSmartCard/assets/style.*.css` 404、`https://域名/TPMSmartCard/` 404）。
+因此必须先看 `base_url` 的主机名：**不是 `*.github.io` 就按根路径（`/`）构建**。
+:::
 
 副本（`nested_base`）只在「主构建 base = `/` 且仓库名不是 `<owner>.github.io`」时生成，
 其余情况不需要 —— 那时主构建本身就在 github.io 项目路径上。
