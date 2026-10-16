@@ -10,6 +10,11 @@ staging/
 !OpenSC/*.msi
 __pycache__
 .idea
+# 文档站（VitePress）：依赖、构建缓存与产物都不入库；CNAME 由 CI 按需生成
+node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+docs/public/CNAME
 # 智能体工作区数据（不随代码分发）
 .workbuddy/
 # 工具链临时目录（YAML 校验等）

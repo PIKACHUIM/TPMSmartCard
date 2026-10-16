@@ -15,8 +15,30 @@
 | [`dev-guide.md`](dev-guide.md) | 开发与调试：环境、运行方式、自检 CLI、打包（cx_Freeze / Nuitka / Inno Setup）、签名、CI、代码约定、真机验证方法 | 开发者 |
 | [`devlog-2026-10-14-backup-restore.md`](devlog-2026-10-14-backup-restore.md) | **早期过程记录**（现含 §1–§11，止于 2026-10-15）：逆向与实机定位的命令行证据。仅作证据来源，不作为结论；其后进展见技术报告 | 需要追溯细节的人 |
 
-根目录 [`../README.md`](../README.md) 是**面向使用者**的产品说明（介绍、功能、系统要求）。
-建议在其中加一节「文档」，指向本索引。
+根目录的
+[`README.md`](https://github.com/PIKACHUIM/TPMSmartCard/blob/main/README.md)
+是**面向使用者**的产品说明（介绍、功能、系统要求）。
+
+## 在线文档站
+
+本目录同时是 **VitePress 文档站**的源码目录，由 CI 构建后发布到 GitHub Pages，
+面向使用者的内容在 [`guide/`](https://github.com/PIKACHUIM/TPMSmartCard/tree/main/docs/guide) 下：
+
+| 章节 | 内容 |
+|---|---|
+| [`guide/index.md`](guide/index.md) | 项目介绍、能力矩阵、适用与不适用场景 |
+| [`guide/principles.md`](guide/principles.md) | 工作原理：五部分构成、工具与系统命令的对应关系、私钥不可导出的原因 |
+| [`guide/requirements.md`](guide/requirements.md) | 硬件与软件要求、环境自查命令、不支持的环境 |
+| [`guide/install.md`](guide/install.md) | 安装包 / 绿色版 / 源码运行、卸载、安装排错 |
+| [`guide/usage-cards.md`](guide/usage-cards.md) | 智能卡管理：建卡、改 / 重置 PIN、删卡、详情 |
+| [`guide/usage-certs.md`](guide/usage-certs.md) | 证书与密钥管理：导入 PFX / CER、生成 CSR、导出、云端下发 |
+| [`guide/ssh.md`](guide/ssh.md) | 用卡上私钥做 SSH2 登录 |
+| [`guide/backup.md`](guide/backup.md) | 备份与还原：包内容、还原前提、三层判定 |
+| [`guide/faq.md`](guide/faq.md) | 常见问题 |
+| [`guide/development.md`](guide/development.md) | 开发方式：环境、运行、打包、CI、代码约定 |
+| [`guide/deploy-docs.md`](guide/deploy-docs.md) | 本文档站的构建与 GitHub Pages / 自定义域名配置 |
+
+本地预览：`cd docs && npm install && npm run docs:dev`。
 
 ## 建议的阅读路径
 

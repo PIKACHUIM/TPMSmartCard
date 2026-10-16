@@ -1,0 +1,201 @@
+name: Build & Deploy Docs (VitePress)
+
+# 构建 docs/ 下的 VitePress 文档站并发布到 GitHub Pages。
+#
+# 同时支持两种访问方式（一份源码、一个产物里放两套自洽的页面）：
+#   1. GitHub Pages 默认域名：https://<owner>.github.io/<repo>/   → base = /<repo>/
+#   2. 自定义域名（可选）：   https://docs.example.com/          → base = /
+# 做法：主构建按 base 出产物；若主构建在域名根路径（base = /），再构建一份
+# base = /<repo>/ 的副本放进产物的 <repo>/ 子目录 —— 静态站点的资源路径在构建期固定，
+# 只有这样两个地址才能各自独立渲染，而不必依赖平台的任何重定向行为。
+# 站点 base 与绝对地址由下面的 "Resolve site config" 推导后注入环境变量，
+# 交给 docs/.vitepress/config.mts 使用；详见 docs/guide/deploy-docs.md。
+#
+# 自定义域名有两种配置方式（任选其一）：
+#   · 仓库变量 DOCS_CUSTOM_DOMAIN（Settings → Secrets and variables → Actions → Variables）
+#     —— 推荐：工作流会按根路径构建并写入 docs/public/CNAME
+#   · 仓库 Settings → Pages → Custom domain 里填写
+#     —— 平台自行维护 CNAME；工作流会从 configure-pages 的输出里识别根路径
+# 也可以用 workflow_dispatch 的 custom_domain / base 输入临时覆盖。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/build-docs.yml'
+  workflow_dispatch:
+    inputs:
+      custom_domain:
+        description: '自定义域名（例如 docs.example.com；留空则取仓库变量 DOCS_CUSTOM_DOMAIN）'
+        required: false
+        default: ''
+      base:
+        description: '站点 base 覆盖（例如 / 或 /TPMSmartCard/；留空自动推导）'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一个站点只允许一个发布在进行中；排队而不是取消，避免把已完成但未发布的构建丢掉
+concurrency:
+  group: docs-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # VitePress 的 lastUpdated 需要完整的 git 历史才能读到每页的提交时间
+          fetch-depth: 0
+
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Resolve site config (base / site url / CNAME)
+        id: site
+        env:
+          INPUT_DOMAIN: ${{ inputs.custom_domain }}
+          INPUT_BASE: ${{ inputs.base }}
+          VAR_DOMAIN: ${{ vars.DOCS_CUSTOM_DOMAIN }}
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          PAGES_BASE_URL: ${{ steps.pages.outputs.base_url }}
+          DEFAULT_ORIGIN: https://${{ github.repository_owner }}.github.io
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+
+          # 1) 自定义域名：手动输入 > 仓库变量；去掉协议头与结尾斜杠
+          DOMAIN="${INPUT_DOMAIN:-${VAR_DOMAIN:-}}"
+          DOMAIN="${DOMAIN#http://}"
+          DOMAIN="${DOMAIN#https://}"
+          DOMAIN="${DOMAIN%%/}"
+
+          # 2) base：手动输入 > 有自定义域名则根路径 > Pages 推导 > 兜底 /<repo>/
+          #    注意：自定义域名若是在 Settings → Pages 里配置的（而不是用仓库变量），
+          #    configure-pages 可能给出空的 base_path，因此再从 base_url 的路径部分兜一层。
+          PAGES_PATH="$(printf '%s' "${PAGES_BASE_URL:-}" | sed -E 's#^[A-Za-z]+://[^/]+##')"
+          if [ -n "${INPUT_BASE:-}" ]; then
+            BASE="$INPUT_BASE"
+          elif [ -n "$DOMAIN" ]; then
+            BASE="/"
+          elif [ -n "${PAGES_BASE_PATH:-}" ]; then
+            BASE="$PAGES_BASE_PATH"
+          elif [ -n "$PAGES_PATH" ]; then
+            BASE="$PAGES_PATH"
+          else
+            BASE="/$REPO_NAME"
+          fi
+          BASE="/${BASE#/}"
+          BASE="${BASE%/}/"
+
+          # 3) 站点绝对地址（sitemap / canonical / og:image）
+          if [ -n "$DOMAIN" ]; then
+            ORIGIN="https://$DOMAIN"
+            printf '%s\n' "$DOMAIN" > docs/public/CNAME
+            echo "::notice title=自定义域名::docs/public/CNAME = $DOMAIN（base = $BASE）"
+          else
+            ORIGIN="${PAGES_BASE_URL:-$DEFAULT_ORIGIN/$REPO_NAME}"
+            rm -f docs/public/CNAME
+            echo "::notice title=使用默认域名::base = $BASE, origin = $ORIGIN"
+          fi
+          ORIGIN="${ORIGIN%/}"
+
+          # 4) 双域名：主构建跑在域名根路径（base=/）时，再准备一份 github.io 项目路径的副本。
+          #    副本放在产物的 /<repo>/ 子目录里，自身资源路径自洽，因此
+          #    https://<owner>.github.io/<repo>/ 也能独立打开，不依赖平台重定向。
+          #    （用户/组织站点 <owner>.github.io 本身就在根路径，不需要副本。）
+          NESTED_BASE=""
+          NESTED_DIR=""
+          case "$REPO_NAME" in
+            *.github.io) ;;
+            *)
+              if [ "$BASE" = "/" ]; then
+                NESTED_BASE="/$REPO_NAME/"
+                NESTED_DIR="/$REPO_NAME"
+              fi
+              ;;
+          esac
+
+          {
+            echo "base=$BASE"
+            echo "origin=$ORIGIN"
+            echo "domain=$DOMAIN"
+            echo "nested_base=$NESTED_BASE"
+            echo "nested_dir=$NESTED_DIR"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### 文档站构建参数"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "|---|---|"
+            echo "| 站点 base | \`$BASE\` |"
+            echo "| 站点地址（canonical / sitemap） | \`$ORIGIN\` |"
+            echo "| 自定义域名 | \`${DOMAIN:-未设置，仅使用 github.io}\` |"
+            echo "| Pages 默认地址 | \`$DEFAULT_ORIGIN/$REPO_NAME/\` |"
+            echo "| 子路径副本 base | \`${NESTED_BASE:-（不需要）}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Build docs
+        working-directory: docs
+        env:
+          DOCS_BASE: ${{ steps.site.outputs.base }}
+          DOCS_SITE_URL: ${{ steps.site.outputs.origin }}
+        run: npm run docs:build
+
+      # 双域名支持（关键一步）：主构建在域名根路径时，再构建一份 base=/<repo>/ 的副本，
+      # 先输出到临时目录，再整体拷进主产物的 /<repo>/ 子目录。
+      # 这样两个地址都能独立、完整地渲染；canonical 仍指向主域名，避免重复内容。
+      - name: Build nested copy for the github.io project path
+        if: steps.site.outputs.nested_base != ''
+        working-directory: docs
+        env:
+          DOCS_BASE: ${{ steps.site.outputs.nested_base }}
+          DOCS_SITE_URL: ${{ steps.site.outputs.origin }}
+          DOCS_OUT_DIR: .vitepress/dist-nested
+        run: |
+          set -euo pipefail
+          npm run docs:build
+          # 副本只是同一份内容的另一个入口：去掉重复的 sitemap（canonical 已指向主域名）
+          rm -f .vitepress/dist-nested/sitemap.xml
+          mkdir -p ".vitepress/dist${{ steps.site.outputs.nested_dir }}"
+          cp -R .vitepress/dist-nested/. ".vitepress/dist${{ steps.site.outputs.nested_dir }}/"
+          rm -rf .vitepress/dist-nested
+          echo "::notice title=双域名::已生成子路径副本 ${{ steps.site.outputs.nested_dir }}/（base=${{ steps.site.outputs.nested_base }}）"
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
