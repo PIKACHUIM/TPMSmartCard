@@ -5,7 +5,7 @@ name: Build Client (Nuitka)
 # Beta 预发布 / 正式 Release，只靠文件名区分：
 #     cx_Freeze  → TPMSmartCard-cxfree-<beta|v版本>-win10-x64-green.zip / -setup.exe
 #     Nuitka     → TPMSmartCard-nuitka-<beta|v版本>-win10-x64-green.zip / -setup.exe
-#   · 产物目录 build/nuitka/（cx_Freeze 的 build/exe.win-amd64-3.11 不动）；
+#   · 产物目录 build/nuitka/（cx_Freeze 那条线的 build/exe.win-amd64-* 不动）；
 #   · 安装包复用 install.iss / Builds\Build-Installer.ps1，只把 TPMSMART_BUILDDIR
 #     指到 build\nuitka\TPMSmartCard（Program Files、卸载器、.tsb 关联等定义都不变）；
 #   · 已存在的 Release 只往里追加资产，不改标题与说明（gh 的 run_number 是各工作流
@@ -119,8 +119,8 @@ jobs:
       package: ${{ steps.pack.outputs.package }}
       setup: ${{ steps.iscc.outputs.setup }}
     env:
-      # 与 cx_Freeze 流水线保持一致：install.iss 与打包脚本都按 3.11 产物写死
-      PYTHON_VERSION: '3.11'
+      # Nuitka 是纯 Python（py3-none-any），不依赖 cx_Freeze，可以跟到官方最高支持的 3.14
+      PYTHON_VERSION: '3.14'
       # runner 控制台是 cp1252，显式 UTF-8 输出，避免中文日志变乱码
       PYTHONIOENCODING: utf-8
     steps:

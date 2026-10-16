@@ -9,7 +9,7 @@ name: Build Client (cx_Freeze x86)
 # Windows 7 上根本没有，且 Python 3.9+ 官方只支持 Windows 8.1 及以上 ——
 # 所以这个 32 位包的最低系统同样是 Windows 8.1，不支持 Windows 7。
 #
-# 前置条件（32 位随包二进制，见 Builds\Prepare-x86-Resources.ps1）：
+# 前置条件（32 位随包二进制，见 Builds\Prepare-ArchResources.ps1 -Arch x86）：
 #   · OpenSC 32 位工具：脚本自动从仓库里的 OpenSC-0.25.1_win32-Light.msi 解包并校验位宽；
 #   · Import\x86\TPMImport.exe：需要提供 TPMImport 的 win-x86 发布，
 #     缺失时本流水线**直接失败**并打印准备办法（程序运行时会调用它）；
@@ -25,7 +25,7 @@ on:
       - 'SmartCardWEB.py'
       - 'Module/**'
       - 'SubApp/**'
-      - 'Builds/Prepare-x86-Resources.ps1'
+      - 'Builds/Prepare-ArchResources.ps1'
       - 'Builds/Build-Installer.ps1'
       - 'Builds/Sign-Windows.ps1'
       - '.github/workflows/build-client-release-x86.yml'
@@ -176,7 +176,7 @@ jobs:
       # 可选的 SSHCardAgent-x86.exe。缺 Import\x86 会在这里直接失败并给出准备办法。
       - name: Prepare 32-bit resources
         shell: pwsh
-        run: pwsh -NoProfile -ExecutionPolicy Bypass -File Builds/Prepare-x86-Resources.ps1
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File Builds/Prepare-ArchResources.ps1 -Arch x86
 
       - name: Resolve package name
         id: naming

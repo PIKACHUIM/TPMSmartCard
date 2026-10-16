@@ -8,7 +8,7 @@ cx_Freeze 是把解释器 + ``.pyc`` 一起分发、运行到那一行才导入�
 冷启动明显更快，代价是构建时间长（CI 上约 20~40 分钟）。
 
 两套并存，互不影响：
-* cx_Freeze 继续出正式包（``build/exe.win-amd64-3.11`` 与 ``install.iss`` 的路径约定都不动）；
+* cx_Freeze 继续出正式包（``build/exe.win-amd64-*`` 与 ``install.iss`` 的路径约定都不动）；
 * Nuitka 单独一条流水线（``.github/workflows/build-client-nuitka.yml``），
   产物落在 ``build/nuitka/``，发布到单独的 ``nuitka-beta`` 预发布标签。
 

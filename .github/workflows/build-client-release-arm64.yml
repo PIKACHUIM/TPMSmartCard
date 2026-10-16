@@ -1,0 +1,331 @@
+name: Build Client (cx_Freeze arm64)
+
+# 原生 arm64 包：Python 3.13 arm64 + Windows 11 ARM64，绿色版 + Inno 安装包。
+# 与另外三条线共用同一批 Release，只靠文件名区分：
+#     TPMSmartCard-cxfree-beta-win11-a64-green.zip / -setup.exe
+#     TPMSmartCard-cxfree-v1.6.0-win11-a64-green.zip / -setup.exe
+#
+# 为什么是 win11 而不是 win10：
+#   · 原生 arm64 二进制只能在 arm64 机器上产出，GitHub 提供的托管镜像是
+#     windows-11-arm（Windows 11 ARM64，公共仓库免费，仍为 public preview）；
+#   · OpenSC 官方没有 Windows arm64 构建（0.25.1 只有 win32/win64 与 macOS dmg），
+#     所以包里带的 OpenSC 工具仍是 x64 版，靠 **Windows 11 的 x64 仿真**运行；
+#     Windows 10 ARM64 只有 x86 仿真，跑不了这些 x64 工具 —— 那种机器请用 x86 包。
+#
+# 前置条件（32 位/arm64 随包二进制，见 Builds\Prepare-ArchResources.ps1）：
+#   · OpenSC 工具：沿用仓库里的 x64 版（无需额外准备）；
+#   · Import\arm64\TPMImport.exe：需要提供 TPMImport 的 win-arm64 发布
+#     （dotnet publish -c Release -r win-arm64），缺失时本流水线直接失败；
+#   · SSH 代理没有 arm64 版，该组件不打包。
+#
+# 签名：arm64 runner 上能否安装/登录 Certum SimplySign 尚未验证，
+#   所以这条线暂时不出签名产物（下面显式设置了 TPMSMART_SIGN_SKIP=1）。
+#   要开签名：删掉 TPMSMART_SIGN_SKIP 那一行、并把 x86 流水线里那三段
+#   Certum 步骤（Detect secrets / Setup SimplySign / Authenticate）拷过来即可。
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'BuildPackage.py'
+      - 'requirements.txt'
+      - 'install.iss'
+      - 'SmartCardAPP.py'
+      - 'SmartCardWEB.py'
+      - 'Module/**'
+      - 'SubApp/**'
+      - 'Builds/Prepare-ArchResources.ps1'
+      - 'Builds/Build-Installer.ps1'
+      - 'Builds/Ensure-InnoSetup.ps1'
+      - '.github/workflows/build-client-release-arm64.yml'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: '发布目标：beta = 滚动预发布版；release = 正式版；none = 只构建不发布'
+        type: choice
+        options: [ beta, release, none ]
+        default: beta
+      version:
+        description: '版本号（channel=release 时必填，例如 1.6.0 或 v1.6.2026.1012）'
+        required: false
+        type: string
+      draft:
+        description: 'channel=release 且 Release 还不存在时，以草稿方式创建'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  CERTUM_OTP_URI: ${{ secrets.CERTUM_OTP_URI }}
+  CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+  CERTUM_CERTIFICATE_SHA1: ${{ secrets.CERTUM_CERTIFICATE_SHA1 }}
+
+concurrency:
+  group: ${{ github.event_name == 'push' && 'client-arm64-beta-build' || 'client-arm64-release-build' }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  prepare:
+    name: Resolve target
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.resolve.outputs.channel }}
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Resolve
+        id: resolve
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          channel="$INPUT_CHANNEL"
+          if [[ "$EVENT" == "push" || -z "$channel" ]]; then
+            channel="beta"
+          fi
+
+          if [[ "$channel" != "release" ]]; then
+            echo "channel=$channel" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+            echo "target: $channel"
+            exit 0
+          fi
+
+          version="${INPUT_VERSION#v}"
+          version="${version#V}"
+          if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error::版本号格式不正确：${INPUT_VERSION}（应形如 1.6.0 或 1.6.2026.1012）"
+            exit 1
+          fi
+
+          echo "channel=release" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "target: release v$version"
+
+  build:
+    name: Build Windows arm64
+    needs: prepare
+    runs-on: windows-11-arm
+    outputs:
+      artifact: ${{ steps.pack.outputs.artifact }}
+      package: ${{ steps.pack.outputs.package }}
+      setup: ${{ steps.iscc.outputs.setup }}
+    env:
+      # arm64 线用官方最高支持版本里 cx_Logging 仍有轮子的那个：cx_Freeze 在 3.14 上
+      # 还需要 cx_Logging（没有 cp314 轮子），所以这里停在 3.13（镜像自带 3.13.11）
+      PYTHON_VERSION: '3.13'
+      PYTHONIOENCODING: utf-8
+      TPMSMART_ARCH: arm64
+      # Certum SimplySign 在 arm64 runner 上未验证，先出不签名产物（见文件头说明）
+      TPMSMART_SIGN_SKIP: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check OpenSC installer
+        shell: pwsh
+        run: |
+          # arm64 包带的是 win64 那份 OpenSC MSI（官方无 arm64 构建，靠 Win11 的 x64 仿真）
+          $msi = 'OpenSC\OpenSC-0.25.1_win64-Light.msi'
+          if (-not (Test-Path $msi)) { throw "缺少 $msi（应从 OpenSC 官方 Release 随仓库分发）" }
+          Write-Host "$msi 就绪，安装包的 OpenSC 组件将使用它"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: arm64
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      # 先确认拿到的确实是 arm64 解释器：arch 写错的话后面产物位宽全不对
+      - name: Verify arm64 interpreter
+        shell: pwsh
+        run: |
+          python -c "import platform,sys,struct;print('interpreter:',platform.machine(),struct.calcsize('P')*8,'bit',sys.version);sys.exit(0 if platform.machine().lower() in ('arm64','aarch64') else 1)"
+          if ($LASTEXITCODE -ne 0) { throw '当前 Python 不是 arm64（请检查 setup-python 的 architecture）' }
+
+      - name: Check declared dependencies
+        run: python Builds/check_imports.py
+
+      # arm64 资源：OpenSC 沿用 x64 工具、校验 Import\arm64、SSH 代理跳过
+      - name: Prepare arm64 resources
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File Builds/Prepare-ArchResources.ps1 -Arch arm64
+
+      - name: Resolve package name
+        id: naming
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          $version = "$env:INPUT_VERSION".Trim() -replace '^[vV]', ''
+
+          $version4 = '1.6.0.0'
+          if (-not [string]::IsNullOrWhiteSpace($version)) {
+            $parts = @($version -split '\.')
+            while ($parts.Count -lt 4) { $parts += '0' }
+            $version4 = ($parts[0..3] -join '.')
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "version4=$version4" >> $env:GITHUB_OUTPUT
+
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            "name=TPMSmartCard-cxfree-beta-win11-a64" >> $env:GITHUB_OUTPUT
+          } else {
+            "name=TPMSmartCard-cxfree-v$version-win11-a64" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Build with cx_Freeze (arm64)
+        env:
+          TPMSMART_VERSION: ${{ steps.naming.outputs.version }}
+        run: python BuildPackage.py build
+
+      - name: Package (portable zip)
+        id: pack
+        shell: pwsh
+        env:
+          NAME: ${{ steps.naming.outputs.name }}
+        run: |
+          $name = $env:NAME
+          $stage = Join-Path 'staging' $name
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          $buildDir = Get-ChildItem -Path 'build' -Directory -ErrorAction SilentlyContinue |
+                      Where-Object { $_.Name -like 'exe.win-arm64-*' } | Select-Object -First 1
+          if (-not $buildDir) { throw 'cx_Freeze output directory (build/exe.win-arm64-*) not found; build failed' }
+          Copy-Item -Path (Join-Path $buildDir.FullName '*') -Destination $stage -Recurse -Force
+
+          # 程序运行时以相对路径调用 Import\TPMImport.exe（见 Module/TPMSmartCard.py）
+          $importStage = Join-Path $stage 'Import'
+          New-Item -ItemType Directory -Force -Path $importStage | Out-Null
+          Get-ChildItem -Path 'Import\arm64' -File | Copy-Item -Destination $importStage -Force
+
+          @(
+            "version=${{ needs.prepare.outputs.version }}",
+            "arch=arm64",
+            "signed=no",
+            "commit=$env:GITHUB_SHA",
+            "ref=$env:GITHUB_REF_NAME",
+            "run=$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID",
+            "built_at=$((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) UTC"
+          ) | Set-Content -Path (Join-Path $stage 'BUILD_INFO.txt') -Encoding UTF8
+
+          New-Item -ItemType Directory -Force -Path 'dist' | Out-Null
+          $zip = Join-Path $PWD "dist/$name-green.zip"
+
+          $sevenZip = 'C:\Program Files\7-Zip\7z.exe'
+          if (Test-Path $sevenZip) {
+            Push-Location 'staging'
+            & $sevenZip a -tzip -mx=9 $zip $name
+            $code = $LASTEXITCODE
+            Pop-Location
+            if ($code -ne 0) { throw "7-Zip failed with exit code $code" }
+          } else {
+            Compress-Archive -Path $stage -DestinationPath $zip -CompressionLevel Optimal
+          }
+
+          $size = [math]::Round((Get-Item $zip).Length / 1MB, 1)
+          Write-Host "created $name-green.zip ($size MB)"
+
+          "artifact=$name" >> $env:GITHUB_OUTPUT
+          "package=$name-green.zip" >> $env:GITHUB_OUTPUT
+          "builddir=$($buildDir.FullName)" >> $env:GITHUB_OUTPUT
+
+      # 安装包：同一份 install.iss，靠 TPMSMART_ARCH=arm64 切成 arm64 模式
+      # （ArchitecturesAllowed=arm64、装到 Program Files、OpenSC 用 x64 那份 MSI）
+      - name: Build installer (Inno Setup)
+        id: iscc
+        shell: pwsh
+        env:
+          TPMSMART_VERSION: ${{ steps.naming.outputs.version }}
+          TPMSMART_VERSION4: ${{ steps.naming.outputs.version4 }}
+          TPMSMART_PACKAGENAME: ${{ steps.naming.outputs.name }}
+          TPMSMART_BUILDDIR: ${{ steps.pack.outputs.builddir }}
+        run: |
+          # 镜像自带 Inno Setup 6.6.1；没有的话脚本会给出升级/安装路径
+          $lines = & (Join-Path $PWD 'Builds/Ensure-InnoSetup.ps1')
+          $iscc = $lines | Where-Object { $_ -match 'ISCC\.exe$' } | Select-Object -Last 1
+          if (-not $iscc -or -not (Test-Path $iscc)) { throw 'ISCC.exe not found' }
+
+          & (Join-Path $PWD 'Builds/Build-Installer.ps1') -Iscc $iscc -ImportDir 'Import\arm64'
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed ($LASTEXITCODE)" }
+
+          $setup = Get-ChildItem 'dist' -Filter '*-setup.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $setup) { throw 'installer executable was not produced' }
+          Write-Host ("created {0} ({1:N1} MB)" -f $setup.Name, ($setup.Length / 1MB))
+          "setup=$($setup.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.artifact }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish (${{ needs.prepare.outputs.channel }})
+    needs: [ prepare, build ]
+    if: needs.prepare.outputs.channel != 'none'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: dist
+
+      - name: Upload arm64 packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          DRAFT: ${{ inputs.draft }}
+          PACKAGE: ${{ needs.build.outputs.package }}
+          SETUP: ${{ needs.build.outputs.setup }}
+        run: |
+          set -euo pipefail
+          REPO="$GITHUB_REPOSITORY"
+
+          if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            if [ "$CHANNEL" = "release" ]; then
+              draft_flag=""
+              if [ "${DRAFT}" = "true" ]; then draft_flag="--draft"; fi
+              gh release create "$TAG" --repo "$REPO" --target "$GITHUB_SHA" $draft_flag \
+                --title "V${VERSION} Release" \
+                --notes "V${VERSION}：含 cx_Freeze（x64/x86/arm64）与 Nuitka 产物，按文件名区分。"
+              echo "::warning title=Release 由本流水线创建::$TAG 通常应由 Build Client Release 创建；若之后还要用它发布 x64 产物，那条线会因「Release 已存在」中止，需要先 gh release delete $TAG"
+            else
+              gh release create "$TAG" --repo "$REPO" --prerelease --target "$GITHUB_SHA" \
+                --title "Beta Build #${{ github.run_number }}" \
+                --notes "自动构建的 Beta 测试版（每次推送到 main 覆盖更新），含 cx_Freeze（x64/x86/arm64）与 Nuitka 产物，按文件名区分。arm64 产物暂未签名。"
+            fi
+          fi
+
+          # 文件名带 -win11-a64-，与其它架构的资产互不覆盖
+          for attempt in 1 2 3; do
+            if gh release upload "$TAG" dist/* --repo "$REPO" --clobber; then
+              echo "已把 $PACKAGE 与 $SETUP 上传到 $TAG"
+              exit 0
+            fi
+            echo "上传失败（第 $attempt 次），5 秒后重试…"
+            sleep 5
+          done
+
+          echo "::error::上传 arm64 产物到 $TAG 失败（3 次都没成功）"
+          exit 1

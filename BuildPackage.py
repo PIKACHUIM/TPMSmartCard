@@ -12,23 +12,23 @@ from Module.Version import VERSION
 version = VERSION
 
 # ---- 目标架构 --------------------------------------------------------------
-# TPMSMART_ARCH=x86 时用 Python 3.10 x86 构建，随包分发的二进制也必须换成 32 位的：
-# OpenSC 工具与 TPMImport 由 Builds\Prepare-x86-Resources.ps1 准备并校验位宽，
-# SSH 代理（可选组件）看仓库里有没有 SSHCardAgent-x86.exe。
+# 三条线的资源来源不同（详见 Builds\Prepare-ArchResources.ps1）：
+#   x64  ：随包用仓库里的 OpenSC\（x64 工具）+ SSHCardAgent.exe
+#   x86  ：用从 win32 MSI 解包出来的 32 位 OpenSC 工具 + 可选的 SSHCardAgent-x86.exe
+#   arm64：OpenSC 官方没有 Windows arm64 构建，只能用 x64 工具（Win11 ARM64 靠 x64 仿真跑）；
+#          SSH 代理没有 arm64 版，该组件不打包
 TARGET_ARCH = os.environ.get("TPMSMART_ARCH", "x64").strip().lower()
 IS_X86 = TARGET_ARCH == "x86"
+IS_ARM64 = TARGET_ARCH == "arm64"
 
-# 32 位 OpenSC 工具目录：由 Builds\Prepare-x86-Resources.ps1 从仓库里的
-# OpenSC-0.25.1_win32-Light.msi 解包（OpenSC\ 里那份是 64 位，不能用于 32 位包）
 OPENSC_X86_DIR = os.environ.get("TPMSMART_OPENSC_DIR") or os.path.join("build", "opensc-win32")
-# 32 位 SSH 密钥代理（WinCryptSSHAgent 的 x86 版），没有就不打包该组件
 SSH_AGENT_X86 = "SSHCardAgent-x86.exe"
 
 
 def _require_dir(path, hint):
     if os.path.isdir(path):
         return
-    raise SystemExit("[打包] 缺少 32 位资源目录：%s\n       %s" % (path, hint))
+    raise SystemExit("[打包] 缺少资源目录：%s\n       %s" % (path, hint))
 
 
 def resource_files():
@@ -39,12 +39,17 @@ def resource_files():
     ]
     if IS_X86:
         _require_dir(OPENSC_X86_DIR,
-                     "请先运行：pwsh -File Builds\\Prepare-x86-Resources.ps1")
+                     "请先运行：pwsh -File Builds\\Prepare-ArchResources.ps1 -Arch x86")
         items.append((OPENSC_X86_DIR, "OpenSC/"))
         if os.path.isfile(SSH_AGENT_X86):
             items.append((SSH_AGENT_X86, "SSHCardAgent.exe"))
         else:
             print("[打包] 提示：没有 %s，32 位产物不含 SSH 密钥代理组件" % SSH_AGENT_X86)
+    elif IS_ARM64:
+        _require_dir("OpenSC", "仓库里应该有 OpenSC\\（x64 工具）")
+        items.append(("OpenSC/", "OpenSC/"))
+        print("[打包] arm64：OpenSC 官方没有 Windows arm64 构建，随包带 x64 工具"
+              "（在 Windows 11 ARM64 上靠 x64 仿真运行）；SSH 代理无 arm64 版，跳过该组件")
     else:
         _require_dir("OpenSC", "仓库里应该有 OpenSC\\（x64 工具）")
         items.append(("OpenSC/", "OpenSC/"))
@@ -53,7 +58,7 @@ def resource_files():
     return items
 
 
-print("[打包] 目标架构：%s（%s）" % (TARGET_ARCH, "32 位" if IS_X86 else "64 位"))
+print("[打包] 目标架构：%s" % TARGET_ARCH)
 files = resource_files()
 
 # TARGET

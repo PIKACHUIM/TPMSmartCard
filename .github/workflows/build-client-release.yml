@@ -106,8 +106,10 @@ jobs:
       package: ${{ steps.pack.outputs.package }}
       setup: ${{ steps.iscc.outputs.setup }}
     env:
-      # 与 install.iss 引用的 build/exe.win-amd64-3.11 保持一致，方便把 CI 产物继续用于本地打安装包
-      PYTHON_VERSION: '3.11'
+      # 与 install.iss 默认引用的 build/exe.win-amd64-* 保持一致，方便把 CI 产物继续用于本地打安装包。
+      # 3.13 是官方仍支持 Windows 8.1 的较新版本（官方要求 8.1+，Win7 需 3.8）；
+      # 3.14 上 cx_Freeze 的依赖 cx_Logging 还没有 cp314 轮子，所以这条线留在 3.13。
+      PYTHON_VERSION: '3.13'
       # runner 控制台是 cp1252，显式 UTF-8 输出，避免签名/构建日志里的中文变乱码
       PYTHONIOENCODING: utf-8
     steps:

@@ -6,13 +6,13 @@
 
  用法：
    # 给 cx_Freeze 产物顶层 exe 签名（BuildPackage.py 构建后会自动调用）
-   .\Builds\Sign-Windows.ps1 -Path 'build\exe.win-amd64-3.11'
+   .\Builds\Sign-Windows.ps1 -Path 'build\exe.win-amd64-3.13'
 
    # 多个目标用 , 或 ; 分隔（也支持在 PowerShell 里传数组）
    .\Builds\Sign-Windows.ps1 -Path 'a.exe;b.exe'
 
    # 只看会签哪些文件、用哪张证书（不落笔）
-   .\Builds\Sign-Windows.ps1 -Path 'build\exe.win-amd64-3.11' -ListOnly
+   .\Builds\Sign-Windows.ps1 -Path 'build\exe.win-amd64-3.13' -ListOnly
 
  退出码：
    0  签名成功，或「没有可用证书且未要求强制签名」的跳过（本地开发机常见）

@@ -9,7 +9,8 @@
 ;    TPMSMART_VERSION4     写入 exe 版本资源的 4 段版本号，如 1.6.0.0（默认 1.6.0.0）
 ;    TPMSMART_PACKAGENAME  产物基础名 = TPMSmartCard-<打包方式>-<通道>-<系统>-<架构>
 ;                          （默认 TPMSmartCard-cxfree-local-win10-x64；安装包名在此基础上拼 -setup）
-;    TPMSMART_BUILDDIR     打包产物目录：cx_Freeze 的 build\exe.win-amd64-3.11，
+;    TPMSMART_BUILDDIR     打包产物目录：cx_Freeze 的 build\exe.win-amd64-3.13
+;                          （x86 线是 exe.win32-3.10，arm64 线是 exe.win-arm64-3.13），
 ;                          或 Nuitka 的 build\nuitka\TPMSmartCard
 ;
 ;  语言：简体中文 + 英文。中文语言包使用随仓库分发的 ChineseSimplified.isl
@@ -78,19 +79,25 @@
 ; ---- cx_Freeze 输出目录 ---------------------------------------------------
 #define BuildDir GetEnv("TPMSMART_BUILDDIR")
 #if Len(BuildDir) == 0
-  #define BuildDir "build\exe.win-amd64-3.11"
+  #define BuildDir "build\exe.win-amd64-3.13"
 #endif
 
 ; ---- 目标架构 -------------------------------------------------------------
-; x64（默认）或 x86。32 位包用 ArchitecturesAllowed=x86compatible，并且**不写**
-; ArchitecturesInstallIn64BitMode —— 这样安装器以 32 位模式运行，{autopf} 自动是
-; Program Files (x86)，注册表也落在 32 位视图，与本程序（32 位进程）的视图一致。
+; x64（默认）/ x86 / arm64：
+;   · x86  ：ArchitecturesAllowed=x86compatible，并且**不写** ArchitecturesInstallIn64BitMode
+;            —— 安装器以 32 位模式运行，{autopf} 自动是 Program Files (x86)、注册表落在
+;            32 位视图，与本程序（32 位进程）看到的视图一致；
+;   · arm64：ArchitecturesAllowed/InstallIn64BitMode 都用 arm64 —— 装到
+;            Program Files、写 64 位注册表视图，与原生 arm64 进程一致；
+;   · x64  ：两者都用 x64compatible。
 #define TargetArch GetEnv("TPMSMART_ARCH")
 #if Len(TargetArch) == 0
   #define TargetArch "x64"
 #endif
 
 ; ---- 随包分发的依赖（按架构选 OpenSC 的 MSI 与 VC++ 运行库）-----------------
+; arm64 也用 win64 那份 OpenSC MSI：官方没有 Windows arm64 构建，
+; Windows 11 ARM64 靠 x64 仿真安装/运行（Win10 ARM64 只有 x86 仿真，不适用）。
 #define OpenScMsi GetEnv("TPMSMART_OPENSC_MSI")
 #if Len(OpenScMsi) == 0
   #if TargetArch == "x86"
@@ -104,6 +111,8 @@
 #if Len(VcRedistExe) == 0
   #if TargetArch == "x86"
     #define VcRedistExe "VC_redist.x86.exe"
+  #elif TargetArch == "arm64"
+    #define VcRedistExe "VC_redist.arm64.exe"
   #else
     #define VcRedistExe "VC_redist.x64.exe"
   #endif
@@ -113,9 +122,17 @@
 #if Len(VcRedistPath) == 0
   #if TargetArch == "x86"
     #define VcRedistPath "Setups\Visual C++ Redistributable for Visual Studio 2015-2022 x86\VC_redist.x86.exe"
+  #elif TargetArch == "arm64"
+    #define VcRedistPath "Setups\Visual C++ Redistributable for Visual Studio 2015-2022 arm64\VC_redist.arm64.exe"
   #else
     #define VcRedistPath "Setups\Visual C++ Redistributable for Visual Studio 2015-2022 x64\VC_redist.x64.exe"
   #endif
+#endif
+
+; 运行库安装包不在仓库里时不报错，只是这次不带它（arm64 的 VC_redist.arm64.exe 通常还需要
+; 自己塞进上面的目录；缺了也不影响编译，安装后在「系统设置」或手动补装即可）。
+#if FileExists(AddBackslash(SourcePath) + VcRedistPath)
+  #define HaveVcRedist
 #endif
 
 ; ---- 代码签名 -------------------------------------------------------------
@@ -167,10 +184,16 @@ DisableWelcomePage=yes
 ; 默认安装类型 = Full：Inno 取 [Types] 第一个条目作为默认类型（Full 在首位），
 ; 安装 OpenSC / 写入 Program Files 都需要管理员
 PrivilegesRequired=admin
-; 需要 Windows 8.1 及以上（64 位包基于 Python 3.11 x64，32 位包基于 Python 3.10 x86）
+; 需要 Windows 8.1 及以上（三条线都用官方仍支持 8.1 的 Python：
+; x64 与 arm64 用 Python 3.13 x64/arm64 —— 3.13 官方要求 8.1+；
+; x86 用 Python 3.10 x86 —— 低版本系统能用的最高版本）
 MinVersion=6.3
 #if TargetArch == "x86"
 ArchitecturesAllowed=x86compatible
+#elif TargetArch == "arm64"
+; 注意：Inno 里 arm64 的标识符就是 arm64（没有 arm64compatible 这种写法，实测会报 invalid）
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
 #else
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -218,6 +241,7 @@ english.StateSkipped=already installed, skipped
 english.StateInstalled=installed
 english.StateFailed=installation failed (exit code %1)
 english.StateUnselected=not selected, skipped
+english.StateNoRedist=not bundled with this installer, skipped (install the Visual C++ runtime manually if the app fails to start)
 english.PrereqWarnTitle=Some dependencies were not installed
 english.PrereqWarnBody=Setup will continue. You can retry from the app's Settings page after installation, or run the installer manually (OpenSC is in the OpenSC folder of the app directory). Card reading and creation use the OpenSC tool folder bundled with the app, so the app works without it.
 chinesesimplified.AppShortcut={#AppName}
@@ -240,6 +264,7 @@ chinesesimplified.StateSkipped=已安装，跳过
 chinesesimplified.StateInstalled=安装完成
 chinesesimplified.StateFailed=安装失败（退出码 %1）
 chinesesimplified.StateUnselected=未选择安装，跳过
+chinesesimplified.StateNoRedist=未随包分发，已跳过（如程序无法启动，请手动安装 VC++ 运行库）
 chinesesimplified.PrereqWarnTitle=部分依赖未能自动安装
 chinesesimplified.PrereqWarnBody=安装程序将继续。安装完成后可在程序「系统设置」中重试，或手动运行安装包（OpenSC 位于程序目录的 OpenSC 文件夹）。本程序读卡与建卡使用随包的 OpenSC 工具目录，不装它不影响本程序功能。
 
@@ -276,7 +301,10 @@ Source: "{#ImportDir}\*.dll"; DestDir: "{app}\Import"; Flags: ignoreversion skip
 Source: "{#ImportDir}\*.json"; DestDir: "{app}\Import"; Flags: ignoreversion skipifsourcedoesntexist
 ; 依赖安装包：不在安装阶段复制，由 [Code] 按需解包后静默安装
 Source: "OpenSC\{#OpenScMsi}"; DestDir: "{tmp}"; Flags: dontcopy
+; 运行库安装包不在仓库里时就不带它（见上面 HaveVcRedist 的说明）
+#ifdef HaveVcRedist
 Source: "{#VcRedistPath}"; DestDir: "{tmp}"; Flags: dontcopy
+#endif
 
 [Icons]
 Name: "{group}\{cm:AppShortcut}"; Filename: "{app}\SmartCardAPP.exe"; WorkingDir: "{app}"
@@ -447,6 +475,7 @@ begin
     PrereqLog := PrereqLog + PrereqNote(CM('ItemVcRedist'), CM('StateSkipped'))
   else
   begin
+#ifdef HaveVcRedist
     ExtractTemporaryFile('{#VcRedistExe}');
     Code := RunPrereq('{#VcRedistExe}', '/install /quiet /norestart', CM('StatusVcRedist'));
     PrereqLog := PrereqLog + PrereqNote(CM('ItemVcRedist'), PrereqState(Code));
@@ -457,6 +486,11 @@ begin
     end
     else
       PrereqFailed := True;
+#else
+    { 安装包里没有带运行库（arm64 的 VC_redist.arm64.exe 需要自己放进 Setups\ 下）：
+      只提示，不视为失败 —— 大多数目标机已有运行库，缺了可手动装 }
+    PrereqLog := PrereqLog + PrereqNote(CM('ItemVcRedist'), CM('StateNoRedist'));
+#endif
   end;
 
   { 2) OpenSC（智能卡中间件）：没勾选组件时跳过，之后可在程序「系统设置」里安装 }

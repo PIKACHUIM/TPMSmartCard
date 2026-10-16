@@ -1,37 +1,48 @@
-﻿# NewVenv-PY311.ps1
-# 用 Python 3.11 重建 TPMSmartCard 的虚拟环境（CI 与打包脚本都要求 3.11）
+﻿# NewVenv-PY313.ps1
+# 建一个本地开发用的虚拟环境（默认 Python 3.13，即 x64 cx_Freeze 正式线所用的版本）
 #
-# 背景：cx_Freeze~=7.2.0 / cx_Logging / pywinpty~=2.0.13 在 Python 3.13/3.14 上
-#       没有预编译 wheel，pip 会退化成源码编译并要求 MSVC Build Tools；
-#       且 install.iss 与 Builds 下的打包脚本硬编码 build\exe.win-amd64-3.11，
-#       换版本后 cx_Freeze 产物目录名会变，打包脚本就找不到文件。
+# 各条流水线用的 Python（与 .github/workflows/*.yml 保持一致）：
+#   x64   cx_Freeze（win10）  Python 3.13   ← 本脚本默认；官方要求 Windows 8.1+
+#   x64   Nuitka（win10）     Python 3.14   （Nuitka 支持到 3.14，且不依赖 cx_Freeze）
+#   x86   cx_Freeze（win78）  Python 3.10   ← 低版本系统能用的最高版本，用 -PythonVersion 3.10
+#   arm64 cx_Freeze（win11）  Python 3.13   （只能在 arm64 机器上构建，见 build-client-release-arm64.yml）
 #
-# 用法（在仓库根目录 D:\Codes\TPMSmartCard 下）：
-#   .\Builds\NewVenv-PY311.ps1
-#   .\Builds\NewVenv-PY311.ps1 -VenvDir D:\Venvs\TPMSmartCard-PY311
-#   .\Builds\NewVenv-PY311.ps1 -Force        # 已存在时先删掉重建
+# 依赖按 Python 版本在 requirements.txt 里用环境标记分流，所以一个 venv 只对应一条线：
+#   3.13/3.14 用 cx_Freeze 8.7 + cryptography>=46；3.10 用 cx_Freeze 7.2 + cryptography 43。
+#   注意 3.14 下不会安装 cx_Freeze（cx_Logging 还没有 cp314 轮子），因此 3.14 venv 只能跑 Nuitka 打包。
+#
+# 用法（在仓库根目录）：
+#   .\Builds\NewVenv-PY313.ps1
+#   .\Builds\NewVenv-PY313.ps1 -PythonVersion 3.10 -VenvDir D:\Venvs\TPMSmartCard-PY310
+#   .\Builds\NewVenv-PY313.ps1 -Force        # 已存在时先删掉重建
 
 [CmdletBinding()]
 param(
-    [string]$VenvDir = 'D:\Venvs\TPMSmartCard-PY311',
+    [string]$PythonVersion = '3.13',
+    [string]$VenvDir = '',
     [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
 
+if (-not $VenvDir) {
+    $VenvDir = 'D:\Venvs\TPMSmartCard-PY' + ($PythonVersion -replace '\.', '')
+}
+
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Warn2($msg) { Write-Host "!!  $msg" -ForegroundColor Yellow }
 
-# 1) 找一个可用的 Python 3.11
-Write-Step '查找 Python 3.11'
+# 1) 找指定版本的 Python（x64）
+Write-Step "查找 Python $PythonVersion"
 $py = $null
 if (Get-Command py.exe -ErrorAction SilentlyContinue) {
-    $found = & py.exe -3.11 -c "import sys;print(sys.executable)" 2>$null
+    $found = & py.exe "-$PythonVersion" -c "import sys;print(sys.executable)" 2>$null
     if ($LASTEXITCODE -eq 0 -and $found) { $py = $found.Trim() }
 }
 if (-not $py) {
-    Write-Warn2 '没有找到 Python 3.11。请先安装：'
-    Write-Host '    下载页: https://www.python.org/downloads/windows/  ->  Python 3.11.x  Windows installer (64-bit)'
+    Write-Warn2 "没有找到 Python $PythonVersion。请先安装："
+    Write-Host '    下载页: https://www.python.org/downloads/windows/'
+    Write-Host "    ->  Python $PythonVersion.x  Windows installer (64-bit)"
     Write-Host '    安装时务必：'
     Write-Host '      - 右键安装包 -> 以管理员身份运行'
     Write-Host '      - 首屏勾选 "Install for all users" 与 "Add python.exe to PATH"'
@@ -67,7 +78,7 @@ if (-not (Test-Path $venvPy)) { throw "venv 创建失败: $venvPy" }
 Write-Step '升级 pip'
 & $venvPy -m pip install --upgrade pip
 
-Write-Step "安装 requirements.txt"
+Write-Step '安装 requirements.txt（版本按 Python 版本自动分流）'
 & $venvPy -m pip install -r $req
 if ($LASTEXITCODE -ne 0) { throw "pip install 失败 (exit $LASTEXITCODE)" }
 
@@ -84,5 +95,6 @@ Write-Step '完成'
 Write-Host "  venv:      $VenvDir"
 Write-Host "  解释器:    $venvPy"
 Write-Host '  PyCharm:   Settings -> Project -> Python Interpreter -> Add -> Existing，选上面这个 python.exe'
-Write-Host '  构建产物:  build\exe.win-amd64-3.11  （与 install.iss 一致）'
+Write-Host '  构建产物:  build\exe.win-amd64-3.13（x64）/ exe.win32-3.10（x86）/ exe.win-arm64-3.13（arm64）'
 Write-Host '  打包:      python BuildPackage.py build   （用上面的解释器；需要管理员权限）'
+Write-Host '  其它架构:  需另建对应版本的 venv（-PythonVersion 3.10 等），见文件头说明'
