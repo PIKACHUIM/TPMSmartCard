@@ -99,6 +99,7 @@ import time
 import uuid
 import zipfile
 
+from Module import DPAPI
 from Module import Paths
 from Module.Version import VERSION
 
@@ -172,6 +173,8 @@ VSC_PCP_DIRS = (
 )
 # 备份包内 TPM 密钥索引的目录名（``pcp/<索引>/<原相对路径>``）
 PCP_DIR = "pcp"
+# 备份包内 DPAPI 明文条目的目录名（``dpapi/<卡片数据目录内的相对路径>``）
+DPAPI_DIR = "dpapi"
 
 # 厂商设备属性集（存在 ``Enum\...\<实例>\Properties`` 里，ACL 受保护，``reg export``
 # 读不到，但 PnP 属性接口可以读写）：
@@ -188,6 +191,10 @@ VSC_PROP_SET_SIMULATOR = "{2BEED4A8-5721-4C27-AF9A-82EC36181B4D}"
 DEVPROPKEY_SIZE = 20
 # DEVPROP_TYPE_STRING / DEVPROP_TYPE_STRING_LIST
 DEVPROP_TYPE_STRING_LIST = 0x00002012
+# 规范化后的厂商属性集（小写、不带花括号），用于比较；属性接口给出的 fmtid
+# 是不带花括号的小写文本，直接跟带花括号的大写常量比会永远不相等。
+VSC_PROP_SETS = tuple(str(uuid.UUID(text.strip("{}"))).lower()
+                      for text in (VSC_PROP_SET_TPMVSC, VSC_PROP_SET_SIMULATOR))
 
 # reg.exe 输出里提取 FriendlyName
 _FRIENDLY_RE = re.compile(r"^\s*FriendlyName\s+REG_SZ\s+(.*?)\s*$", re.MULTILINE)
@@ -845,6 +852,48 @@ def create_backup(dest_path, name="", uid=""):
     if not vendor_props:
         log.append("警告: 没读到厂商卡片身份属性，还原后读卡器很可能不会出现")
 
+    # ---- 1d. DPAPI：卡上的密钥 / PIN 映射必须在本机解开后再收进备份 --------- #
+    # keymaps / pinmaps / pinpolicy / blobs\* 都不是明文，而是 DPAPI blob
+    # （用户作用域、描述 "TPMVSC"），主密钥在**本机**的账户 DPAPI 存储里。
+    # 只把密文收进备份的话，换系统后目标机没有这把主密钥，驱动读不出卡上的密钥与
+    # PIN 映射 —— 实测表现为「读卡器在、卡片也在，但证书与私钥都不出现」
+    # （certutil -scinfo 报「找不到储存的密钥集」，见 devlog §13）。
+    # 因此这里解开成明文收进包，还原时再用目标机的 DPAPI 重新封装。
+    dpapi_records = []
+    plain_blobs = []
+    for rel, full, _, _ in copied:
+        if not rel.startswith(FILES_DIR + "/"):
+            continue
+        try:
+            with open(full, "rb") as handle:
+                raw = handle.read()
+        except OSError as err:
+            log.append("读取卡片数据失败，跳过 DPAPI 处理: %s (%s)" % (rel, err))
+            continue
+        info = DPAPI.blob_info(raw)
+        if not info:
+            continue
+        inner = rel[len(FILES_DIR) + 1:]
+        plain, note = DPAPI.unprotect(raw)
+        if plain is None:
+            log.append("DPAPI 解密失败: %s（%s）" % (inner, note))
+            continue
+        account = DPAPI.master_key_owner(info["master_key"])[0]
+        arcname = "%s/%s" % (DPAPI_DIR, inner)
+        plain_blobs.append((arcname, plain))
+        dpapi_records.append({"path": inner, "file": arcname, "account": account,
+                              "flags": info["flags"], "master_key": info["master_key"],
+                              "size": len(plain)})
+        log.append("DPAPI 已解密: %s（%s；主密钥 %s%s）"
+                   % (inner, note, info["master_key"],
+                      "，属于 %s" % account if account else "，未能在本机定位所属账户"))
+    if dpapi_records:
+        log.append("已解密 %d 个 DPAPI 保护文件；还原时会用目标机的 DPAPI 重新加密。"
+                   "注意：备份包因此包含卡上密钥材料的明文，请妥善保管备份文件"
+                   % len(dpapi_records))
+    else:
+        log.append("卡片数据里没有 DPAPI 保护的内容（无需解密）")
+
     # 数据目录清单（诊断用，便于确认目录内部布局）
     index_lines = store_index()
 
@@ -859,6 +908,9 @@ def create_backup(dest_path, name="", uid=""):
                     archive.write(full, rel)
                 except OSError as err:
                     raise BackupError("写入备份文件失败: %s (%s)" % (rel, err))
+            # DPAPI 明文条目（换系统后由目标机重新加密，见 1d）
+            for arcname, payload in plain_blobs:
+                archive.writestr(arcname, payload)
             archive.writestr("store-index.txt", "\n".join(index_lines))
 
             # ---- 3. 注册表：导出到临时文件后收进压缩包 -------------------- #
@@ -908,14 +960,19 @@ def create_backup(dest_path, name="", uid=""):
                 },
                 "registry": registry,
                 "pcp": pcp,
+                "dpapi": dpapi_records,
                 "system_root": SYSTEM_ROOT,
                 "device_properties": properties,
                 "files": [{"path": rel, "size": size, "sha256": sha}
                           for rel, _, size, sha in copied],
                 "notes": [
-                    "备份包含四部分：卡片数据目录（Tpm）、设备注册表、TPM 密钥索引"
-                    "（PCPKSP 下的 *.PCPKEY）、设备属性（卡片身份：卡片名与卡片 GUID）；"
-                    "不含 TPM 内部的密钥材料。",
+                    "备份包含五部分：卡片数据目录（Tpm）、设备注册表、TPM 密钥索引"
+                    "（PCPKSP 下的 *.PCPKEY）、设备属性（卡片身份：卡片名与卡片 GUID）、"
+                    "以及卡片数据的 DPAPI 明文（dpapi/，见下）；不含 TPM 内部的密钥材料。",
+                    "卡片里的 keymaps / pinmaps / pinpolicy / blobs\\* 是 DPAPI 保护的，"
+                    "备份时用本机 DPAPI 解开成明文收进 dpapi/；还原时用目标机的 DPAPI "
+                    "重新加密写回。因此备份包包含卡上密钥与 PIN 映射的明文，"
+                    "请把它当作与 PIN / 管理密钥同等敏感的文件保管。",
                     "设备属性存在 Enum 下受 ACL 保护的 Properties 子键里，注册表导出"
                     "带不回来，必须单独备份——少了它驱动不会向 PC/SC 发布读卡器。",
                     "卡片私钥由 TPM 保护，磁盘上只有 TPM 封装后的数据；"
@@ -1231,6 +1288,18 @@ def _guid_raw(text):
     return uuid.UUID(str(text).strip("{}")).bytes_le
 
 
+def _fmtid_text(value):
+    """把属性集 GUID（bytes 或字符串）规范成不带花括号的小写文本，便于比较。"""
+    if isinstance(value, (bytes, bytearray)):
+        return str(uuid.UUID(bytes_le=bytes(value)))
+    return str(value or "").strip().strip("{}").lower()
+
+
+def _is_vendor_set(fmtid):
+    """是不是厂商（卡片身份）属性集；``fmtid`` 用 ``_fmtid_text`` 规范过的文本。"""
+    return _fmtid_text(fmtid) in VSC_PROP_SETS
+
+
 def _setupapi_props():
     """准备 setupapi 的设备属性接口，返回 ``(setupapi, SP_DEVINFO_DATA, DEVPROPKEY)``。
 
@@ -1325,7 +1394,7 @@ def read_device_properties(uid=""):
     if info is None:
         return []
     try:
-        return [{"fmtid": str(uuid.UUID(bytes_le=bytes(key.fmtid))),
+        return [{"fmtid": _fmtid_text(key.fmtid),
                  "pid": key.pid,
                  "type": ptype,
                  "data": base64.b64encode(blob).decode("ascii")}
@@ -1358,8 +1427,14 @@ def _rewrite_system_root(blob, ptype, source_root):
 def write_device_properties(uid="", properties=None, source_root=""):
     """把备份里的 PnP 设备属性写回本机设备。
 
-    只写「本机设备上还没有的」属性：PnP 自己生成的安装信息（``DEVPKEY_Device_*``）
-    本机已经有了，同机还原时属性本来也在，都不动；只有真正缺失的厂商属性会被补齐。
+    写回策略分两类：
+
+    * **厂商（卡片身份）属性集**（``{2065F23D-…}`` / ``{2BEED4A8-…}``）：本机已有但
+      与备份**不一致时必须覆盖**。这套属性就是"这张卡是谁"，本机残留的旧身份（例如
+      另一个实例被写过别的卡的身份）会让驱动按另一张卡去找 TPM 密钥，表现为读卡器
+      出现却认不出卡片、或者两台设备的卡片信息一模一样。
+    * 其它属性（PnP 自己生成的 ``DEVPKEY_Device_*`` 安装信息等）：只补本机没有的，
+      同机还原时保持原样。
 
     :param properties: ``read_device_properties()`` 的结果
     :param source_root: 备份机器的 ``%SystemRoot%``，用于改写属性里的绝对路径
@@ -1377,20 +1452,18 @@ def write_device_properties(uid="", properties=None, source_root=""):
     if info is None or data is None:
         return ["设备节点不存在，跳过写回设备属性（卡片身份属性是驱动认出卡片的关键）"]
     written = 0
+    fixed = 0
     skipped = 0
     failed = []
     try:
-        existing = set()
-        for key, _, _ in _property_entries(setupapi, devinfo, propkey, info, data):
-            existing.add((str(uuid.UUID(bytes_le=bytes(key.fmtid))).lower(), key.pid))
+        existing = {}
+        for key, _, blob in _property_entries(setupapi, devinfo, propkey, info, data):
+            existing[(_fmtid_text(key.fmtid), key.pid)] = blob
         for record in records:
-            fmtid = str(record.get("fmtid") or "").strip().lower()
+            fmtid = _fmtid_text(record.get("fmtid"))
             if not fmtid:
                 continue
             pid = int(record.get("pid") or 0)
-            if (fmtid, pid) in existing:
-                skipped += 1
-                continue
             try:
                 blob = base64.b64decode(str(record.get("data") or ""))
                 key = propkey.from_buffer_copy(_guid_raw(fmtid) + pid.to_bytes(4, "little"))
@@ -1400,24 +1473,32 @@ def write_device_properties(uid="", properties=None, source_root=""):
             if not blob or not ptype:
                 continue
             blob = _rewrite_system_root(blob, ptype, source_root)
+            have = existing.get((fmtid, pid))
+            if have is not None:
+                if not _is_vendor_set(fmtid) or have == blob:
+                    skipped += 1
+                    continue
+                # 身份属性不一致：覆盖它，否则本机旧身份会一直粘着这张设备
+                fixed += 1
             if setupapi.SetupDiSetDevicePropertyW(info, ctypes.byref(data), ctypes.byref(key),
                                                   ptype, blob, len(blob), 0):
                 written += 1
             else:
                 failed.append("%s,%d" % (fmtid, pid))
+                if have is not None:
+                    fixed -= 1
     finally:
         setupapi.SetupDiDestroyDeviceInfoList(info)
-    lines = ["已写回设备属性: %d 项（本机已有 %d 项未改动）" % (written, skipped)]
+    lines = ["已写回设备属性: %d 项（其中卡片身份被纠正 %d 项，本机已有且一致 %d 项未改动）"
+             % (written, fixed, skipped)]
     if failed:
         lines.append("以下设备属性写入失败（不影响其它项）: %s" % ", ".join(failed[:6]))
     return lines
 
 
 def vendor_property_count(properties=None):
-    """数一下记录里有几项厂商卡片身份属性（用于备份时的自检提示）。"""
-    wanted = (VSC_PROP_SET_TPMVSC, VSC_PROP_SET_SIMULATOR)
-    return sum(1 for item in (properties or [])
-               if str(item.get("fmtid") or "").upper() in wanted)
+    """数一下记录里有几项厂商卡片身份属性（用于备份 / 诊断时的自检提示）。"""
+    return sum(1 for item in (properties or []) if _is_vendor_set(item.get("fmtid")))
 
 
 def _rescan_devices(uid="", attempts=3):
@@ -1668,6 +1749,71 @@ def pcp_index_lines():
     return lines
 
 
+def _reprotect_dpapi(reader, record, fallback, log):
+    """还原时把备份里的 DPAPI 明文用**本机** DPAPI 重新封装。
+
+    驱动以服务账户身份运行，只有用「同一账户 + 同一作用域」重新加密，它才能解开这些
+    数据；不重新加密（直接用备份里的旧密文）的话，换系统后卡上的密钥 / PIN 映射在本机
+    解不开，表现为读卡器与卡片都在、证书与私钥却不出现。
+
+    :param record: 备份清单 ``dpapi`` 里的记录
+    :param fallback: 原始密文（重新加密失败时退回它，避免连原有数据都丢掉）
+    :return: 可直接写回 store 的字节
+    """
+    arcname = str(record.get("file") or "")
+    inner = record.get("path")
+    account = str(record.get("account") or "") or "SYSTEM"
+    flags = int(record.get("flags") or 0)
+    if not arcname or not reader.exists(arcname):
+        log.append("DPAPI 明文条目缺失，按原始密文写回: %s" % inner)
+        return fallback
+    try:
+        plain = reader.read(arcname)
+    except (KeyError, OSError) as err:
+        log.append("读取 DPAPI 明文失败，按原始密文写回: %s (%s)" % (inner, err))
+        return fallback
+    blob, note = DPAPI.protect(plain, account=account, flags=flags)
+    if blob is None:
+        log.append("DPAPI 重新加密失败（%s），按原始密文写回: %s" % (note, inner))
+        return fallback
+    log.append("DPAPI 已用 %s 重新加密: %s（%s）" % (account, inner, note))
+    return blob
+
+
+def dpapi_state(guid=""):
+    """检查卡片数据里的 DPAPI blob 在本机能否解开（只读，不改动文件）。
+
+    :return: ``(state, text)``，state 取 ``ok`` / ``fail`` / ``none`` / ``unknown``
+    """
+    target = os.path.join(VSC_STORE_DIR, guid) if guid else VSC_STORE_DIR
+    if not os.path.isdir(target):
+        return "unknown", "卡片数据目录不存在，无法判断 DPAPI 状态"
+    blobs = 0
+    failed = []
+    for current, _, files in os.walk(target):
+        for name in files:
+            path = os.path.join(current, name)
+            try:
+                with open(path, "rb") as handle:
+                    raw = handle.read()
+            except OSError:
+                continue
+            if not DPAPI.blob_info(raw):
+                continue
+            blobs += 1
+            plain, _ = DPAPI.unprotect(raw)
+            if plain is None:
+                failed.append(os.path.relpath(path, target).replace("\\", "/"))
+    if not blobs:
+        return "none", "卡片数据里没有 DPAPI 保护的内容"
+    if failed:
+        return "fail", ("卡片上有 %d 个 DPAPI 保护的文件，其中 %d 个在本机解不开（%s）"
+                        "—— 这些数据的 DPAPI 主密钥不在本机；旧版工具做的备份会这样，"
+                        "需要用新版工具在源系统重新备份"
+                        % (blobs, len(failed), ", ".join(failed[:4])))
+    return "ok", "卡片上的 %d 个 DPAPI 保护文件在本机均可解开" % blobs
+
+
 def _binding_ok(bound, guid):
     """判断设备当前的 store 绑定是否可用：绑定的目录必须真实存在，且（已知 GUID 时）
     必须就是备份里这张卡的 GUID。
@@ -1761,12 +1907,18 @@ def _diagnostics(uid="", guid=""):
                  % (len(props), vendor,
                     "" if vendor else "  ← 缺少卡片身份属性，读卡器不会被发布到 PC/SC"))
     lines.extend(pcp_index_lines())
+    state, text = dpapi_state(guid)
+    lines.append("卡片数据 DPAPI（%s）: %s" % (state, text))
     return lines
 
 
-def _restore_verdict(dev_state, reader_code_, bound, guid):
-    """把设备节点状态 / 读卡器状态 / store 绑定合成一句可执行的结论。"""
+def _restore_verdict(dev_state, reader_code_, bound, guid, dpapi="ok"):
+    """把设备节点状态 / 读卡器状态 / store 绑定 / DPAPI 状态合成一句可执行的结论。"""
     if reader_code_ == "card":
+        if dpapi == "fail":
+            return ("卡片已出现，但卡上的密钥 / PIN 数据在本机解不开（DPAPI 主密钥不在"
+                    "本机）：证书与私钥都不会显示。旧版工具做的备份会这样，请用新版工具"
+                    "在源系统重新备份后再还原")
         return "成功：读卡器已出现且卡片可识别，可以直接使用（建议用 PIN 做一次签名验证私钥）"
     if dev_state == "missing":
         return ("设备节点没能建出来：注册表已写回，但系统没有把它枚举成设备"
@@ -1823,6 +1975,12 @@ def restore_backup(package, force=False):
             stale = []
             file_count = 0
             pcp_count = 0
+            dpapi_count = 0
+            # keymaps / pinmaps / pinpolicy / blobs\* 是 DPAPI 保护的：备份里存的是
+            # 源机解出来的明文，写回前必须用**本机** DPAPI 重新加密，否则换系统后
+            # 驱动解不开卡上的密钥与 PIN 映射（读卡器与卡片都在、证书却不出现）。
+            dpapi_map = {str(item.get("path") or ""): item
+                         for item in (manifest.get("dpapi") or [])}
             entries = manifest.get("files") or []
             if entries:
                 if store_state() == "denied":
@@ -1843,12 +2001,18 @@ def restore_backup(package, force=False):
                     expect = str(item.get("sha256") or "")
                     if expect and hashlib.sha256(data).hexdigest() != expect:
                         stale.append(inner)
+                    record = dpapi_map.get(inner)
+                    if record:
+                        data = _reprotect_dpapi(reader, record, data, log)
+                        dpapi_count += 1
                     target = os.path.join(VSC_STORE_DIR, *inner.split("/"))
                     _write_data(data, target, log)
                     file_count += 1
                 log.append("已还原卡片数据文件: %d 个" % file_count)
                 if pcp_count:
                     log.append("已还原 TPM 密钥索引文件: %d 个" % pcp_count)
+                if dpapi_count:
+                    log.append("已用本机 DPAPI 重新加密 %d 个卡片数据文件" % dpapi_count)
             else:
                 log.append("备份中没有卡片数据文件，仅还原注册表")
 
@@ -1954,7 +2118,11 @@ def restore_backup(package, force=False):
     # 逐条日志与诊断信息一起返回，并落盘成文件。
     dev_state, dev_text = devnode_state(uid)
     log.append("设备节点状态: %s（%s）" % (dev_state, dev_text))
-    verdict = _restore_verdict(dev_state, reader_code, bound, guid)
+    # DPAPI 状态决定「卡片出现了能不能真的用」：读卡器与卡片都在、但卡上密钥在本机
+    # 解不开时，证书与私钥都不会显示，不能算还原成功。
+    dpapi_code, dpapi_text = dpapi_state(guid)
+    log.append("卡片数据 DPAPI 检查: %s" % dpapi_text)
+    verdict = _restore_verdict(dev_state, reader_code, bound, guid, dpapi_code)
     report_log = ["还原结论: %s" % verdict, "备份文件: %s" % os.path.abspath(str(package))]
     report_log.extend(log)
     report_log.extend(_diagnostics(uid, guid))
@@ -1972,6 +2140,7 @@ def restore_backup(package, force=False):
         "key_state": key_state,
         "dev_state": dev_state,
         "reader_state": reader_code,
+        "dpapi_state": dpapi_code,
         "bound": bound,
         "verdict": verdict,
         "log_file": log_file,
