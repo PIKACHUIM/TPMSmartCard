@@ -1193,9 +1193,20 @@ def _write_data(data, target, log):
 
 
 def _service(action):
-    """启动 / 停止智能卡服务，返回一行日志。"""
+    """启动 / 停止智能卡服务，返回一行日志。
+
+    ``sc`` 的返回码要区分对待：``start`` 报 **1056**（服务已在运行）、``stop`` 报
+    **1062**（服务未在运行）都属于正常状态，不能记成失败 —— 现场日志里那句
+    ``StartService FAILED 1056`` 曾让人误判成"服务起不来"。
+    """
+    if action == "stop" and _service_state() == "STOPPED":
+        return "智能卡服务 %s stop: 已经是停止状态" % CARD_SERVICE
     code, output = run_command(["sc", action, CARD_SERVICE])
     detail = output.splitlines()[0] if output else str(code)
+    if code != 0 and action == "start" and "1056" in output:
+        return "智能卡服务 %s start: 已在运行（1056）" % CARD_SERVICE
+    if code != 0 and action == "stop" and "1062" in output:
+        return "智能卡服务 %s stop: 未在运行（1062）" % CARD_SERVICE
     return "智能卡服务 %s %s: %s" % (CARD_SERVICE, action, detail)
 
 
@@ -1568,6 +1579,79 @@ def write_device_properties(uid="", properties=None, source_root=""):
 def vendor_property_count(properties=None):
     """数一下记录里有几项厂商卡片身份属性（用于备份 / 诊断时的自检提示）。"""
     return sum(1 for item in (properties or []) if _is_vendor_set(item.get("fmtid")))
+
+
+# SetupAPI：让设备重新加载（``devcon restart`` 的做法）。
+# 必须用它而不是「重新枚举」：设备是**先启动、后写属性**的，而驱动只在设备启动时
+# 读一次属性并据此向 PC/SC 注册读卡器接口。
+DIF_PROPERTYCHANGE = 0x00000012
+DICS_PROPCHANGE = 0x00000002
+DICS_FLAG_GLOBAL = 0x00000001
+
+
+def restart_device(uid=""):
+    """重启卡片设备节点，让驱动重新启动并重新读取设备属性。
+
+    **为什么必须有这一步**：还原流程是「先注册 / 启动设备节点，再写厂商属性
+    （卡片身份 + store 绑定）」，而 ``smartcardsimulator.dll`` 只在设备启动时读一次
+    这些属性、据此向 PC/SC 注册读卡器接口。仅 ``CM_Reenumerate_DevNode``
+    （等效于设备管理器里的「扫描检测硬件改动」）**不会重启设备栈**，驱动仍停在
+    「启动时还没有身份属性」的状态 —— 实测表现：设备节点 ``started``、属性也写进去了，
+    但设备接口与读卡器都不出现；**重启系统后立刻正常**（重启等于真正重启了设备）。
+
+    优先用 SetupAPI 的 ``DIF_PROPERTYCHANGE`` + ``DICS_PROPCHANGE``（``devcon restart``
+    同款，Win8+ 均支持），失败时退化为 ``pnputil /restart-device``。
+
+    :return: ``(ok, text)``
+    """
+    import ctypes
+    uid = instance_id(uid)
+    if not uid:
+        return False, "缺少实例编号，未重启设备"
+
+    class _Header(ctypes.Structure):
+        _fields_ = [("cbSize", ctypes.c_uint32), ("InstallFunction", ctypes.c_uint32)]
+
+    class _PropChange(ctypes.Structure):
+        _fields_ = [("header", _Header), ("StateChange", ctypes.c_uint32),
+                    ("Scope", ctypes.c_uint32), ("HwProfile", ctypes.c_uint32)]
+
+    text = ""
+    try:
+        setupapi, devinfo, _ = _setupapi_props()
+    except Exception as err:
+        setupapi, devinfo = None, None
+        text = "SetupAPI 不可用（%s）" % err
+    if setupapi is not None:
+        info, data = _open_device(setupapi, devinfo, uid)
+        if info is None:
+            text = "打不开设备实例"
+        else:
+            try:
+                params = _PropChange()
+                params.header.cbSize = ctypes.sizeof(_PropChange)
+                params.header.InstallFunction = DIF_PROPERTYCHANGE
+                params.StateChange = DICS_PROPCHANGE
+                params.Scope = DICS_FLAG_GLOBAL
+                params.HwProfile = 0
+                if not setupapi.SetupDiSetClassInstallParamsW(
+                        info, ctypes.byref(data), ctypes.byref(params.header),
+                        ctypes.sizeof(params)):
+                    text = "SetupDiSetClassInstallParams 失败（%s）" % ctypes.get_last_error()
+                elif setupapi.SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, info,
+                                                        ctypes.byref(data)):
+                    return True, "已重启卡片设备（SetupAPI DICS_PROPCHANGE）"
+                else:
+                    text = "SetupDiCallClassInstaller 失败（%s）" % ctypes.get_last_error()
+            finally:
+                setupapi.SetupDiDestroyDeviceInfoList(info)
+
+    code, output = run_command(["pnputil", "/restart-device",
+                                "ROOT\\SMARTCARDREADER\\%s" % uid], timeout=120)
+    if code == 0:
+        return True, "已重启卡片设备（pnputil /restart-device）"
+    first = (output.splitlines() or [""])[0].strip()
+    return False, "重启卡片设备失败: %s%s" % (text, ("；" + first) if first else "")
 
 
 def _rescan_devices(uid="", attempts=3):
@@ -2206,6 +2290,20 @@ def restore_backup(package, force=False):
         else:
             log.append("未能写回设备属性（store 路径）: %s" % text)
     bound = device_store_path(uid)
+
+    # ---- 7b. 真正重启一次设备节点 ----------------------------------------- #
+    # 卡片身份与 store 绑定都是**在设备启动之后**才写进去的，而驱动只在设备启动时
+    # 读一次这些属性；只重新枚举（扫描检测硬件改动）不会重启设备栈，读卡器因此
+    # 不出现 —— 这也是"重启系统后就正常"的原因。这里补上真正的重启。
+    if reader_code != "card":
+        ok, text = restart_device(uid)
+        log.append("重启卡片设备: %s" % text)
+        if ok:
+            log.append(_service("stop"))
+            time.sleep(1)
+            log.append(_service("start"))
+            reader_code, reader_text = reader_state(uid)
+            log.append(reader_text)
 
     # ---- 8. 自检：卡片上的私钥对象（数据层）+ TPM 密钥（信息，不下负面断言） -- #
     log.append(_card_key_objects(uid))
