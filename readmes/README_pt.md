@@ -90,7 +90,7 @@ Permite gerar chaves e CSR localmente ou distribuir certificados com segurança 
 
 ```bash
 # 1. Preparar um ambiente Python 3.11 (há um script de apoio incluído)
-powershell -File Builds\NewVenv-PY311.ps1
+powershell -File Builds\NewVenv-PY313.ps1
 
 # 2. Instalar as dependências
 pip install -r requirements.txt
@@ -143,6 +143,10 @@ R: O Windows proíbe criar / excluir cartões inteligentes virtuais em uma sess�
 R: **Não.** Um backup vale apenas para o **mesmo TPM**: funciona após reinstalar o Windows nessa máquina, mas não em outra máquina ou com outro TPM; além disso, um **cartão excluído**
 **não pode ser restaurado** (a exclusão remove sua chave persistente no TPM). Se o cartão não aparecer após a restauração, reinicie primeiro o dispositivo ou o sistema.
 
+**P: Após a restauração o cartão não aparece. O que fazer?**
+R: **Reinicie primeiro**: o cartão pode aparecer na lista de leitores somente após **reiniciar o dispositivo (driver) ou o sistema**. Se ainda não aparecer,
+veja o veredito de três camadas no log (nó do dispositivo / leitor / DPAPI): geralmente é um backup de versão antiga ou a ausência das propriedades de identidade ([solução de problemas](../docs/troubleshooting.md)).
+
 **P: Após restaurar, o leitor não aparece ou os certificados não são exibidos. E agora?**
 R: Veja o veredito de três camadas no log de restauração (nó do dispositivo / leitor / DPAPI). As causas mais comuns são um backup feito por versão antiga ou a ausência das propriedades de identidade do cartão;
 siga o [guia de solução de problemas](../docs/troubleshooting.md) ou anexe o log a uma issue.
@@ -171,6 +175,7 @@ Este projeto é distribuído sob a licença **GPL-3.0**. Consulte [LICENSE](../L
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — ferramentas e middleware de código aberto para cartões inteligentes
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent — agente SSH baseado na chave privada de um cartão inteligente
+
 
 
 

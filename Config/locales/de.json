@@ -112,7 +112,7 @@
   "msg_rec_confirm": "Diese virtuelle Smartcard wiederherstellen?\n\nKartenname: %s\nInstanz: %s\nSicherungszeit: %s\n\nDie Wiederherstellung schreibt die Kartendaten zurück und importiert die Registrierung.",
   "msg_rec_ok": "Wiederherstellung abgeschlossen\n\nDatendateien: %s\nRegistrierung: %s Eintrag/Einträge\n\nFalls die Karte nicht in der Liste erscheint, bitte das System neu starten.",
   "msg_rec_stale": "Hinweis: %s Sicherungsdatei(en) haben die Integritätsprüfung nicht bestanden (möglicherweise geändert)",
-  "msg_rec_tpm_diff": "Warnung: Diese Sicherung stammt nicht vom TPM dieses Computers.\n\n%s\n\nDie Wiederherstellung schlägt wahrscheinlich fehl, oder die Karte kann ihre privaten Schlüssel nicht nutzen.\nWiederherstellung trotzdem erzwingen?",
+  "msg_rec_tpm_diff": "Warnung: Diese Sicherung wurde nicht vom TPM dieses Computers erstellt.\n\n%s\n\nDasselbe TPM ist Voraussetzung für den privaten Schlüssel auf der Karte: Fortfahren baut nur Karte und Zertifikate neu auf – der private Schlüssel lässt sich nicht wiederherstellen (sein übergeordneter Schlüssel liegt im TPM des Quellrechners).\n\nWiederherstellung trotzdem fortsetzen?",
   "msg_rec_fail": "Wiederherstellung fehlgeschlagen: %s",
   "done": "Erfolg",
   "fail": "Fehler",
@@ -284,3 +284,4 @@
   "msg_set_startup_off": "Nicht aktiviert",
   "msg_set_startup_fail": "Autostart-Einstellung konnte nicht geändert werden. Prüfen Sie, ob das Programm als Administrator läuft und geplante Aufgaben erlaubt sind."
 }
+

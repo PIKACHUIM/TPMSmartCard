@@ -90,7 +90,7 @@ TPM 기반 가상 스마트카드는 물리 카드에 가까운 강도를 제공
 
 ```bash
 # 1. Python 3.11 환경 준비(저장소에 포함된 스크립트로 venv 재생성 권장)
-powershell -File Builds\NewVenv-PY311.ps1
+powershell -File Builds\NewVenv-PY313.ps1
 
 # 2. 의존성 설치
 pip install -r requirements.txt
@@ -143,6 +143,10 @@ A: Windows는 터미널 서비스 세션에서 가상 스마트카드 생성 / �
 A: **불가능합니다.** 백업은 **같은 TPM**에만 적용됩니다(해당 PC에서 OS 재설치 시 가능, 다른 PC나 다른 TPM은 불가). 또한 **삭제된 카드는**
 **복원할 수 없습니다**(삭제 시 TPM 내 영구 키도 지워집니다). 복원 후 카드가 나타나지 않으면 장치 또는 시스템을 재시작한 뒤 확인하세요.
 
+**Q: 복원 후 카드가 나타나지 않으면 어떻게 하나요?**
+A: **먼저 재시작하세요**: 복원한 카드는 **장치(드라이버) 또는 시스템을 다시 시작**해야 리더 목록에 나타날 수 있습니다. 그래도 나타나지 않으면
+복원 로그의 3계층 판정(장치 노드 / 리더 / DPAPI)을 확인하세요. 대개 「구버전으로 만든 백업」 또는 카드 식별 속성 누락이 원인입니다([문제 해결 안내](../docs/troubleshooting.md)).
+
 **Q: 복원 후 리더가 나타나지 않거나 인증서가 보이지 않습니다.**
 A: 먼저 복원 로그의 3계층 판정(장치 노드 / 리더 / DPAPI)을 확인하세요. 대개 「구버전으로 만든 백업」 또는 카드 식별 속성 누락이 원인입니다.
 [문제 해결 안내](../docs/troubleshooting.md)를 따라 확인하거나 로그를 이슈에 첨부해 주세요.
@@ -171,6 +175,7 @@ A: 발급한 중간 CA가 이 PC에 설치되어 있지 않습니다. 「신뢰�
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — 오픈 소스 스마트카드 도구와 미들웨어
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent — 스마트카드 개인 키로 SSH 인증을 수행하는 에이전트
+
 
 
 

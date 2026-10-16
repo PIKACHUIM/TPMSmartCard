@@ -90,7 +90,7 @@ Permite generar claves y CSR localmente o distribuir certificados de forma segur
 
 ```bash
 # 1. Preparar un entorno de Python 3.11 (se incluye un script de ayuda)
-powershell -File Builds\NewVenv-PY311.ps1
+powershell -File Builds\NewVenv-PY313.ps1
 
 # 2. Instalar las dependencias
 pip install -r requirements.txt
@@ -143,6 +143,10 @@ R: Windows prohíbe crear / eliminar tarjetas inteligentes virtuales en una sesi
 R: **No.** Una copia solo sirve para el **mismo TPM**: funciona tras reinstalar Windows en ese equipo, pero no en otro equipo ni con otro TPM; además, una **tarjeta eliminada**
 **no se puede restaurar** (al eliminarla se borra su clave persistente en el TPM). Si la tarjeta no aparece tras restaurar, reinicia primero el dispositivo o el sistema.
 
+**P: Tras restaurar la tarjeta no aparece. ¿Qué hago?**
+R: **Reinicia primero**: la tarjeta puede aparecer en la lista de lectores solo tras **reiniciar el dispositivo (controlador) o el sistema**. Si sigue sin aparecer,
+consulta el veredicto de tres capas del registro (nodo de dispositivo / lector / DPAPI): suele deberse a una copia de una versión anterior o a la falta de las propiedades de identidad ([solución de problemas](../docs/troubleshooting.md)).
+
 **P: Tras restaurar no aparece el lector o no se ven los certificados, ¿qué hago?**
 R: Consulta el veredicto de tres capas del registro de restauración (nodo de dispositivo / lector / DPAPI). Las causas más habituales son una copia hecha con una versión anterior o la falta de las propiedades de identidad de la tarjeta;
 sigue la [guía de solución de problemas](../docs/troubleshooting.md) paso a paso o adjunta el registro a una incidencia.
@@ -171,6 +175,7 @@ Este proyecto se publica bajo la licencia **GPL-3.0**. Consulta [LICENSE](../LIC
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — herramientas y middleware de código abierto para tarjetas inteligentes
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent — agente SSH basado en la clave privada de una tarjeta inteligente
+
 
 
 

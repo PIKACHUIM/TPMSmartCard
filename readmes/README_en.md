@@ -90,7 +90,7 @@ English | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [�
 
 ```bash
 # 1. Prepare a Python 3.11 environment (a helper script is included)
-powershell -File Builds\NewVenv-PY311.ps1
+powershell -File Builds\NewVenv-PY313.ps1
 
 # 2. Install dependencies
 pip install -r requirements.txt
@@ -143,6 +143,10 @@ A: Windows forbids creating / deleting virtual smart cards in a Terminal Service
 A: **No.** A backup only applies to the **same TPM**: it works after reinstalling Windows on that machine, but not on another machine or another TPM; and a **deleted card**
 **cannot be restored** (deleting a card removes its persistent TPM key). If the card does not appear after a restore, restart the device or reboot first.
 
+**Q: After a restore the card does not show up. What should I do?**
+A: **Restart first**: the card may need a device (driver) restart or a system reboot before it appears in the reader list. If it still does not appear,
+read the three-layer verdict in the restore log (device node / reader / DPAPI): the usual causes are a backup made by an older version or missing card identity properties — follow the [troubleshooting guide](../docs/troubleshooting.md).
+
 **Q: After a restore the reader does not appear, or certificates do not show up. What now?**
 A: Read the three-layer verdict in the restore log (device node / reader / DPAPI). The most common causes are a backup made by an older version or missing card identity properties;
 follow the [troubleshooting guide](../docs/troubleshooting.md) step by step, or attach the log to an issue.
@@ -171,5 +175,6 @@ This project is released under the **GPL-3.0** license. See [LICENSE](../LICENSE
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — open source smart card tools and middleware
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent — an SSH agent backed by smart card private keys
+
 
 

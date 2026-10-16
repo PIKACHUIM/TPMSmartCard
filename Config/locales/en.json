@@ -112,7 +112,7 @@
   "msg_rec_confirm": "Restore this virtual smart card?\n\nCard name: %s\nInstance: %s\nBackup time: %s\n\nRestore will write back the card data and import the registry keys.",
   "msg_rec_ok": "Restore completed\n\nData files: %s\nRegistry: %s item(s)\n\nIf the card does not appear in the list, please restart the system.",
   "msg_rec_stale": "Notice: %s backup file(s) failed the integrity check (may have been modified)",
-  "msg_rec_tpm_diff": "Warning: this backup was not created by this machine's TPM.\n\n%s\n\nRestoring will most likely fail, or the restored card will not be able to use its private keys.\nForce the restore anyway?",
+  "msg_rec_tpm_diff": "Warning: this backup was not created by this computer's TPM.\n\n%s\n\nThe same TPM is a hard requirement for the on-card private key: continuing will only rebuild the card and its certificates — the private key cannot be recovered (its parent key lives inside the source TPM).\n\nContinue the restore anyway?",
   "msg_rec_fail": "Restore failed: %s",
   "done": "Success",
   "fail": "Error",
@@ -284,3 +284,4 @@
   "msg_set_startup_off": "Not enabled",
   "msg_set_startup_fail": "Could not change the autostart setting. Make sure the app runs as administrator and that scheduled tasks are not blocked, then try again."
 }
+

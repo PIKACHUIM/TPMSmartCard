@@ -112,7 +112,7 @@
   "msg_rec_confirm": "Ripristinare questa carta intelligente virtuale?\n\nNome carta: %s\nIstanza: %s\nData del backup: %s\n\nIl ripristino riscriverà i dati e importerà il registro.",
   "msg_rec_ok": "Ripristino completato\n\nFile di dati: %s\nRegistro: %s voce/i\n\nSe la carta non compare nell'elenco, riavvia il sistema.",
   "msg_rec_stale": "Avviso: %s file di backup non hanno superato il controllo di integrità (potrebbero essere stati modificati)",
-  "msg_rec_tpm_diff": "Attenzione: questo backup non è stato creato dal TPM di questo computer.\n\n%s\n\nIl ripristino molto probabilmente fallirà, oppure la carta ripristinata non potrà usare le chiavi private.\nForzare comunque il ripristino?",
+  "msg_rec_tpm_diff": "Attenzione: questo backup non è stato creato dal TPM di questo computer.\n\n%s\n\nLo stesso TPM è un requisito indispensabile per la chiave privata sulla carta: proseguendo si ricostruiscono solo carta e certificati — la chiave privata non può essere recuperata (la sua chiave padre risiede nel TPM di origine).\n\nContinuare comunque il ripristino?",
   "msg_rec_fail": "Ripristino non riuscito: %s",
   "done": "Operazione riuscita",
   "fail": "Errore",
@@ -284,3 +284,4 @@
   "msg_set_startup_off": "Non attivo",
   "msg_set_startup_fail": "Impossibile modificare l'avvio automatico. Verifica che il programma sia eseguito come amministratore e che le attività pianificate non siano bloccate."
 }
+

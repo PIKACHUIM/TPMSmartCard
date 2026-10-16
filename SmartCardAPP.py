@@ -1092,8 +1092,10 @@ class SmartCardAPP:
         print("Restore TPM Check:", tpm_state, tpm_text)
         force = False
         if tpm_state == "mismatch":
-            if not messagebox.askokcancel(self.i18n("msg_rec_title"),
-                                          self.i18n("msg_rec_tpm_diff") % tpm_text):
+            # 用「是 / 否」明确询问：TPM 不一致时默认**不**继续（取消/关闭对话框都返回 False）。
+            # 选「是」才会带 force=True 调 restore_backup，那里还有第二道保险（未 force 直接抛错）。
+            if not messagebox.askyesno(self.i18n("msg_rec_title"),
+                                       self.i18n("msg_rec_tpm_diff") % tpm_text):
                 return None
             force = True
         try:

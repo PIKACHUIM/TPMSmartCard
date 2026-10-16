@@ -91,7 +91,7 @@ Générez les clés et les CSR en local, ou recevez les certificats en toute sé
 
 ```bash
 # 1. Préparer un environnement Python 3.11 (un script d'aide est fourni)
-powershell -File Builds\NewVenv-PY311.ps1
+powershell -File Builds\NewVenv-PY313.ps1
 
 # 2. Installer les dépendances
 pip install -r requirements.txt
@@ -144,6 +144,10 @@ R : Windows interdit la création / suppression de cartes à puce virtuelles dan
 R : **Non.** Une sauvegarde ne s'applique qu'au **même TPM** : elle fonctionne après une réinstallation sur cette machine, mais pas sur une autre machine ni avec un autre TPM ; et une **carte supprimée**
 **ne peut pas être restaurée** (sa suppression efface sa clé persistante dans le TPM). Si la carte n'apparaît pas après restauration, redémarrez d'abord l'appareil ou le système.
 
+**Q : La carte n'apparaît pas après la restauration, que faire ?**
+R : **Redémarrez d'abord** : la carte peut nécessiter un **redémarrage de l'appareil (pilote) ou du système** avant d'apparaître dans la liste des lecteurs. Si elle n'apparaît toujours pas,
+consultez le verdict en trois couches du journal (nœud d'appareil / lecteur / DPAPI) : la cause est souvent une sauvegarde d'une version antérieure ou l'absence des propriétés d'identité ([guide de dépannage](../docs/troubleshooting.md)).
+
 **Q : Après restauration, le lecteur n'apparaît pas ou les certificats ne s'affichent pas. Que faire ?**
 R : Consultez le verdict en trois couches du journal de restauration (nœud d'appareil / lecteur / DPAPI). Les causes les plus fréquentes sont une sauvegarde créée par une version antérieure ou l'absence des propriétés d'identité de la carte ;
 suivez le [guide de dépannage](../docs/troubleshooting.md) étape par étape, ou joignez le journal à un ticket.
@@ -172,6 +176,7 @@ Ce projet est distribué sous licence **GPL-3.0**. Voir [LICENSE](../LICENSE).
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — outils et intergiciel open source pour cartes à puce
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent — agent SSH reposant sur la clé privée d'une carte à puce
+
 
 
 

@@ -112,7 +112,7 @@
   "msg_rec_confirm": "Restaurer cette carte à puce virtuelle ?\n\nNom de la carte : %s\nInstance : %s\nDate de sauvegarde : %s\n\nLa restauration réécrira les données et importera le registre.",
   "msg_rec_ok": "Restauration terminée\n\nFichiers de données : %s\nRegistre : %s élément(s)\n\nSi la carte n'apparaît pas dans la liste, redémarrez le système.",
   "msg_rec_stale": "Attention : %s fichier(s) de sauvegarde ont échoué au contrôle d'intégrité (peut-être modifiés)",
-  "msg_rec_tpm_diff": "Attention : cette sauvegarde n'a pas été créée par le TPM de cet ordinateur.\n\n%s\n\nLa restauration échouera probablement, ou la carte restaurée ne pourra pas utiliser ses clés privées.\nForcer la restauration ?",
+  "msg_rec_tpm_diff": "Attention : cette sauvegarde n'a pas été créée par le TPM de cet ordinateur.\n\n%s\n\nLe même TPM est indispensable pour la clé privée de la carte : continuer ne fera que reconstruire la carte et ses certificats — la clé privée ne peut pas être récupérée (sa clé parente réside dans le TPM d'origine).\n\nContinuer la restauration ?",
   "msg_rec_fail": "Échec de la restauration : %s",
   "done": "Succès",
   "fail": "Erreur",
@@ -284,3 +284,4 @@
   "msg_set_startup_off": "Non activé",
   "msg_set_startup_fail": "Impossible de modifier le démarrage automatique. Vérifiez que l'application s'exécute en tant qu'administrateur et que les tâches planifiées ne sont pas bloquées."
 }
+

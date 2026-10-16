@@ -112,7 +112,7 @@
   "msg_rec_confirm": "¿Restaurar esta tarjeta inteligente virtual?\n\nNombre de la tarjeta: %s\nInstancia: %s\nFecha del respaldo: %s\n\nLa restauración reescribirá los datos e importará el registro.",
   "msg_rec_ok": "Restauración completada\n\nArchivos de datos: %s\nRegistro: %s elemento(s)\n\nSi la tarjeta no aparece en la lista, reinicie el sistema.",
   "msg_rec_stale": "Aviso: %s archivo(s) del respaldo no superaron la verificación de integridad (pueden haber sido modificados)",
-  "msg_rec_tpm_diff": "Advertencia: este respaldo no lo creó el TPM de este equipo.\n\n%s\n\nEs muy probable que la restauración falle o que la tarjeta restaurada no pueda usar sus claves privadas.\n¿Forzar la restauración de todos modos?",
+  "msg_rec_tpm_diff": "Advertencia: este respaldo no lo creó el TPM de este equipo.\n\n%s\n\nEl mismo TPM es un requisito indispensable para la clave privada de la tarjeta: continuar solo reconstruirá la tarjeta y sus certificados — la clave privada no se puede recuperar (su clave padre reside en el TPM de origen).\n\n¿Continuar con la restauración?",
   "msg_rec_fail": "Error al restaurar: %s",
   "done": "Correcto",
   "fail": "Error",
@@ -284,3 +284,4 @@
   "msg_set_startup_off": "No activado",
   "msg_set_startup_fail": "No se pudo cambiar el inicio automático. Comprueba que la aplicación se ejecuta como administrador y que las tareas programadas no están bloqueadas."
 }
+

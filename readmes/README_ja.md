@@ -90,7 +90,7 @@ TPM ベースの仮想スマートカードは物理カードに近い強度を�
 
 ```bash
 # 1. Python 3.11 環境を用意（同梱スクリプトで venv を再作成するのを推奨）
-powershell -File Builds\NewVenv-PY311.ps1
+powershell -File Builds\NewVenv-PY313.ps1
 
 # 2. 依存関係をインストール
 pip install -r requirements.txt
@@ -143,6 +143,10 @@ A：Windows はターミナルサービス セッションでの仮想スマー�
 A：**できません**。バックアップは**同じ TPM** にのみ有効です（そのマシンで OS を再インストールした場合は可、別のマシンや別の TPM は不可）。また**削除されたカードは**
 **復元できません**（削除時に TPM 内の永続キーも消えるため）。復元後にカードが現れない場合は、デバイスまたは OS を再起動してから確認してください。
 
+**Q：復元後にカードが現れない場合は？**
+A：**まず再起動**してください：復元したカードは**デバイス（ドライバー）またはシステムの再起動**後にリーダー一覧へ現れることがあります。それでも現れない場合は、
+復元ログの 3 層判定（デバイスノード / リーダー / DPAPI）を確認してください。多くは「旧バージョンで作成したバックアップ」またはカード識別プロパティの欠落が原因です（[トラブルシューティング](../docs/troubleshooting.md)）。
+
 **Q：復元後にリーダーが出ない / 証明書が表示されない場合は？**
 A：まず復元ログの 3 層判定（デバイスノード / リーダー / DPAPI）を確認してください。多くは「旧バージョンで作成したバックアップ」またはカード識別プロパティの欠落が原因です。
 [トラブルシューティング](../docs/troubleshooting.md) に沿って切り分けるか、ログを Issue に添付してください。
@@ -171,6 +175,7 @@ A：発行元の中間 CA がこのマシンにインストールされていま
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) —— オープンソースのスマートカード ツールとミドルウェア
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent —— スマートカードの秘密鍵で SSH 認証を行うエージェント
+
 
 
 

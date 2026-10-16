@@ -77,7 +77,7 @@ _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 
 | 维度 | 取值 |
 |---|---|
-| 语言 / 运行时 | Python **3.11** |
+| 语言 / 运行时 | Python **3.13**（x64 与 arm64 线）、**3.10**（x86/低版本系统线）、**3.14**（Nuitka 线） |
 | 界面 | Tkinter + ttkbootstrap（纯代码构建界面，布局由 `Config/*.json` 驱动） |
 | 卡片操作 | `tpmvscmgr`（建卡 / 删卡 / 改 PIN）+ OpenSC（读卡与证书）+ 自研 PnP / SetupAPI 层（设备节点与属性） |
 | 备份还原 | 自研 `.tsb`（zip）打包；`Module/DPAPI.py` 负责 DPAPI 加解密与令牌借用 |
@@ -89,8 +89,8 @@ _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 ## 🛠️ 开发构建
 
 ```bash
-# 1. 准备 Python 3.11 环境（推荐用仓库自带脚本重建 venv）
-powershell -File Builds\NewVenv-PY311.ps1
+# 1. 准备 Python 3.13 环境（推荐用仓库自带脚本重建 venv；x86 线用 -PythonVersion 3.10）
+powershell -File Builds\NewVenv-PY313.ps1
 
 # 2. 安装依赖
 pip install -r requirements.txt
@@ -143,6 +143,10 @@ A：Windows 禁止在终端服务会话中创建 / 删除虚拟智能卡。请�
 A：**不能**。备份只适用于**同一颗 TPM**：在本机重装系统后可以还原，换机器或换 TPM 都不行；而且**卡片被删除后**
 **也无法还原**（删除卡片会清除它在 TPM 内的持久密钥）。还原后若卡片没出现，先重启设备或重启系统再试。
 
+**Q：还原后卡片没出现怎么办？**
+A：**先重启一次**：还原后卡片可能需要**重启设备（驱动）或重启系统**才会出现在读卡器列表中。若仍不出现，
+看还原日志的三层判定（设备节点 / 读卡器 / DPAPI）：常见原因是「用旧版本备份的包」或缺卡片身份属性，对照 [故障排查手册](docs/troubleshooting.md) 逐步判定。
+
 **Q：还原后读卡器没出现 / 证书不显示怎么办？**
 A：先看还原日志的三层判定（设备节点 / 读卡器 / DPAPI）。常见原因是「用旧版本备份的包」或缺卡片身份属性；
 对照 [故障排查手册](docs/troubleshooting.md) 逐步判定，或把日志发到 Issues。
@@ -171,5 +175,6 @@ A：签发该证书的中级 CA 没装在当前机器上，把它导入「受信
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) —— 开源智能卡工具与中间件
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent —— 用智能卡私钥做 SSH 认证的代理程序
+
 
 

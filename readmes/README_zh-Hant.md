@@ -90,7 +90,7 @@ _一款在 Windows 上建立與管理 TPM 虛擬智慧卡的圖形化工具_
 
 ```bash
 # 1. 準備 Python 3.11 環境（建議用倉庫自帶指令碼重建 venv）
-powershell -File Builds\NewVenv-PY311.ps1
+powershell -File Builds\NewVenv-PY313.ps1
 
 # 2. 安裝相依套件
 pip install -r requirements.txt
@@ -143,6 +143,10 @@ A：Windows 禁止在終端機服務工作階段中建立 / 刪除虛擬智慧�
 A：**不能**。備份只適用於**同一顆 TPM**：在本機重裝系統後可以還原，換機器或換 TPM 都不行；而且**卡片被刪除後**
 **也無法還原**（刪除卡片會清除它在 TPM 內的持久金鑰）。還原後若卡片沒出現，先重新啟動裝置或系統再試。
 
+**Q：還原後卡片沒出現怎麼辦？**
+A：**先重新啟動一次**：還原後卡片可能需要**重新啟動裝置（驅動程式）或系統**才會出現在讀卡機清單中。若仍未出現，
+請看還原日誌的三層判定（裝置節點 / 讀卡機 / DPAPI）：常見原因是「用舊版備份的包」或缺卡片身分屬性，對照 [疑難排解手冊](../docs/troubleshooting.md) 逐步判定。
+
 **Q：還原後讀卡機沒出現 / 憑證不顯示怎麼辦？**
 A：先看還原日誌的三層判定（裝置節點 / 讀卡機 / DPAPI）。常見原因是「用舊版備份的包」或缺卡片身分屬性；
 對照 [疑難排解手冊](../docs/troubleshooting.md) 逐步判定，或把日誌發到 Issues。
@@ -171,6 +175,7 @@ A：簽發該憑證的中繼 CA 沒安裝在目前機器上，把它匯入「受
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) —— 開源智慧卡工具與中介軟體
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent —— 以智慧卡私鑰做 SSH 認證的代理程式
+
 
 
 

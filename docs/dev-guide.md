@@ -4,8 +4,8 @@
 
 | 项 | 值 |
 |---|---|
-| Python | **3.11**（`install.iss` 与 `Builds/*.ps1` 硬编码了 `exe.win-amd64-3.11`） |
-| 重建虚拟环境 | `Builds/NewVenv-PY311.ps1` |
+| Python | **3.13**（x64 `exe.win-amd64-3.13`、arm64 `exe.win-arm64-3.13`）、**3.10**（x86 `exe.win32-3.10`）、**3.14**（Nuitka 线，无 cx_Freeze） |
+| 重建虚拟环境 | `Builds/NewVenv-PY313.ps1`（x86 线用 `-PythonVersion 3.10`） |
 | 依赖 | `pip install -r requirements.txt`；打包加 `-r requirements-nuitka.txt` |
 | 主要第三方依赖 | `ttkbootstrap`、`cryptography`、`pyOpenSSL`、`Flask`、`pywin32`、`comtypes`、`pywinpty`、`pyglet`、`tkcalendar`、`pyperclip`、`python-dateutil`、`cx_Freeze`、`pillow`、`lief`、`babel` |
 | 依赖自查 | `python Builds/check_imports.py`（第三方 import 是否可导入、发行包是否已写入 `requirements.txt`） |
@@ -116,5 +116,5 @@ ISCC 编译失败）、`Import/TPMImport.exe` 及其 DLL/JSON（证书导入，�
 | `Fix-MsiPolicy.ps1` / `.bat` | 仅互相引用，无构建/CI/应用引用；用于 OpenSC MSI 安装失败（1625 / `0x80070659`）的手工排障 | 体积小、有排障价值，**建议保留**；若确定不再需要可删 |
 | `Module/CertutilDeal.py` | 仅被 `Module/SmartCardAPI.py` 的 `else` 分支引用，而 `use_opensc` 全仓库无 `False` 调用 → 事实上的死分支 | 若确认不再保留 certutil 读卡后端，可连同该分支一起删；否则保留 |
 | `SSHCardAgent.exe`（4.1 MB） | 随包分发；另有 `choco install wincrypt-sshagent` 的在线安装路径 | 若可接受"在线安装"，可改为按需安装以减小安装包；离线场景建议保留 |
-| `build/`（约 159 MB） | 本地构建产物（`.gitignore` 已忽略）；`install.iss` 默认从 `build\exe.win-amd64-3.11` 取文件 | 出安装包前不要删，其余时间可清理 |
+| `build/`（约 159 MB） | 本地构建产物（`.gitignore` 已忽略）；`install.iss` 默认从 `build\exe.win-amd64-3.13` 取文件（按架构还有 `exe.win32-3.10` / `exe.win-arm64-3.13`） | 出安装包前不要删，其余时间可清理 |
 | `.idea/`、`dist/`、`Caches/` | 本地/运行时产物，均已被 `.gitignore` 覆盖 | 无需处理 |

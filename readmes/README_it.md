@@ -90,7 +90,7 @@ Consente di generare chiavi e CSR in locale o di distribuire i certificati in mo
 
 ```bash
 # 1. Preparare un ambiente Python 3.11 (è incluso uno script di supporto)
-powershell -File Builds\NewVenv-PY311.ps1
+powershell -File Builds\NewVenv-PY313.ps1
 
 # 2. Installare le dipendenze
 pip install -r requirements.txt
@@ -143,6 +143,10 @@ R: Windows vieta la creazione / eliminazione di smart card virtuali in una sessi
 R: **No.** Un backup vale solo per lo **stesso TPM**: funziona dopo una reinstallazione su questa macchina, ma non su un'altra macchina o con un altro TPM; inoltre una **scheda eliminata**
 **non può essere ripristinata** (l'eliminazione rimuove la sua chiave persistente nel TPM). Se la scheda non compare dopo il ripristino, riavvia prima il dispositivo o il sistema.
 
+**D: Dopo il ripristino la scheda non compare. Cosa fare?**
+R: **Riavvia prima**: la scheda può comparire nell'elenco dei lettori solo dopo un **riavvio del dispositivo (driver) o del sistema**. Se ancora non compare,
+leggi la valutazione sui tre livelli nel log (nodo dispositivo / lettore / DPAPI): di solito è una copia creata da una versione precedente o la mancanza delle proprietà di identità ([guida](../docs/troubleshooting.md)).
+
 **D: Dopo il ripristino il lettore non compare o i certificati non si vedono. Cosa fare?**
 R: Leggi la valutazione sui tre livelli nel log di ripristino (nodo dispositivo / lettore / DPAPI). Le cause più comuni sono un backup creato da una versione precedente o proprietà di identità della card mancanti;
 segui la [guida alla risoluzione dei problemi](../docs/troubleshooting.md) oppure allega il log a una issue.
@@ -171,6 +175,7 @@ Questo progetto è distribuito con licenza **GPL-3.0**. Vedi [LICENSE](../LICENS
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — strumenti e middleware open source per smart card
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent — agente SSH basato sulla chiave privata di una smart card
+
 
 
 

@@ -91,7 +91,7 @@ Schlüssel und CSR lassen sich lokal erzeugen, Zertifikate sicher aus der Cloud 
 
 ```bash
 # 1. Python-3.11-Umgebung vorbereiten (ein Hilfsskript liegt bei)
-powershell -File Builds\NewVenv-PY311.ps1
+powershell -File Builds\NewVenv-PY313.ps1
 
 # 2. Abhängigkeiten installieren
 pip install -r requirements.txt
@@ -144,6 +144,10 @@ A: Windows verbietet das Erstellen / Löschen virtueller Smartcards in einer Ter
 A: **Nein.** Eine Sicherung gilt nur für dasselbe **TPM**: nach einer Neuinstallation auf diesem Rechner ja, auf einem anderen Rechner oder mit einem anderen TPM nein; eine **gelöschte Karte**
 **kann nicht wiederhergestellt werden** (beim Löschen wird ihr persistenter TPM-Schlüssel entfernt). Erscheint die Karte nach der Wiederherstellung nicht, starten Sie zuerst das Gerät bzw. das System neu.
 
+**F: Die Karte erscheint nach der Wiederherstellung nicht – was tun?**
+A: **Zuerst neu starten**: Die Karte erscheint unter Umständen erst nach einem **Neustart des Geräts (Treibers) oder von Windows** in der Leserliste. Erscheint sie danach immer noch nicht,
+sehen Sie das dreistufige Urteil im Protokoll an (Geräteknoten / Leser / DPAPI): meist liegt es an einer Sicherung aus einer älteren Version oder an fehlenden Identitätseigenschaften der Karte ([Fehlerbehebung](../docs/troubleshooting.md)).
+
 **F: Nach der Wiederherstellung erscheint kein Leser oder keine Zertifikate – was tun?**
 A: Sehen Sie sich das dreistufige Urteil im Protokoll an (Geräteknoten / Leser / DPAPI). Häufigste Ursachen sind eine Sicherung aus einer älteren Version oder fehlende Identitätseigenschaften der Karte;
 folgen Sie der [Fehlerbehebungsanleitung](../docs/troubleshooting.md) oder hängen Sie das Protokoll an ein Issue an.
@@ -172,6 +176,7 @@ Dieses Projekt steht unter der **GPL-3.0**-Lizenz. Siehe [LICENSE](../LICENSE).
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — Open-Source-Werkzeuge und Middleware für Smartcards
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent — SSH-Agent auf Basis privater Smartcard-Schlüssel
+
 
 
 

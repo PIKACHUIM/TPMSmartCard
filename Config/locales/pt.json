@@ -112,7 +112,7 @@
   "msg_rec_confirm": "Restaurar este cartão inteligente virtual?\n\nNome do cartão: %s\nInstância: %s\nData do backup: %s\n\nA restauração gravará os dados de volta e importará o registro.",
   "msg_rec_ok": "Restauração concluída\n\nArquivos de dados: %s\nRegistro: %s item(ns)\n\nSe o cartão não aparecer na lista, reinicie o sistema.",
   "msg_rec_stale": "Aviso: %s arquivo(s) de backup não passaram na verificação de integridade (podem ter sido modificados)",
-  "msg_rec_tpm_diff": "Aviso: este backup não foi criado pelo TPM deste computador.\n\n%s\n\nA restauração provavelmente falhará, ou o cartão restaurado não conseguirá usar as chaves privadas.\nForçar a restauração mesmo assim?",
+  "msg_rec_tpm_diff": "Aviso: este backup não foi criado pelo TPM deste computador.\n\n%s\n\nO mesmo TPM é requisito obrigatório para a chave privada do cartão: continuar apenas recria o cartão e os certificados — a chave privada não pode ser recuperada (sua chave pai fica no TPM de origem).\n\nContinuar a restauração mesmo assim?",
   "msg_rec_fail": "Falha na restauração: %s",
   "done": "Sucesso",
   "fail": "Erro",
@@ -284,3 +284,4 @@
   "msg_set_startup_off": "Não ativado",
   "msg_set_startup_fail": "Não foi possível alterar a inicialização automática. Verifique se o programa está a ser executado como administrador e se as tarefas agendadas não estão bloqueadas."
 }
+
