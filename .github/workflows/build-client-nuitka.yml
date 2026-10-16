@@ -1,15 +1,20 @@
 name: Build Client (Nuitka)
 
 # 第二套打包方案：Nuitka（把 Python 编译成原生 exe，冷启动比 cx_Freeze 快）。
-# 与 build-client-release.yml（cx_Freeze）完全独立：
-#   · 产物名带 -nuitka 前缀，Actions 产物名也不同；
-#   · 不碰 beta / 正式 Release，只在勾选 publish 时发到 nuitka-beta 预发布；
+# 构建过程与 build-client-release.yml（cx_Freeze）互相独立，发布则共用同一个
+# beta 滚动预发布标签，只靠文件名区分：
+#     cx_Freeze  → TPMSmartCard-beta-win64.zip / -setup.exe
+#     Nuitka     → TPMSmartCard-nuitka-beta-win64.zip
+#   · 产物目录 build/nuitka/（cx_Freeze 的 build/exe.win-amd64-3.11 不动）；
+#   · 发布时只在 beta 不存在的情况下创建它，不覆盖 cx_Freeze 写入的标题与说明
+#     （gh 的 run_number 是各工作流独立的，说明也由 cx_Freeze 那条线维护）；
 #   · 不参与 install.aip（Advanced Installer 工程仍指向 cx_Freeze 的
 #     build\exe.win-amd64-3.11），要打 Inno 安装包时把 TPMSMART_BUILDDIR 指到
 #     build\nuitka\TPMSmartCard 再跑 Builds\Build-Installer.ps1 即可。
 #
 # 触发方式：
-#   · 推送改动本方案的文件到 main（paths 过滤，避免每次提交都跑完整原生编译）；
+#   · 推送改动本方案的文件到 main（paths 过滤，避免每次提交都跑完整原生编译，
+#     想让每次推送都产出 Nuitka 包就删掉 paths 过滤）；
 #   · 手动 workflow_dispatch（可只构建部分入口、可控制是否发布）。
 on:
   push:
@@ -21,9 +26,9 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: '发布到 nuitka-beta 预发布（不勾选则只上传 Actions 产物）'
+        description: '构建完成后把产物传到 beta 预发布（默认是；取消勾选只上传 Actions 产物）'
         type: boolean
-        default: false
+        default: true
       version:
         description: '版本号（留空取 Module/Version.py 的默认值，例如 1.6.0）'
         required: false
@@ -316,12 +321,12 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # 默认不发布：只有手动触发并勾选 publish 时才发到 nuitka-beta 预发布，
-  # 与正式/滚动 beta 产物完全隔离
+  # 与 cx_Freeze 的 beta 是同一个滚动预发布：两边各传各的产物，靠文件名区分。
+  # push 触发时默认发布（与 cx_Freeze 行为一致），手动触发可用 publish 关掉。
   publish:
-    name: Publish Nuitka preview
+    name: Publish to beta
     needs: build
-    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
     steps:
       - name: Download artifact
@@ -330,39 +335,41 @@ jobs:
           name: ${{ needs.build.outputs.artifact }}
           path: dist
 
-      - name: Publish nuitka-beta
+      - name: Upload Nuitka package to beta
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE: ${{ needs.build.outputs.package }}
         run: |
           set -euo pipefail
           REPO="$GITHUB_REPOSITORY"
-          TAG="nuitka-beta"
-          TITLE="Nuitka Preview Build #${{ github.run_number }}"
+          TAG="beta"
 
-          cat > notes.md <<EOF
-          Nuitka 打包方案的预览产物（与 cx_Freeze 正式包并行，仅用于对比和测试）。
-
-          - 免安装绿色版：\`$PACKAGE\`（解压后运行 \`SmartCardAPP.exe\`）
-          - 提交：\`$GITHUB_SHA\`
-          - 触发方式：${{ github.event_name }}
-          - 构建流水线：[#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-          > Nuitka 走原生编译，冷启动比 cx_Freeze 快；该产物仅供测试，请勿用于生产环境。
-          EOF
-
-          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-            if gh api -X PATCH "repos/$REPO/git/refs/tags/$TAG" -f sha="$GITHUB_SHA" -F force=true >/dev/null 2>&1; then
-              gh release edit "$TAG" --repo "$REPO" --title "$TITLE" --notes-file notes.md --prerelease
-            else
-              gh release delete "$TAG" --repo "$REPO" --yes
-              gh api -X DELETE "repos/$REPO/git/refs/tags/$TAG" >/dev/null 2>&1 || true
-              gh release create "$TAG" --repo "$REPO" --prerelease --target "$GITHUB_SHA" \
-                --title "$TITLE" --notes-file notes.md
+          # 只在 beta 还不存在时创建（例如只手动跑了本流水线，cx_Freeze 那条线还没跑过）。
+          # 已存在时不动标题和说明：gh 的 run_number 是各工作流各自计数的，说明文字也由
+          # cx_Freeze 那条线维护，这里改回去只会互相覆盖。
+          ensure_release() {
+            if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+              return 0
             fi
-          else
             gh release create "$TAG" --repo "$REPO" --prerelease --target "$GITHUB_SHA" \
-              --title "$TITLE" --notes-file notes.md
-          fi
+              --title "Beta Build #${{ github.run_number }}" \
+              --notes "自动构建的 Beta 测试版（每次推送到 main 覆盖更新），含 cx_Freeze 与 Nuitka 两套产物，按文件名区分。"
+          }
 
-          gh release upload "$TAG" dist/* --repo "$REPO" --clobber
+          ensure_release
+
+          # 允许重试：cx_Freeze 那条线在标签无法移动时会删掉 Release 重建，
+          # 正好撞上时这次上传会失败
+          for attempt in 1 2 3; do
+            if gh release upload "$TAG" dist/* --repo "$REPO" --clobber; then
+              echo "已把 $PACKAGE 上传到 $TAG"
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::上传 $PACKAGE 到 $TAG 失败（3 次都没成功）"
+              exit 1
+            fi
+            echo "上传失败，5 秒后重试…"
+            sleep 5
+            ensure_release
+          done
