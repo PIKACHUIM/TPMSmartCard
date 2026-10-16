@@ -861,6 +861,7 @@ def create_backup(dest_path, name="", uid=""):
     # 因此这里解开成明文收进包，还原时再用目标机的 DPAPI 重新封装。
     dpapi_records = []
     plain_blobs = []
+    dpapi_failed = 0
     for rel, full, _, _ in copied:
         if not rel.startswith(FILES_DIR + "/"):
             continue
@@ -881,9 +882,11 @@ def create_backup(dest_path, name="", uid=""):
             account = DPAPI.master_key_owner(info["master_key"])[0]
         except Exception as err:
             log.append("DPAPI 处理失败，跳过该文件（仍按密文备份）: %s (%s)" % (inner, err))
+            dpapi_failed += 1
             continue
         if plain is None:
             log.append("DPAPI 解密失败: %s（%s）" % (inner, note))
+            dpapi_failed += 1
             continue
         arcname = "%s/%s" % (DPAPI_DIR, inner)
         plain_blobs.append((arcname, plain))
@@ -897,6 +900,10 @@ def create_backup(dest_path, name="", uid=""):
         log.append("已解密 %d 个 DPAPI 保护文件；还原时会用目标机的 DPAPI 重新加密。"
                    "注意：备份包因此包含卡上密钥材料的明文，请妥善保管备份文件"
                    % len(dpapi_records))
+    elif dpapi_failed:
+        log.append("卡片上有 %d 个 DPAPI 保护文件，但**全部解密失败**（见上文）："
+                   "这次备份里它们只是密文，换系统还原时无法用目标机 DPAPI 重新加密，"
+                   "卡片密钥仍然不可用" % dpapi_failed)
     else:
         log.append("卡片数据里没有 DPAPI 保护的内容（无需解密）")
 

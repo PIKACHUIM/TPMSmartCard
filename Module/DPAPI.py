@@ -316,6 +316,10 @@ def _token_candidates(account):
             name = _process_name(handle)
         finally:
             api.kernel32.CloseHandle(handle)
+        # 没有镜像路径的进程（Registry / Memory Compression / Secure System 这类
+        # 内核态或内存态进程）跳过：实测借它们的令牌后 DPAPI 会 ACCESS_DENIED。
+        if not name:
+            continue
         rank = preferred.index(name) if name in preferred else len(preferred)
         ranked.append((rank, pid, name))
     ranked.sort(key=lambda item: (item[0], item[1]))
@@ -347,6 +351,43 @@ def _token_candidates(account):
             api.kernel32.CloseHandle(handle)
 
 
+def _dpapi_probe():
+    """在**当前线程身份下**做一次 DPAPI 往返，确认这个身份真的能做 DPAPI。
+
+    只看令牌 SID 不够：实测借用 `Registry`（内存态进程、没有镜像路径）的令牌时，
+    SID 确实是 SYSTEM，但用它调 DPAPI 仍然 `ACCESS_DENIED(5)` —— 所以借到令牌后必须
+    **实打实试一次**，失败就换下一个候选进程。
+    """
+    api = _structs()
+    sample = b"dpapi-probe"
+    holder = ctypes.create_string_buffer(sample, len(sample))
+    source = api.DATA_BLOB()
+    source.cbData = len(sample)
+    source.pbData = ctypes.cast(holder, ctypes.c_void_p)
+    out = api.DATA_BLOB()
+    if not api.crypt32.CryptProtectData(ctypes.byref(source), "probe", None, None, None, 0,
+                                        ctypes.byref(out)):
+        return False
+    try:
+        blob = api.blob_bytes(out)
+    finally:
+        api.kernel32.LocalFree(out.pbData)
+    if not blob:
+        return False
+    holder2 = ctypes.create_string_buffer(blob, len(blob))
+    back = api.DATA_BLOB()
+    back.cbData = len(blob)
+    back.pbData = ctypes.cast(holder2, ctypes.c_void_p)
+    out2 = api.DATA_BLOB()
+    if not api.crypt32.CryptUnprotectData(ctypes.byref(back), None, None, None, None, 0,
+                                          ctypes.byref(out2)):
+        return False
+    try:
+        return api.blob_bytes(out2) == sample
+    finally:
+        api.kernel32.LocalFree(out2.pbData)
+
+
 def _thread_sid():
     """当前线程令牌的用户 SID（借用令牌后复核用）；失败返回空串。"""
     api = _structs()
@@ -374,8 +415,10 @@ def impersonate(account):
         if not api.advapi32.SetThreadToken(None, ctypes.c_void_p(token)):
             api.kernel32.CloseHandle(ctypes.c_void_p(token))
             continue
-        # 借用后复核：确认当前线程真的是目标账户，否则撤回换下一个候选
-        if want and _thread_sid() != want:
+        # 借用后复核两点：① 线程身份确实是目标账户；② 这个身份**真的能做 DPAPI**。
+        # 只查 SID 不够——内存态进程（Registry 之类）的令牌 SID 也是 SYSTEM，
+        # 但用它调 DPAPI 会 ACCESS_DENIED。
+        if (want and _thread_sid() != want) or not _dpapi_probe():
             api.advapi32.RevertToSelf()
             api.kernel32.CloseHandle(ctypes.c_void_p(token))
             continue
