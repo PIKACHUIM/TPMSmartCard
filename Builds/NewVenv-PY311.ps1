@@ -1,9 +1,9 @@
 ﻿# NewVenv-PY311.ps1
-# 用 Python 3.11 重建 TPMSmartCard 的虚拟环境（CI 与 install.aip 都要求 3.11）
+# 用 Python 3.11 重建 TPMSmartCard 的虚拟环境（CI 与打包脚本都要求 3.11）
 #
 # 背景：cx_Freeze~=7.2.0 / cx_Logging / pywinpty~=2.0.13 在 Python 3.13/3.14 上
 #       没有预编译 wheel，pip 会退化成源码编译并要求 MSVC Build Tools；
-#       且 install.aip / install.iss 硬编码 build\exe.win-amd64-3.11，
+#       且 install.iss 与 Builds 下的打包脚本硬编码 build\exe.win-amd64-3.11，
 #       换版本后 cx_Freeze 产物目录名会变，打包脚本就找不到文件。
 #
 # 用法（在仓库根目录 D:\Codes\TPMSmartCard 下）：
@@ -84,5 +84,5 @@ Write-Step '完成'
 Write-Host "  venv:      $VenvDir"
 Write-Host "  解释器:    $venvPy"
 Write-Host '  PyCharm:   Settings -> Project -> Python Interpreter -> Add -> Existing，选上面这个 python.exe'
-Write-Host '  构建产物:  build\exe.win-amd64-3.11  （与 install.aip / install.iss 一致）'
+Write-Host '  构建产物:  build\exe.win-amd64-3.11  （与 install.iss 一致）'
 Write-Host '  打包:      python BuildPackage.py build   （用上面的解释器；需要管理员权限）'

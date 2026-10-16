@@ -12,3 +12,5 @@ __pycache__
 .idea
 # 智能体工作区数据（不随代码分发）
 .workbuddy/
+# 工具链临时目录（YAML 校验等）
+._yamlcheck/

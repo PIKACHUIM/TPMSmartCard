@@ -8,8 +8,7 @@ cx_Freeze 是把解释器 + ``.pyc`` 一起分发、运行到那一行才导入�
 冷启动明显更快，代价是构建时间长（CI 上约 20~40 分钟）。
 
 两套并存，互不影响：
-* cx_Freeze 继续出正式包（``build/exe.win-amd64-3.11`` 与 ``install.iss`` /
-  ``install.aip`` 的路径约定都不动）；
+* cx_Freeze 继续出正式包（``build/exe.win-amd64-3.11`` 与 ``install.iss`` 的路径约定都不动）；
 * Nuitka 单独一条流水线（``.github/workflows/build-client-nuitka.yml``），
   产物落在 ``build/nuitka/``，发布到单独的 ``nuitka-beta`` 预发布标签。
 
@@ -22,7 +21,7 @@ cx_Freeze 是把解释器 + ``.pyc`` 一起分发、运行到那一行才导入�
         SmartCardWEB.exe        WEB 上传服务（控制台）
         CertImport.exe          证书导入对话框（GUI + requireAdministrator 清单）
         Config/  OpenSC/  templates/  static/  Import/
-        MoreConfig.exe  SSHCardAgent.exe
+        SSHCardAgent.exe
         BUILD_INFO.txt
 
 exe 与 ``Config/`` 同级，所以 ``Module/Paths.py`` 的 ``project_root()`` 走的是
@@ -71,10 +70,10 @@ OUT_ROOT = os.path.join(ROOT, "build", "nuitka")
 DIST_DIR = os.path.join(OUT_ROOT, "TPMSmartCard")
 
 # 随程序分发、与工作目录无关的资源：Nuitka 只管 exe，这些直接拷到产物根目录。
-# 参考 BuildPackage.py 的 include_files（Config/OpenSC/templates/MoreConfig.exe/
+# 参考 BuildPackage.py 的 include_files（Config/OpenSC/templates/
 # SSHCardAgent.exe），外加 SmartCardWEB 用到的 static/。
 RESOURCE_DIRS = ("Config", "OpenSC", "templates", "static")
-RESOURCE_FILES = ("MoreConfig.exe", "SSHCardAgent.exe")
+RESOURCE_FILES = ("SSHCardAgent.exe",)
 
 # Import 只取顶层运行时文件（与 install.iss 的 [Files] 一致，避免把 Import\TPMImport
 # 的 C# 源码工程一起打进去）。程序运行时会用相对路径调用 Import\TPMImport.exe。
