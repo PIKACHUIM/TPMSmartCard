@@ -1,5 +1,4 @@
-<center>
-
+<div align="center">
 # Gerenciador de Cartões Inteligentes Virtuais TPM
 
 _Uma ferramenta gráfica para criar e gerenciar cartões inteligentes virtuais TPM no Windows_
@@ -20,8 +19,8 @@ Permite gerar chaves e CSR localmente ou distribuir certificados com segurança 
 
 📘 [Índice da documentação](../docs/README.md) · 🧭 [Arquitetura](../docs/architecture.md) · 💾 [Design de backup e restauração](../docs/design-backup-restore.md) · 🛠️ [Solução de problemas](../docs/troubleshooting.md) · 🔐 [Modelo de segurança](../docs/security.md)
 
-[English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md) | [Italiano](README_it.md) | Português | [Русский](README_ru.md) | [Español](README_es.md)
-</center>
+[English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | Português | [Русский](README_ru.md) | [Español](README_es.md)
+</div>
 ---
 
 ## ✨ Recursos
@@ -35,7 +34,7 @@ Permite gerar chaves e CSR localmente ou distribuir certificados com segurança 
 ### Backup e restauração
 
 * **Backup completo do cartão**: empacota um cartão em um `.tsb` (dados do cartão + registro do dispositivo + índice de chaves TPM + propriedades do dispositivo + texto claro DPAPI)
-* **Restauração em outra máquina**: restaure em **outra máquina** ou após uma **reinstalação limpa**; os dados DPAPI são descriptografados na máquina de origem e recriptografados com a chave mestra da máquina de destino (veja o [design de backup e restauração](../docs/design-backup-restore.md))
+* **Restauração no mesmo TPM**: um backup só pode ser restaurado no **mesmo TPM** (reinstalar o Windows nessa máquina: sim; **outra máquina / outro TPM: não**, e **um cartão excluído não pode ser restaurado**); os dados DPAPI são descriptografados no backup e recriptografados com a chave mestra local na restauração (veja o [design de backup e restauração](../docs/design-backup-restore.md))
 * **Diagnóstico da restauração**: após restaurar, a ferramenta avalia as três camadas (nó do dispositivo / leitor PC-SC / DPAPI) e apresenta uma conclusão acionável com logs
 
 ### Cenários e ferramentas
@@ -128,9 +127,10 @@ Um cartão inteligente virtual TPM utilizável é composto por **cinco partes**,
 
 Outras observações:
 
-* Após mudar de máquina ou reinstalar o Windows, é possível restaurar **leitor, cartão e certificados**; se a **chave privada do cartão** continua utilizável depende da máquina de destino —
-  confirme com um teste de assinatura usando o PIN e, se necessário, reemita o certificado;
-* `.tsb` criados por versões antigas não contêm as propriedades do dispositivo nem o texto claro DPAPI e não servem para restauração em outra máquina; faça um novo backup com a versão atual.
+* **Pré-requisitos**: é necessário o **mesmo TPM** (reinstalação nessa máquina: sim; outra máquina ou outro TPM: não) e o **cartão não pode ter sido excluído**
+  — excluir um cartão também remove sua chave persistente no TPM: depois disso nem um backup permite restaurar;
+* Após a restauração, **pode ser necessário reiniciar o dispositivo (driver) ou o sistema** para o cartão aparecer na lista de leitores;
+* `.tsb` criados por versões antigas não contêm propriedades do dispositivo nem texto claro DPAPI: a restauração deixa a identidade do cartão faltando e o leitor não aparece — faça um novo backup com a versão atual.
 
 ---
 
@@ -139,12 +139,9 @@ Outras observações:
 **P: Por que a criação de um cartão falha na Área de Trabalho Remota com `0x800704d3`?**
 R: O Windows proíbe criar / excluir cartões inteligentes virtuais em uma sessão de Serviços de Terminal. Use o console local ou `mstsc /admin`.
 
-**P: Preciso instalar o OpenSC separadamente?**
-R: Não. As ferramentas OpenSC usadas para ler cartões acompanham o aplicativo; a instalação para todo o sistema é opcional (só beneficia outros clientes PKCS#11).
-
 **P: Um backup pode ser restaurado em outra máquina?**
-R: Sim (é exatamente o objetivo do `.tsb`). Dados, nó do dispositivo, leitor e certificados podem ser restaurados; a utilização da chave privada do cartão depende do
-TPM e do estado do cartão na máquina de destino — confirme com um teste de assinatura pelo PIN e reemita o certificado se necessário.
+R: **Não.** Um backup vale apenas para o **mesmo TPM**: funciona após reinstalar o Windows nessa máquina, mas não em outra máquina ou com outro TPM; além disso, um **cartão excluído**
+**não pode ser restaurado** (a exclusão remove sua chave persistente no TPM). Se o cartão não aparecer após a restauração, reinicie primeiro o dispositivo ou o sistema.
 
 **P: Após restaurar, o leitor não aparece ou os certificados não são exibidos. E agora?**
 R: Veja o veredito de três camadas no log de restauração (nó do dispositivo / leitor / DPAPI). As causas mais comuns são um backup feito por versão antiga ou a ausência das propriedades de identidade do cartão;
@@ -174,3 +171,7 @@ Este projeto é distribuído sob a licença **GPL-3.0**. Consulte [LICENSE](../L
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — ferramentas e middleware de código aberto para cartões inteligentes
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent — agente SSH baseado na chave privada de um cartão inteligente
+
+
+
+

@@ -1,5 +1,4 @@
-<center>
-
+<div align="center">
 # TPM 가상 스마트카드 관리자
 
 _Windows에서 TPM 가상 스마트카드를 만들고 관리하는 GUI 도구_
@@ -20,8 +19,8 @@ TPM 기반 가상 스마트카드는 물리 카드에 가까운 강도를 제공
 
 📘 [문서 색인](../docs/README.md) · 🧭 [아키텍처](../docs/architecture.md) · 💾 [백업/복원 설계](../docs/design-backup-restore.md) · 🛠️ [문제 해결](../docs/troubleshooting.md) · 🔐 [보안 모델](../docs/security.md)
 
-[English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | 한국어 | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
-</center>
+[English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | 한국어<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
+</div>
 ---
 
 ## ✨ 기능
@@ -35,7 +34,7 @@ TPM 기반 가상 스마트카드는 물리 카드에 가까운 강도를 제공
 ### 백업과 복원
 
 * **카드 전체 백업**: 카드를 `.tsb` 하나로 패키징(카드 데이터 + 장치 레지스트리 + TPM 키 인덱스 + 장치 속성 + DPAPI 평문)
-* **다른 PC로 복원**: **다른 PC** 또는 **재설치한 시스템**에서 복원 가능. DPAPI 데이터는 백업한 PC에서 복호화하고 대상 PC의 마스터 키로 다시 암호화합니다([백업/복원 설계](../docs/design-backup-restore.md) 참고)
+* **동일 TPM 복원**: 백업은 **같은 TPM**에서만 복원할 수 있습니다(해당 PC에서 OS를 재설치한 경우 가능, **다른 PC / 다른 TPM은 불가**, **카드를 삭제한 뒤에도 복원 불가**). DPAPI 데이터는 백업 시 복호화하고 복원 시 로컬 마스터 키로 다시 암호화합니다([백업/복원 설계](../docs/design-backup-restore.md))
 * **복원 진단**: 복원 후 장치 노드 / 리더 / DPAPI 3계층 상태를 판정하고 실행 가능한 결론과 로그를 제공합니다
 
 ### 활용과 도구
@@ -128,9 +127,10 @@ python BuildNuitka.py             # Nuitka: build/nuitka/TPMSmartCard/
 
 그 밖의 안내:
 
-* 다른 PC / 재설치 후 복원에서는 **리더, 카드, 인증서**를 복원할 수 있습니다. 카드상 **개인 키를 계속 쓸 수 있는지는 대상 PC 상태에 달려 있습니다**.
-  PIN으로 서명 테스트를 수행해 확인하고, 필요하면 인증서를 재발급하세요.
-* 구버전으로 만든 `.tsb`에는 「장치 속성」과 「DPAPI 평문」이 없어 다른 PC 복원에 쓸 수 없습니다. 최신 버전으로 다시 백업하세요.
+* **전제 조건**: **같은 TPM**이어야 하며(해당 PC에서 OS 재설치 시 가능, 다른 PC나 다른 TPM은 불가), **카드가 삭제되지 않은 상태**여야 합니다
+  — 카드를 삭제하면 TPM 내 영구 키도 지워지므로 백업이 있어도 복원할 수 없습니다;
+* 복원 후 카드가 리더 목록에 나타나려면 **장치(드라이버) 재시작 또는 시스템 재부팅이 필요할 수 있습니다**;
+* 구버전으로 만든 `.tsb`에는 장치 속성과 DPAPI 평문이 없어 복원 시 카드 식별 정보가 빠지고 리더가 나타나지 않습니다. 최신 버전으로 다시 백업하세요.
 
 ---
 
@@ -139,12 +139,9 @@ python BuildNuitka.py             # Nuitka: build/nuitka/TPMSmartCard/
 **Q: 원격 데스크톱에서 카드 생성이 실패하고 `0x800704d3`이 반환되는 이유는?**
 A: Windows는 터미널 서비스 세션에서 가상 스마트카드 생성 / 삭제를 금지합니다. 로컬 콘솔에서 작업하거나 `mstsc /admin`으로 연결하세요.
 
-**Q: OpenSC를 따로 설치해야 하나요?**
-A: 아닙니다. 카드 읽기용 OpenSC는 앱에 포함되어 있습니다. 시스템 전역 설치는 선택 사항이며 다른 PKCS#11 클라이언트 전용입니다.
-
-**Q: 백업을 다른 PC에서 복원할 수 있나요?**
-A: 가능합니다(`.tsb`의 핵심 목표입니다). 데이터, 장치 노드, 리더, 인증서를 모두 복원할 수 있습니다. 카드상 개인 키 사용 가능 여부는
-대상 PC의 TPM과 카드 상태에 달려 있으니 PIN 서명 테스트로 확인하고 필요하면 인증서를 재발급하세요.
+**Q: 다른 PC에서 복원할 수 있나요?**
+A: **불가능합니다.** 백업은 **같은 TPM**에만 적용됩니다(해당 PC에서 OS 재설치 시 가능, 다른 PC나 다른 TPM은 불가). 또한 **삭제된 카드는**
+**복원할 수 없습니다**(삭제 시 TPM 내 영구 키도 지워집니다). 복원 후 카드가 나타나지 않으면 장치 또는 시스템을 재시작한 뒤 확인하세요.
 
 **Q: 복원 후 리더가 나타나지 않거나 인증서가 보이지 않습니다.**
 A: 먼저 복원 로그의 3계층 판정(장치 노드 / 리더 / DPAPI)을 확인하세요. 대개 「구버전으로 만든 백업」 또는 카드 식별 속성 누락이 원인입니다.
@@ -174,3 +171,7 @@ A: 발급한 중간 CA가 이 PC에 설치되어 있지 않습니다. 「신뢰�
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — 오픈 소스 스마트카드 도구와 미들웨어
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent — 스마트카드 개인 키로 SSH 인증을 수행하는 에이전트
+
+
+
+

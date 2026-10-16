@@ -1,6 +1,4 @@
-
-<center>
-
+<div align="center">
 # TPM Virtual Smartcard Manager
 
 _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
@@ -21,8 +19,8 @@ _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 
 📘 [文档索引](docs/README.md) · 🧭 [架构说明](docs/architecture.md) · 💾 [备份还原设计](docs/design-backup-restore.md) · 🛠️ [故障排查](docs/troubleshooting.md) · 🔐 [安全模型](docs/security.md)
 
-[English](readmes/README_en.md) | 简体中文 | [繁體中文](readmes/README_zh-Hant.md) | [日本語](readmes/README_ja.md) | [한국어](readmes/README_ko.md) | [Italiano](readmes/README_it.md) | [Português](readmes/README_pt.md) | [Русский](readmes/README_ru.md) | [Español](readmes/README_es.md)
-</center>
+[English](readmes/README_en.md) | 简体中文 | [繁體中文](readmes/README_zh-Hant.md) | [日本語](readmes/README_ja.md) | [한국어](readmes/README_ko.md)<br>[Deutsch](readmes/README_de.md) | [Français](readmes/README_fr.md) | [Italiano](readmes/README_it.md) | [Português](readmes/README_pt.md) | [Русский](readmes/README_ru.md) | [Español](readmes/README_es.md)
+</div>
 ---
 
 ## ✨ 功能
@@ -36,7 +34,7 @@ _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 ### 备份与还原
 
 * **整卡备份**：把一张卡完整打包成 `.tsb`（卡片数据 + 设备注册表 + TPM 密钥索引 + 设备属性 + DPAPI 明文）
-* **跨机还原**：可在**另一台机器**或**重装后的系统**上还原；DPAPI 数据在备份机解开、在目标机用本机主密钥重新加密（详见 [备份还原设计](docs/design-backup-restore.md)）
+* **同 TPM 还原**：只能在同一颗 TPM 上还原（在本机重装系统后可以；**换机器 / 换 TPM 不行**，**删除卡片后也无法还原**）；DPAPI 数据在备份时解开、还原时用本机主密钥重新加密（详见 [备份还原设计](docs/design-backup-restore.md)）
 * **还原诊断**：还原后自动判定设备节点 / 读卡器 / DPAPI 三层状态，并给出可执行的结论与日志
 
 ### 场景与工具
@@ -129,9 +127,10 @@ python BuildNuitka.py             # Nuitka：build/nuitka/TPMSmartCard/
 
 其它说明：
 
-* 换机 / 重装系统后还原，**读卡器、卡片与证书**可以恢复；卡上**私钥能否继续使用取决于目标机状态**，
-  可用 PIN 做一次签名验证确认，必要时重新签发证书；
-* 旧版本工具做的 `.tsb` 不含「设备属性」与「DPAPI 明文」，无法用于跨机还原，请用新版本重新备份。
+* **还原前提**：必须**同一颗 TPM**（在本机重装系统后可以还原；换机器、换 TPM 都不行），且**卡片没有被删除**
+  —— 删除卡片会清除它在 TPM 内的持久密钥，删除之后即使有备份也无法还原；
+* 还原后**可能需要重启设备（驱动）或重启系统**，卡片才会出现在读卡器列表中；
+* 旧版本工具做的 `.tsb` 不含「设备属性」与「DPAPI 明文」，用它还原会缺卡片身份、读卡器不会出现，请用新版本重新备份。
 
 ---
 
@@ -140,12 +139,9 @@ python BuildNuitka.py             # Nuitka：build/nuitka/TPMSmartCard/
 **Q：为什么在远程桌面里创建卡片失败，报 `0x800704d3`？**
 A：Windows 禁止在终端服务会话中创建 / 删除虚拟智能卡。请在本机控制台操作，或用 `mstsc /admin` 连接控制台会话。
 
-**Q：必须单独安装 OpenSC 吗？**
-A：不需要。读卡用的 OpenSC 已随程序分发，系统级安装是可选项（仅供其它 PKCS#11 客户端使用）。
-
-**Q：备份能换一台机器还原吗？**
-A：可以（这也是 `.tsb` 的强化目标）。数据、设备节点、读卡器与证书都能恢复；卡上私钥是否可用取决于目标机
-TPM 与卡片状态，用 PIN 做一次签名即可确认，必要时重新签发证书。
+**Q：备份能在别的机器上还原吗？**
+A：**不能**。备份只适用于**同一颗 TPM**：在本机重装系统后可以还原，换机器或换 TPM 都不行；而且**卡片被删除后**
+**也无法还原**（删除卡片会清除它在 TPM 内的持久密钥）。还原后若卡片没出现，先重启设备或重启系统再试。
 
 **Q：还原后读卡器没出现 / 证书不显示怎么办？**
 A：先看还原日志的三层判定（设备节点 / 读卡器 / DPAPI）。常见原因是「用旧版本备份的包」或缺卡片身份属性；
@@ -175,3 +171,5 @@ A：签发该证书的中级 CA 没装在当前机器上，把它导入「受信
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) —— 开源智能卡工具与中间件
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent —— 用智能卡私钥做 SSH 认证的代理程序
+
+

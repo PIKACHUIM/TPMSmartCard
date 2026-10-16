@@ -1,5 +1,4 @@
-<center>
-
+<div align="center">
 # TPM 虛擬智慧卡管理員
 
 _一款在 Windows 上建立與管理 TPM 虛擬智慧卡的圖形化工具_
@@ -20,8 +19,8 @@ _一款在 Windows 上建立與管理 TPM 虛擬智慧卡的圖形化工具_
 
 📘 [文件索引](../docs/README.md) · 🧭 [架構說明](../docs/architecture.md) · 💾 [備份還原設計](../docs/design-backup-restore.md) · 🛠️ [疑難排解](../docs/troubleshooting.md) · 🔐 [安全模型](../docs/security.md)
 
-[English](README_en.md) | [简体中文](../README.md) | 繁體中文 | [日本語](README_ja.md) | [한국어](README_ko.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
-</center>
+[English](README_en.md) | [简体中文](../README.md) | 繁體中文 | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
+</div>
 ---
 
 ## ✨ 功能
@@ -35,7 +34,7 @@ _一款在 Windows 上建立與管理 TPM 虛擬智慧卡的圖形化工具_
 ### 備份與還原
 
 * **整卡備份**：把一張卡完整打包成 `.tsb`（卡片資料 + 裝置登錄檔 + TPM 金鑰索引 + 裝置屬性 + DPAPI 明文）
-* **跨機還原**：可在**另一台機器**或**重裝後的系統**上還原；DPAPI 資料在備份機解開、在目標機用本機主金鑰重新加密（詳見 [備份還原設計](../docs/design-backup-restore.md)）
+* **同 TPM 還原**：只能在同一顆 TPM 上還原（在本機重裝系統後可以；**換機器 / 換 TPM 不行**，**刪除卡片後也無法還原**）；DPAPI 資料在備份時解開、還原時用本機主金鑰重新加密（詳見 [備份還原設計](../docs/design-backup-restore.md)）
 * **還原診斷**：還原後自動判定裝置節點 / 讀卡機 / DPAPI 三層狀態，並給出可執行的結論與日誌
 
 ### 情境與工具
@@ -128,9 +127,10 @@ python BuildNuitka.py             # Nuitka：build/nuitka/TPMSmartCard/
 
 其它說明：
 
-* 換機 / 重裝系統後還原，**讀卡機、卡片與憑證**可以復原；卡上**私鑰能否繼續使用取決於目標機狀態**，
-  可用 PIN 做一次簽章驗證確認，必要時重新簽發憑證；
-* 舊版工具製作的 `.tsb` 不含「裝置屬性」與「DPAPI 明文」，無法用於跨機還原，請用新版本重新備份。
+* **還原前提**：必須**同一顆 TPM**（在本機重裝系統後可以還原；換機器、換 TPM 都不行），且**卡片沒有被刪除**
+  —— 刪除卡片會清除它在 TPM 內的持久金鑰，刪除之後即使有備份也無法還原；
+* 還原後**可能需要重新啟動裝置（驅動程式）或重新啟動系統**，卡片才會出現在讀卡機清單中；
+* 舊版工具製作的 `.tsb` 不含「裝置屬性」與「DPAPI 明文」，用於還原會缺卡片身分、讀卡機不會出現，請用新版本重新備份。
 
 ---
 
@@ -139,12 +139,9 @@ python BuildNuitka.py             # Nuitka：build/nuitka/TPMSmartCard/
 **Q：為什麼在遠端桌面中建立卡片會失敗，並回報 `0x800704d3`？**
 A：Windows 禁止在終端機服務工作階段中建立 / 刪除虛擬智慧卡。請在本機主控台操作，或用 `mstsc /admin` 連線主控台工作階段。
 
-**Q：必須另外安裝 OpenSC 嗎？**
-A：不需要。讀卡用的 OpenSC 已隨程式散布，系統級安裝是選用項目（僅供其它 PKCS#11 用戶端使用）。
-
-**Q：備份可以拿到另一台機器還原嗎？**
-A：可以（這正是 `.tsb` 的強化目標）。資料、裝置節點、讀卡機與憑證都能復原；卡上私鑰是否可用取決於目標機
-TPM 與卡片狀態，用 PIN 做一次簽章即可確認，必要時重新簽發憑證。
+**Q：備份能在別的機器上還原嗎？**
+A：**不能**。備份只適用於**同一顆 TPM**：在本機重裝系統後可以還原，換機器或換 TPM 都不行；而且**卡片被刪除後**
+**也無法還原**（刪除卡片會清除它在 TPM 內的持久金鑰）。還原後若卡片沒出現，先重新啟動裝置或系統再試。
 
 **Q：還原後讀卡機沒出現 / 憑證不顯示怎麼辦？**
 A：先看還原日誌的三層判定（裝置節點 / 讀卡機 / DPAPI）。常見原因是「用舊版備份的包」或缺卡片身分屬性；
@@ -174,3 +171,7 @@ A：簽發該憑證的中繼 CA 沒安裝在目前機器上，把它匯入「受
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) —— 開源智慧卡工具與中介軟體
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent —— 以智慧卡私鑰做 SSH 認證的代理程式
+
+
+
+

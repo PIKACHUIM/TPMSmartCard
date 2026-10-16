@@ -1,5 +1,4 @@
-<center>
-
+<div align="center">
 # Gestore di Smart Card Virtuali TPM
 
 _Uno strumento grafico per creare e gestire smart card virtuali TPM su Windows_
@@ -20,8 +19,8 @@ Consente di generare chiavi e CSR in locale o di distribuire i certificati in mo
 
 📘 [Indice della documentazione](../docs/README.md) · 🧭 [Architettura](../docs/architecture.md) · 💾 [Progettazione backup/ripristino](../docs/design-backup-restore.md) · 🛠️ [Risoluzione dei problemi](../docs/troubleshooting.md) · 🔐 [Modello di sicurezza](../docs/security.md)
 
-[English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md) | Italiano | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
-</center>
+[English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | Italiano | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
+</div>
 ---
 
 ## ✨ Funzionalità
@@ -35,7 +34,7 @@ Consente di generare chiavi e CSR in locale o di distribuire i certificati in mo
 ### Backup e ripristino
 
 * **Backup completo della card**: pacchettizza una card in un `.tsb` (dati della card + registro di sistema del dispositivo + indice chiavi TPM + proprietà del dispositivo + testo in chiaro DPAPI)
-* **Ripristino su un'altra macchina**: ripristino su **un'altra macchina** o dopo una **reinstallazione pulita**; i dati DPAPI vengono decifrati sulla macchina di backup e ri-cifrati con la chiave principale della macchina di destinazione (vedi [progettazione backup/ripristino](../docs/design-backup-restore.md))
+* **Ripristino sullo stesso TPM**: un backup può essere ripristinato solo sullo **stesso TPM** (reinstallazione di Windows su questa macchina: sì; **altra macchina / altro TPM: no**, e **una scheda eliminata non può essere ripristinata**); i dati DPAPI vengono decifrati al momento del backup e ri-cifrati con la chiave principale locale al ripristino (vedi [progettazione backup/ripristino](../docs/design-backup-restore.md))
 * **Diagnostica del ripristino**: dopo il ripristino lo strumento verifica i tre livelli nodo dispositivo / lettore PC-SC / DPAPI e fornisce una conclusione operativa con i log
 
 ### Scenari e strumenti
@@ -128,9 +127,10 @@ Una smart card virtuale TPM utilizzabile è composta da **cinque parti** e il `.
 
 Altre note:
 
-* Dopo il passaggio a un'altra macchina o la reinstallazione di Windows è possibile ripristinare **lettore, card e certificati**; se la **chiave privata sulla card** resti utilizzabile dipende dalla macchina di destinazione —
-  verificalo con un test di firma tramite PIN e, se necessario, riemetti il certificato;
-* i `.tsb` creati da versioni precedenti non contengono le proprietà del dispositivo né il testo in chiaro DPAPI e non possono essere usati per ripristini su altre macchine; crea un nuovo backup con la versione corrente.
+* **Prerequisiti**: serve lo **stesso TPM** (reinstallazione su questa macchina: sì; altra macchina o altro TPM: no) e la **scheda non deve essere stata eliminata**
+  — eliminando una scheda si rimuove anche la sua chiave persistente nel TPM: dopo, nemmeno un backup può ripristinarla;
+* Dopo il ripristino **può essere necessario riavviare il dispositivo (driver) o il sistema** perché la scheda compaia nell'elenco dei lettori;
+* I `.tsb` creati da versioni precedenti non contengono proprietà del dispositivo né testo in chiaro DPAPI: il ripristino lascia l'identità della scheda mancante e il lettore non compare — crea un nuovo backup con la versione corrente.
 
 ---
 
@@ -139,12 +139,9 @@ Altre note:
 **D: Perché la creazione di una card in Desktop remoto fallisce con `0x800704d3`?**
 R: Windows vieta la creazione / eliminazione di smart card virtuali in una sessione Servizi terminal. Usa la console locale o `mstsc /admin`.
 
-**D: Devo installare OpenSC separatamente?**
-R: No. Gli strumenti OpenSC per la lettura delle card sono inclusi nell'applicazione; l'installazione a livello di sistema è facoltativa (serve solo ad altri client PKCS#11).
-
 **D: Un backup può essere ripristinato su un'altra macchina?**
-R: Sì (è esattamente lo scopo del `.tsb`). Dati, nodo del dispositivo, lettore e certificati possono essere ripristinati; l'utilizzabilità della chiave privata sulla card dipende
-dallo stato del TPM e della card di destinazione — verificala con un test di firma tramite PIN e riemetti il certificato se necessario.
+R: **No.** Un backup vale solo per lo **stesso TPM**: funziona dopo una reinstallazione su questa macchina, ma non su un'altra macchina o con un altro TPM; inoltre una **scheda eliminata**
+**non può essere ripristinata** (l'eliminazione rimuove la sua chiave persistente nel TPM). Se la scheda non compare dopo il ripristino, riavvia prima il dispositivo o il sistema.
 
 **D: Dopo il ripristino il lettore non compare o i certificati non si vedono. Cosa fare?**
 R: Leggi la valutazione sui tre livelli nel log di ripristino (nodo dispositivo / lettore / DPAPI). Le cause più comuni sono un backup creato da una versione precedente o proprietà di identità della card mancanti;
@@ -174,3 +171,7 @@ Questo progetto è distribuito con licenza **GPL-3.0**. Vedi [LICENSE](../LICENS
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — strumenti e middleware open source per smart card
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent — agente SSH basato sulla chiave privata di una smart card
+
+
+
+

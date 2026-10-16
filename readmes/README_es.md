@@ -1,5 +1,4 @@
-<center>
-
+<div align="center">
 # Administrador de Tarjetas Inteligentes Virtuales TPM
 
 _Una herramienta gráfica para crear y administrar tarjetas inteligentes virtuales TPM en Windows_
@@ -20,8 +19,8 @@ Permite generar claves y CSR localmente o distribuir certificados de forma segur
 
 📘 [Índice de documentación](../docs/README.md) · 🧭 [Arquitectura](../docs/architecture.md) · 💾 [Diseño de copia y restauración](../docs/design-backup-restore.md) · 🛠️ [Solución de problemas](../docs/troubleshooting.md) · 🔐 [Modelo de seguridad](../docs/security.md)
 
-[English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | Español
-</center>
+[English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | Español
+</div>
 ---
 
 ## ✨ Funciones
@@ -35,7 +34,7 @@ Permite generar claves y CSR localmente o distribuir certificados de forma segur
 ### Copia de seguridad y restauración
 
 * **Copia completa de la tarjeta**: empaqueta una tarjeta en un `.tsb` (datos de la tarjeta + registro del dispositivo + índice de claves TPM + propiedades del dispositivo + texto en claro DPAPI)
-* **Restauración en otro equipo**: se puede restaurar en **otro equipo** o tras una **reinstalación limpia**; los datos DPAPI se descifran en el equipo de origen y se vuelven a cifrar con la clave maestra del equipo de destino (ver [diseño de copia y restauración](../docs/design-backup-restore.md))
+* **Restauración en el mismo TPM**: una copia solo se puede restaurar en el **mismo TPM** (reinstalar Windows en ese equipo: sí; **otro equipo / otro TPM: no**, y **una tarjeta eliminada no se puede restaurar**); los datos DPAPI se descifran al copiar y se vuelven a cifrar con la clave maestra local al restaurar (ver [diseño de copia y restauración](../docs/design-backup-restore.md))
 * **Diagnóstico de restauración**: tras restaurar, la herramienta evalúa las tres capas (nodo de dispositivo / lector PC-SC / DPAPI) y ofrece una conclusión accionable con registros
 
 ### Escenarios y herramientas
@@ -128,9 +127,10 @@ Una tarjeta inteligente virtual TPM utilizable consta de **cinco partes**, y el 
 
 Otras notas:
 
-* Tras cambiar de equipo o reinstalar Windows se pueden restaurar **lector, tarjeta y certificados**; que la **clave privada de la tarjeta** siga siendo utilizable depende del equipo de destino —
-  compruébalo con una prueba de firma usando el PIN y, si es necesario, vuelve a emitir el certificado;
-* los `.tsb` creados por versiones anteriores no contienen las propiedades del dispositivo ni el texto en claro DPAPI, por lo que no sirven para restaurar en otro equipo; crea una copia nueva con la versión actual.
+* **Requisitos**: se necesita el **mismo TPM** (reinstalar en ese equipo: sí; otro equipo u otro TPM: no) y la **tarjeta no debe haber sido eliminada**
+  — eliminar una tarjeta borra también su clave persistente en el TPM: después, ni una copia permite restaurarla;
+* Tras restaurar, **puede ser necesario reiniciar el dispositivo (controlador) o el sistema** para que la tarjeta aparezca en la lista de lectores;
+* Los `.tsb` creados por versiones anteriores no incluyen propiedades del dispositivo ni texto en claro DPAPI: al restaurar falta la identidad de la tarjeta y el lector no aparece — crea una copia nueva con la versión actual.
 
 ---
 
@@ -139,12 +139,9 @@ Otras notas:
 **P: ¿Por qué falla la creación de una tarjeta en Escritorio remoto con `0x800704d3`?**
 R: Windows prohíbe crear / eliminar tarjetas inteligentes virtuales en una sesión de Servicios de Terminal Server. Usa la consola local o conéctate con `mstsc /admin`.
 
-**P: ¿Hay que instalar OpenSC por separado?**
-R: No. Las herramientas OpenSC para leer tarjetas vienen con la aplicación; la instalación para todo el sistema es opcional (solo sirve a otros clientes PKCS#11).
-
 **P: ¿Se puede restaurar una copia en otro equipo?**
-R: Sí (es justo el objetivo del `.tsb`). Se pueden restaurar datos, nodo de dispositivo, lector y certificados; que la clave privada de la tarjeta sea utilizable depende del
-TPM y del estado de la tarjeta del equipo de destino — confírmalo con una prueba de firma con el PIN y vuelve a emitir el certificado si es necesario.
+R: **No.** Una copia solo sirve para el **mismo TPM**: funciona tras reinstalar Windows en ese equipo, pero no en otro equipo ni con otro TPM; además, una **tarjeta eliminada**
+**no se puede restaurar** (al eliminarla se borra su clave persistente en el TPM). Si la tarjeta no aparece tras restaurar, reinicia primero el dispositivo o el sistema.
 
 **P: Tras restaurar no aparece el lector o no se ven los certificados, ¿qué hago?**
 R: Consulta el veredicto de tres capas del registro de restauración (nodo de dispositivo / lector / DPAPI). Las causas más habituales son una copia hecha con una versión anterior o la falta de las propiedades de identidad de la tarjeta;
@@ -174,3 +171,7 @@ Este proyecto se publica bajo la licencia **GPL-3.0**. Consulta [LICENSE](../LIC
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — herramientas y middleware de código abierto para tarjetas inteligentes
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent — agente SSH basado en la clave privada de una tarjeta inteligente
+
+
+
+

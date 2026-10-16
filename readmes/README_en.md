@@ -1,5 +1,4 @@
-<center>
-
+<div align="center">
 # TPM Virtual Smartcard Manager
 
 _A graphical tool for creating and managing TPM Virtual Smart Cards on Windows_
@@ -20,8 +19,8 @@ Generate keys and CSRs locally, or deliver certificates securely from the cloud 
 
 📘 [Documentation index](../docs/README.md) · 🧭 [Architecture](../docs/architecture.md) · 💾 [Backup & restore design](../docs/design-backup-restore.md) · 🛠️ [Troubleshooting](../docs/troubleshooting.md) · 🔐 [Security model](../docs/security.md)
 
-English | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
-</center>
+English | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
+</div>
 ---
 
 ## ✨ Features
@@ -35,7 +34,7 @@ English | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [�
 ### Backup and restore
 
 * **Full-card backup**: package a card into a `.tsb` (card data + device registry + TPM key index + device properties + DPAPI plaintext)
-* **Cross-machine restore**: restore on **another machine** or after a **clean reinstall**; DPAPI data is decrypted on the backup machine and re-encrypted with the target machine's own master key (see [backup & restore design](../docs/design-backup-restore.md))
+* **Same-TPM restore**: a backup can only be restored on the **same TPM** (reinstalling Windows on that machine works; **another machine / another TPM does not**, and **a deleted card cannot be restored**); DPAPI data is decrypted when backing up and re-encrypted with the local master key when restoring (see [backup & restore design](../docs/design-backup-restore.md))
 * **Restore diagnostics**: after a restore the tool checks the device node / PC-SC reader / DPAPI layers and reports an actionable verdict with logs
 
 ### Scenarios and tools
@@ -50,7 +49,7 @@ English | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [�
 
 1. Download `TPMSmartCard-*-setup.exe` (or the portable zip) from [Releases](https://github.com/PIKACHUIM/TPMSmartCard/releases) and install it;
 2. **Run as administrator** (registering card devices and reading/writing system folders require administrator rights);
-3. Create a card in “Card Management” → import or generate a certificate → (optional) install and start the SSH agent in “System Settings”;
+3. Create a card in "Card Management" → import or generate a certificate → (optional) install and start the SSH agent in "System Settings";
 4. Backup: select a card → Backup to get a `.tsb`; Restore: select a `.tsb` → Restore.
 
 > [!IMPORTANT]
@@ -128,9 +127,10 @@ A usable TPM Virtual Smart Card consists of **five parts**, and a `.tsb` capture
 
 Other notes:
 
-* After moving to another machine or reinstalling Windows, the **reader, card and certificates** can be restored; whether the **on-card private key** remains usable depends on the target machine —
-  verify with a signature test using the PIN, and re-issue the certificate if necessary;
-* `.tsb` files created by older versions do not contain the device properties or DPAPI plaintext and cannot be used for cross-machine restores; create a fresh backup with the current version.
+* **Preconditions**: the **same TPM** is required (a clean reinstall on that machine works; another machine or another TPM does not), and the **card must not have been deleted**
+  — deleting a card removes its persistent TPM key, so even a backup cannot bring it back;
+* After a restore you **may need to restart the device (driver) or reboot Windows** before the card appears in the reader list;
+* `.tsb` files created by older versions lack the device properties and DPAPI plaintext: restoring them leaves the card identity missing and the reader will not appear — create a fresh backup with the current version.
 
 ---
 
@@ -139,19 +139,16 @@ Other notes:
 **Q: Why does creating a card fail inside a Remote Desktop session with `0x800704d3`?**
 A: Windows forbids creating / deleting virtual smart cards in a Terminal Services session. Use the local console, or connect with `mstsc /admin`.
 
-**Q: Do I have to install OpenSC separately?**
-A: No. The OpenSC tools used for reading cards ship with the app; a system-wide install is optional (only useful for other PKCS#11 clients).
-
 **Q: Can a backup be restored on another machine?**
-A: Yes (that is what `.tsb` is designed for). Data, device node, reader and certificates can all be restored; whether the on-card private key is usable depends on the target machine's
-TPM and card state — confirm with a PIN signature test and re-issue the certificate if necessary.
+A: **No.** A backup only applies to the **same TPM**: it works after reinstalling Windows on that machine, but not on another machine or another TPM; and a **deleted card**
+**cannot be restored** (deleting a card removes its persistent TPM key). If the card does not appear after a restore, restart the device or reboot first.
 
 **Q: After a restore the reader does not appear, or certificates do not show up. What now?**
 A: Read the three-layer verdict in the restore log (device node / reader / DPAPI). The most common causes are a backup made by an older version or missing card identity properties;
 follow the [troubleshooting guide](../docs/troubleshooting.md) step by step, or attach the log to an issue.
 
 **Q: Does it need a network connection?**
-A: Everything works offline except “cloud certificate delivery”.
+A: Everything works offline except "cloud certificate delivery".
 
 **Q: The certificate chain reports `CERT_E_CHAINING`?**
 A: The issuing intermediate CA is not installed on this machine — import it into the trusted root/intermediate store.
@@ -174,3 +171,5 @@ This project is released under the **GPL-3.0** license. See [LICENSE](../LICENSE
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — open source smart card tools and middleware
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
 3. WinCryptSSHAgent — an SSH agent backed by smart card private keys
+
+
