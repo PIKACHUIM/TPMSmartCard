@@ -22,6 +22,10 @@ on:
     paths:
       - 'BuildNuitka.py'
       - 'requirements-nuitka.txt'
+      # requirements-nuitka.txt 会 -r 引到 requirements.txt，且构建前要过依赖自检，
+      # 所以这两个文件变了也必须重建（否则依赖改动在这条线上不会被验证）
+      - 'requirements.txt'
+      - 'Builds/check_imports.py'
       # 安装包也由本流水线产出，改这些文件时一并重建
       - 'install.iss'
       - 'Builds/Ensure-InnoSetup.ps1'
