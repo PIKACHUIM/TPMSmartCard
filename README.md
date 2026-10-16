@@ -1,10 +1,18 @@
-<img src="Images/QQ20261016-184916.png" width="760" alt="TPM 虚拟智能卡管理器">
+
+<center>
+
+# TPM Virtual Smartcard Manager
 
 _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 
-基于 TPM 的虚拟智能卡提供接近物理智能卡的强度：私钥由 TPM 保护、始终不以明文导出，
-既支持本地生成密钥与 CSR，也支持云端安全下发证书；可部分替代 YubiKey、ePass 等物理卡的
-PIV 与 SSH 用途（SSL 双向认证、BitLocker、EFS、SSH2 登录等）。
+<img src="Images/QQ20261016-184916.png" width="760" alt="TPM 虚拟智能卡管理器">
+
+
+
+基于 TPM 的虚拟智能卡提供接近物理智能卡的强度，私钥由 TPM 保护、始终不以明文导出
+
+支持本地生成密钥与 CSR 和云端安全下发证书，替代 YubiKey、ePass 等物理卡的PIV需求
+
 
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 [![Build](https://github.com/PIKACHUIM/TPMSmartCard/actions/workflows/build-client-release.yml/badge.svg)](https://github.com/PIKACHUIM/TPMSmartCard/actions/workflows/build-client-release.yml)
@@ -13,8 +21,8 @@ PIV 与 SSH 用途（SSL 双向认证、BitLocker、EFS、SSH2 登录等）。
 
 📘 [文档索引](docs/README.md) · 🧭 [架构说明](docs/architecture.md) · 💾 [备份还原设计](docs/design-backup-restore.md) · 🛠️ [故障排查](docs/troubleshooting.md) · 🔐 [安全模型](docs/security.md)
 
-[English](readmes/README_en.md) | 简体中文
-
+[English](readmes/README_en.md) | 简体中文 | [繁體中文](readmes/README_zh-Hant.md) | [日本語](readmes/README_ja.md) | [한국어](readmes/README_ko.md) | [Italiano](readmes/README_it.md) | [Português](readmes/README_pt.md) | [Русский](readmes/README_ru.md) | [Español](readmes/README_es.md)
+</center>
 ---
 
 ## ✨ 功能
@@ -80,7 +88,7 @@ PIV 与 SSH 用途（SSL 双向认证、BitLocker、EFS、SSH2 登录等）。
 
 ---
 
-## 🛠️ 开发与构建
+## 🛠️ 开发构建
 
 ```bash
 # 1. 准备 Python 3.11 环境（推荐用仓库自带脚本重建 venv）
@@ -103,7 +111,7 @@ python BuildNuitka.py             # Nuitka：build/nuitka/TPMSmartCard/
 
 ---
 
-## 💾 关于备份与还原（`.tsb`）
+## 💾 备份还原
 
 一张可用的 TPM 虚拟智能卡由**五个部分**共同构成，`.tsb` 会把这五部分全部收进包里：
 
