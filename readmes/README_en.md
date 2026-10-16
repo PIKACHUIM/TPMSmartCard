@@ -58,33 +58,6 @@ English | [简体中文](../README.md)
 
 ---
 
-## 💾 About backup and restore (`.tsb`)
-
-A usable TPM Virtual Smart Card consists of **five parts**, and a `.tsb` captures all of them:
-
-| Part | Content | If missing |
-|---|---|---|
-| Card data folder | `Tpm\<store GUID>\` (card filesystem, key/PIN maps) | Card has no content |
-| Device registry | `ROOT\SMARTCARDREADER\<instance>` and related keys | Device node cannot be created |
-| TPM key index | `*.PCPKEY` (3 candidate folders) | Driver cannot find the card keys |
-| Device properties | card name, card GUID, store binding (ACL-protected; registry export cannot read them) | Reader is not published to PC/SC |
-| DPAPI plaintext | plaintext of `keymaps` / `pinmaps` / `pinpolicy` / `blobs\*` (re-encrypted on the target machine) | Certificates and private key do not show up |
-
-> [!WARNING]
-> Because of the last item, a `.tsb` is **equivalent to key material**: keep it offline and never put it into
-> version control, cloud drives or chat tools. The tool re-encrypts it with the target machine's DPAPI on restore;
-> keep the card name, PIN, PUK and admin key safe as well.
-
-Other notes:
-
-* After moving to another machine or reinstalling Windows, the **reader, card and certificates** can be restored.
-  Whether the **on-card private key** remains usable depends on the target machine — verify with a signature test
-  using the PIN, and re-issue the certificate if needed.
-* `.tsb` files created by older versions lack the device properties and DPAPI plaintext, so they cannot be used for
-  cross-machine restores; create a fresh backup with the current version.
-
----
-
 ## 🧩 Requirements
 
 | Item | Requirement |
@@ -129,6 +102,33 @@ python BuildNuitka.py             # Nuitka: build/nuitka/TPMSmartCard/
 * Dependency self-check: `python Builds/check_imports.py`
 * Full development guide (running, packaging, signing, CI, on-device debugging): [dev guide](../docs/dev-guide.md)
 * Module layout and responsibilities: [architecture](../docs/architecture.md)
+
+---
+
+## 💾 About backup and restore (`.tsb`)
+
+A usable TPM Virtual Smart Card consists of **five parts**, and a `.tsb` captures all of them:
+
+| Part | Content | If missing |
+|---|---|---|
+| Card data folder | `Tpm\<store GUID>\` (card filesystem, key/PIN maps) | Card has no content |
+| Device registry | `ROOT\SMARTCARDREADER\<instance>` and related keys | Device node cannot be created |
+| TPM key index | `*.PCPKEY` (3 candidate folders) | Driver cannot find the card keys |
+| Device properties | card name, card GUID, store binding (ACL-protected; registry export cannot read them) | Reader is not published to PC/SC |
+| DPAPI plaintext | plaintext of `keymaps` / `pinmaps` / `pinpolicy` / `blobs\*` (re-encrypted on the target machine) | Certificates and private key do not show up |
+
+> [!WARNING]
+> Because of the last item, a `.tsb` is **equivalent to key material**: keep it offline and never put it into
+> version control, cloud drives or chat tools. The tool re-encrypts it with the target machine's DPAPI on restore;
+> keep the card name, PIN, PUK and admin key safe as well.
+
+Other notes:
+
+* After moving to another machine or reinstalling Windows, the **reader, card and certificates** can be restored.
+  Whether the **on-card private key** remains usable depends on the target machine — verify with a signature test
+  using the PIN, and re-issue the certificate if needed.
+* `.tsb` files created by older versions lack the device properties and DPAPI plaintext, so they cannot be used for
+  cross-machine restores; create a fresh backup with the current version.
 
 ---
 
