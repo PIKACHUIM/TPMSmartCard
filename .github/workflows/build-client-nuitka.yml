@@ -189,7 +189,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-nuitka.txt
+          # --only-binary 避免 pip 挑到没有本架构轮子的最新版后去源码构建；Nuitka 本体
+          # 与 pyperclip 只有源码包（都是纯 Python，装得上），单独开例外
+          python -m pip install -r requirements-nuitka.txt --only-binary=:all: --no-binary=Nuitka,pyperclip
 
       # cx_Freeze / Nuitka 对缺失模块都只告警，产物要到运行那一行才报
       # ModuleNotFoundError，所以先确认 requirements.txt 覆盖了项目里全部 import

@@ -164,7 +164,8 @@ jobs:
           # 装依赖失败时这行能直接说明标记为什么没按预期生效。
           python -c "import platform,struct,sys;print('env: machine=%s arch=%s ptr=%d winsize=%d py=%s' % (platform.machine(), platform.architecture()[0], struct.calcsize('P')*8, sys.maxsize, sys.version.split()[0]))"
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          # --only-binary：只装本架构有轮子的版本，避免 pip 退化成源码构建（pyperclip 例外）
+          python -m pip install -r requirements.txt --only-binary=:all: --no-binary=pyperclip
 
       # 先确认拿到的确实是 32 位解释器：arch 写错的话后面所有产物位宽都会不对
       - name: Verify 32-bit interpreter

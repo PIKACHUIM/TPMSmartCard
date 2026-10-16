@@ -176,7 +176,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          # --only-binary：只装本架构有轮子的版本，避免 pip 挑到最新版后退化成源码构建
+          # （arm64 上 cryptography 50 就这样去编译 Rust + OpenSSL 了）；pyperclip 只有源码包
+          python -m pip install -r requirements.txt --only-binary=:all: --no-binary=pyperclip
 
       # cx_Freeze 对缺失模块只告警，产物要到运行那一行才报 ModuleNotFoundError，
       # 所以先确认 requirements.txt 覆盖了项目里 import 的所有第三方模块

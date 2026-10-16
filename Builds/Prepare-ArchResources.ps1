@@ -15,8 +15,19 @@
      所以随包仍用仓库里的 x64 工具 —— 在 Windows 11 ARM64 上靠 x64 仿真运行
      （Windows 10 ARM64 只有 x86 仿真，跑不了 x64 工具，因此 arm64 包面向 Win11）：
      1) 校验 OpenSC\ 下的工具就绪（不重新解包，也不改架构）；
-     2) 校验 Import\arm64\TPMImport.exe 是 arm64（dotnet publish -r win-arm64 的产物）；
+     2) 校验 Import\arm64\TPMImport.exe 是 arm64；
      3) SSH 代理没有 arm64 版，该组件直接跳过。
+
+ 关于 TPMImport 的 Import\x86 与 Import\arm64：
+     TPMImport 是 net8.0 的普通 .NET 应用，**应用本体** TPMImport.dll 是 AnyCPU（与架构无关，
+     deps.json 也不带 RID），只有 **宿主 apphost** TPMImport.exe 与架构有关。
+     所以这两个目录就是同一批 dll/json 配上「另一种架构的宿主」：
+       · 宿主用 dotnet 生成（本机 SDK 即可，不需要 C# 源码）：
+           建个 net8.0 空壳工程（OutputType=Exe，与 x64 那份一样是控制台子系统），
+           dotnet build -c Release -r win-x86 -p:AssemblyName=TPMImport -p:OutputType=Exe
+           取输出里的 TPMImport.exe，与 Import\ 下的 dll/deps.json/runtimeconfig.json 放一起；
+       · 换新版 TPMImport.dll 时宿主不用重新生成（宿主只负责加载同名 dll）。
+     冒烟：无参数运行应打印 "Usage: TPMImport [-user] [-delete] ..."（与 x64 那份输出一致）。
 
  用法（仓库根目录）：
      pwsh -File Builds\Prepare-ArchResources.ps1 -Arch x86
