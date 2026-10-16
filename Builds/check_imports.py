@@ -73,7 +73,10 @@ ALLOW_UNLISTED = set()
 #   winpty（pywinpty）—— 交互式控制台后端；该包只在 cp37 及更早发过 win32 wheel，
 #   32 位构建里必然没有，缺了会自动退回 Module/ConsoleIO.py 的 ctypes 实现
 #   （见 Module/PtyCompat.py）。
-OPTIONAL_MODULES = {"winpty"}
+#   cx_Freeze —— 只有 cx_Freeze 那条打包线需要（BuildPackage.py 会被本脚本扫描到）。
+#   Nuitka 线跑在 Python 3.14 上，而 cx_Freeze 的依赖 cx_Logging 没有 cp314 轮子，
+#   那边本来就不装它，不该因此拦住构建。
+OPTIONAL_MODULES = {"winpty", "cx_Freeze"}
 
 
 def normalize(name):

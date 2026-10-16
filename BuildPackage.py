@@ -62,22 +62,25 @@ print("[打包] 目标架构：%s" % TARGET_ARCH)
 files = resource_files()
 
 # TARGET
+# 注意 base 的写法：cx_Freeze 7.x 里 "Win32GUI" 是旧名、"gui" 是它的别名；
+# 8.x 已经删掉旧名（写 Win32GUI 会报 no base named 'legacy/win32gui'，建议 gui），
+# 所以这里统一用 "gui" —— x86 线的 7.2 与 x64/arm64 线的 8.7 都支持。
 client = Executable(
     script="SmartCardAPP.py",
-    base="Win32GUI",
+    base="gui",
     icon="Config/iconer/icon02.ico",
     uac_admin=True
 )
 server = Executable(
     script="SmartCardWEB.py",
-    # base="Win32GUI",
+    # base="gui",
     icon="Config/iconer/icon04.ico",
     # uac_admin=True
 )
 
 tokens = Executable(
     script="SubApp/CertImport.py",
-    base="Win32GUI",
+    base="gui",
     icon="Config/iconer/icon03.ico",
     uac_admin=True
 )
