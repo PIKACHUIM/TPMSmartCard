@@ -81,10 +81,42 @@
   #define BuildDir "build\exe.win-amd64-3.11"
 #endif
 
-; ---- 随包分发的依赖 -------------------------------------------------------
-#define OpenScMsi "OpenSC-0.25.1_win64-Light.msi"
-#define VcRedistExe "VC_redist.x64.exe"
-#define VcRedistPath "Setups\Visual C++ Redistributable for Visual Studio 2015-2022 x64\VC_redist.x64.exe"
+; ---- 目标架构 -------------------------------------------------------------
+; x64（默认）或 x86。32 位包用 ArchitecturesAllowed=x86compatible，并且**不写**
+; ArchitecturesInstallIn64BitMode —— 这样安装器以 32 位模式运行，{autopf} 自动是
+; Program Files (x86)，注册表也落在 32 位视图，与本程序（32 位进程）的视图一致。
+#define TargetArch GetEnv("TPMSMART_ARCH")
+#if Len(TargetArch) == 0
+  #define TargetArch "x64"
+#endif
+
+; ---- 随包分发的依赖（按架构选 OpenSC 的 MSI 与 VC++ 运行库）-----------------
+#define OpenScMsi GetEnv("TPMSMART_OPENSC_MSI")
+#if Len(OpenScMsi) == 0
+  #if TargetArch == "x86"
+    #define OpenScMsi "OpenSC-0.25.1_win32-Light.msi"
+  #else
+    #define OpenScMsi "OpenSC-0.25.1_win64-Light.msi"
+  #endif
+#endif
+
+#define VcRedistExe GetEnv("TPMSMART_VCREDIST_EXE")
+#if Len(VcRedistExe) == 0
+  #if TargetArch == "x86"
+    #define VcRedistExe "VC_redist.x86.exe"
+  #else
+    #define VcRedistExe "VC_redist.x64.exe"
+  #endif
+#endif
+
+#define VcRedistPath GetEnv("TPMSMART_VCREDIST_PATH")
+#if Len(VcRedistPath) == 0
+  #if TargetArch == "x86"
+    #define VcRedistPath "Setups\Visual C++ Redistributable for Visual Studio 2015-2022 x86\VC_redist.x86.exe"
+  #else
+    #define VcRedistPath "Setups\Visual C++ Redistributable for Visual Studio 2015-2022 x64\VC_redist.x64.exe"
+  #endif
+#endif
 
 ; ---- 代码签名 -------------------------------------------------------------
 ; 由 Builds\Build-Installer.ps1（或 CI）设置；非空即表示启用签名，值 = 签名工具名
@@ -135,10 +167,14 @@ DisableWelcomePage=yes
 ; 默认安装类型 = Full：Inno 取 [Types] 第一个条目作为默认类型（Full 在首位），
 ; 安装 OpenSC / 写入 Program Files 都需要管理员
 PrivilegesRequired=admin
-; 本产物基于 Python 3.11 x64 构建，实际需要 Windows 8.1 及以上
+; 需要 Windows 8.1 及以上（64 位包基于 Python 3.11 x64，32 位包基于 Python 3.10 x86）
 MinVersion=6.3
+#if TargetArch == "x86"
+ArchitecturesAllowed=x86compatible
+#else
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+#endif
 ; 注册 .tsb 文件类型关联后需要通知外壳刷新（否则资源管理器不会立刻认图标）
 ChangesAssociations=yes
 SetupLogging=yes

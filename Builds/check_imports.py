@@ -69,6 +69,12 @@ DIST_ALIASES = {
 # 留空表示要求全部显式声明。
 ALLOW_UNLISTED = set()
 
+# 可选依赖：装了就用、没装也能跑（代码里有 try/except 兜底），缺失时只告警不算失败。
+#   winpty（pywinpty）—— 交互式控制台后端；该包只在 cp37 及更早发过 win32 wheel，
+#   32 位构建里必然没有，缺了会自动退回 Module/ConsoleIO.py 的 ctypes 实现
+#   （见 Module/PtyCompat.py）。
+OPTIONAL_MODULES = {"winpty"}
+
 
 def normalize(name):
     """规范化包名，便于跨写法比较（Flask-Classful == flask_classful）。"""
@@ -138,6 +144,7 @@ def main():
     stdlib = set(getattr(sys, "stdlib_module_names", ()))
     missing = []
     undeclared = []
+    optional = []
     checked = 0
     for module in sorted(imports):
         if module in stdlib or module in local_names or module.startswith("_"):
@@ -155,13 +162,18 @@ def main():
             dists = [DIST_ALIASES[module]]
 
         if spec is None:
-            missing.append((module, dists, sorted(imports[module])))
+            if module in OPTIONAL_MODULES:
+                optional.append((module, sorted(imports[module])))
+            else:
+                missing.append((module, dists, sorted(imports[module])))
         elif dists and module not in ALLOW_UNLISTED:
             if not any(normalize(dist) in declared for dist in dists):
                 undeclared.append((module, dists, sorted(imports[module])))
 
     print("检查 %d 个项目内 import 的第三方模块（%s）" % (checked, sys.executable))
     print("requirements.txt 已声明 %d 个发行包" % len(declared))
+    for module, where in optional:
+        print("可选依赖缺失（不影响构建）：%s（被引用于 %s）" % (module, "、".join(where)))
 
     if not missing and not undeclared:
         print("依赖检查通过：模块都能导入，且发行包都已在 requirements.txt 中声明。")

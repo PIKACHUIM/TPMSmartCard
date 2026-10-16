@@ -1,0 +1,400 @@
+name: Build Client (cx_Freeze x86)
+
+# 32 位（x86）包：Python 3.10 x86 + Windows 8.1，绿色版 + Inno 安装包。
+# 与 build-client-release.yml（x64 cx_Freeze）共用同一批 Release，只靠文件名区分：
+#     TPMSmartCard-cxfree-beta-win78-x86-green.zip / -setup.exe
+#     TPMSmartCard-cxfree-v1.6.0-win78-x86-green.zip / -setup.exe
+#
+# 关于「win78」这个名字：TPM 虚拟智能卡（tpmvscmgr.exe）是 Windows 8 才引入的功能，
+# Windows 7 上根本没有，且 Python 3.9+ 官方只支持 Windows 8.1 及以上 ——
+# 所以这个 32 位包的最低系统同样是 Windows 8.1，不支持 Windows 7。
+#
+# 前置条件（32 位随包二进制，见 Builds\Prepare-x86-Resources.ps1）：
+#   · OpenSC 32 位工具：脚本自动从仓库里的 OpenSC-0.25.1_win32-Light.msi 解包并校验位宽；
+#   · Import\x86\TPMImport.exe：需要提供 TPMImport 的 win-x86 发布，
+#     缺失时本流水线**直接失败**并打印准备办法（程序运行时会调用它）；
+#   · SSHCardAgent-x86.exe（可选）：WinCryptSSHAgent 的 32 位版，缺失只告警。
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'BuildPackage.py'
+      - 'requirements.txt'
+      - 'install.iss'
+      - 'SmartCardAPP.py'
+      - 'SmartCardWEB.py'
+      - 'Module/**'
+      - 'SubApp/**'
+      - 'Builds/Prepare-x86-Resources.ps1'
+      - 'Builds/Build-Installer.ps1'
+      - 'Builds/Sign-Windows.ps1'
+      - '.github/workflows/build-client-release-x86.yml'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: '发布目标：beta = 滚动预发布版；release = 正式版；none = 只构建不发布'
+        type: choice
+        options: [ beta, release, none ]
+        default: beta
+      version:
+        description: '版本号（channel=release 时必填，例如 1.6.0 或 v1.6.2026.1012）'
+        required: false
+        type: string
+      draft:
+        description: 'channel=release 且 Release 还不存在时，以草稿方式创建'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# 与另外两条流水线共用同一批 Certum 云签名凭据（三个都配齐才签名）
+env:
+  CERTUM_OTP_URI: ${{ secrets.CERTUM_OTP_URI }}
+  CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+  CERTUM_CERTIFICATE_SHA1: ${{ secrets.CERTUM_CERTIFICATE_SHA1 }}
+
+concurrency:
+  # 推送触发的 beta 构建只保留最新一次；手动发布单独分组，避免被取消
+  group: ${{ github.event_name == 'push' && 'client-x86-beta-build' || 'client-x86-release-build' }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  # 解析发布目标与版本号。刻意不像 x64 那条线那样检查「Release 是否已存在」：
+  # 32 位产物是往同一个 Release 里追加资产，正常情况下那个 Release 已经由它建好了。
+  prepare:
+    name: Resolve target
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.resolve.outputs.channel }}
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Resolve
+        id: resolve
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          channel="$INPUT_CHANNEL"
+          if [[ "$EVENT" == "push" || -z "$channel" ]]; then
+            channel="beta"
+          fi
+
+          if [[ "$channel" != "release" ]]; then
+            echo "channel=$channel" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+            echo "target: $channel"
+            exit 0
+          fi
+
+          version="${INPUT_VERSION#v}"
+          version="${version#V}"
+          if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error::版本号格式不正确：${INPUT_VERSION}（应形如 1.6.0 或 1.6.2026.1012）"
+            exit 1
+          fi
+
+          echo "channel=release" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "target: release v$version"
+
+  build:
+    name: Build Windows x86
+    needs: prepare
+    runs-on: windows-latest
+    outputs:
+      artifact: ${{ steps.pack.outputs.artifact }}
+      package: ${{ steps.pack.outputs.package }}
+      setup: ${{ steps.iscc.outputs.setup }}
+    env:
+      # 32 位构建：与 requirements.txt 里 pywinpty 的 platform_machine 标记配合，
+      # 32 位下会自动跳过没有 win32 wheel 的那个包
+      PYTHON_VERSION: '3.10'
+      PYTHONIOENCODING: utf-8
+      # 安装包与资源选择都按这个变量走（install.iss / BuildPackage.py 都读它）
+      TPMSMART_ARCH: x86
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect Certum signing secrets
+        id: signing
+        shell: pwsh
+        run: |
+          if ($env:CERTUM_CERTIFICATE_SHA1 -and $env:CERTUM_OTP_URI -and $env:CERTUM_USERNAME) {
+            "TPMSMART_SIGN_ENABLED=1" >> $env:GITHUB_ENV
+            "TPMSMART_SIGN_REQUIRED=1" >> $env:GITHUB_ENV
+            Write-Host "Certum 云签名已启用（证书指纹 $env:CERTUM_CERTIFICATE_SHA1）"
+          } else {
+            "TPMSMART_SIGN_ENABLED=0" >> $env:GITHUB_ENV
+            Write-Host "::warning title=未启用代码签名::缺少 CERTUM_USERNAME / CERTUM_OTP_URI / CERTUM_CERTIFICATE_SHA1 Secrets，本次产物不带数字签名"
+          }
+
+      # 32 位包要用 win32 的 OpenSC MSI（解包工具 + 安装包内分发），
+      # 两个 MSI 都应该随仓库分发（.gitignore 里有 !OpenSC/*.msi 的例外规则）
+      - name: Check OpenSC installers
+        shell: pwsh
+        run: |
+          $needed = @('OpenSC\OpenSC-0.25.1_win32-Light.msi', 'OpenSC\OpenSC-0.25.1_win64-Light.msi')
+          $missing = @($needed | Where-Object { -not (Test-Path $_) })
+          if ($missing.Count) {
+            throw ("缺少 OpenSC 安装包：" + ($missing -join '、') + "（应从 OpenSC 官方 Release 随仓库分发）")
+          }
+          Write-Host "OpenSC MSI 齐备：$($needed -join '、')"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x86
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      # 先确认拿到的确实是 32 位解释器：arch 写错的话后面所有产物位宽都会不对
+      - name: Verify 32-bit interpreter
+        shell: pwsh
+        run: |
+          python -c "import struct,sys;bits=struct.calcsize('P')*8;print('interpreter:',bits,'bit',sys.version);sys.exit(0 if bits==32 else 1)"
+          if ($LASTEXITCODE -ne 0) { throw '当前 Python 不是 32 位（请检查 setup-python 的 architecture）' }
+
+      - name: Check declared dependencies
+        run: python Builds/check_imports.py
+
+      # 准备并校验 32 位资源：OpenSC 工具（从 win32 MSI 解包）、Import\x86、
+      # 可选的 SSHCardAgent-x86.exe。缺 Import\x86 会在这里直接失败并给出准备办法。
+      - name: Prepare 32-bit resources
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File Builds/Prepare-x86-Resources.ps1
+
+      - name: Resolve package name
+        id: naming
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          $version = "$env:INPUT_VERSION".Trim() -replace '^[vV]', ''
+
+          $version4 = '1.6.0.0'
+          if (-not [string]::IsNullOrWhiteSpace($version)) {
+            $parts = @($version -split '\.')
+            while ($parts.Count -lt 4) { $parts += '0' }
+            $version4 = ($parts[0..3] -join '.')
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "version4=$version4" >> $env:GITHUB_OUTPUT
+
+          # 产物基础名：TPMSmartCard-<打包方式>-<通道>-<系统>-<架构>（与其它两条线同规则）
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            "name=TPMSmartCard-cxfree-beta-win78-x86" >> $env:GITHUB_OUTPUT
+          } else {
+            "name=TPMSmartCard-cxfree-v$version-win78-x86" >> $env:GITHUB_OUTPUT
+          }
+
+      # ---- Certum 云签名环境（与 x64 / Nuitka 两条线同一套脚本）----
+      - name: Setup Certum SimplySign
+        if: env.TPMSMART_SIGN_ENABLED == '1'
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File Builds/Sign-SetupCertum.ps1 -Install -ConfigureRegistry
+
+      - name: Authenticate Certum
+        if: env.TPMSMART_SIGN_ENABLED == '1'
+        shell: pwsh
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            pwsh -NoProfile -ExecutionPolicy Bypass -File Builds/Sign-SetupCertum.ps1 -Connect -Verify
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "Certum 认证第 $attempt 次失败，10 秒后重试"
+            Start-Sleep -Seconds 10
+          }
+          throw 'Certum 云签名认证失败（3 次重试都没能把云证书挂到证书库）'
+
+      # 32 位 Python 3.10 的 cx_Freeze 输出目录是 build/exe.win32-3.10
+      - name: Build with cx_Freeze (x86)
+        env:
+          TPMSMART_VERSION: ${{ steps.naming.outputs.version }}
+        run: python BuildPackage.py build
+
+      - name: Package (portable zip)
+        id: pack
+        shell: pwsh
+        env:
+          NAME: ${{ steps.naming.outputs.name }}
+        run: |
+          $name = $env:NAME
+          $stage = Join-Path 'staging' $name
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          $buildDir = Get-ChildItem -Path 'build' -Directory -ErrorAction SilentlyContinue |
+                      Where-Object { $_.Name -like 'exe.win32-*' } | Select-Object -First 1
+          if (-not $buildDir) { throw 'cx_Freeze output directory (build/exe.win32-*) not found; build failed' }
+          Copy-Item -Path (Join-Path $buildDir.FullName '*') -Destination $stage -Recurse -Force
+
+          # 程序运行时以相对路径调用 Import\TPMImport.exe（见 Module/TPMSmartCard.py），
+          # 32 位包必须带 Import\x86 里那份 32 位运行时文件
+          $importStage = Join-Path $stage 'Import'
+          New-Item -ItemType Directory -Force -Path $importStage | Out-Null
+          Get-ChildItem -Path 'Import\x86' -File | Copy-Item -Destination $importStage -Force
+
+          if ($env:TPMSMART_SIGN_ENABLED -eq '1') {
+            $importTargets = @(Get-ChildItem -Path $importStage -File |
+                Where-Object { $_.Name -in @('TPMImport.exe', 'TPMImport.dll') } |
+                ForEach-Object { $_.FullName })
+            if ($importTargets.Count) {
+              & (Join-Path $PWD 'Builds/Sign-Windows.ps1') -Path ($importTargets -join ';')
+              if ($LASTEXITCODE -ne 0) { throw "signing Import components failed ($LASTEXITCODE)" }
+            }
+          }
+
+          @(
+            "version=${{ needs.prepare.outputs.version }}",
+            "arch=x86",
+            "commit=$env:GITHUB_SHA",
+            "ref=$env:GITHUB_REF_NAME",
+            "run=$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID",
+            "built_at=$((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) UTC"
+          ) | Set-Content -Path (Join-Path $stage 'BUILD_INFO.txt') -Encoding UTF8
+
+          New-Item -ItemType Directory -Force -Path 'dist' | Out-Null
+          # absolute path: 7-Zip runs with the staging directory as working directory
+          $zip = Join-Path $PWD "dist/$name-green.zip"
+
+          $sevenZip = 'C:\Program Files\7-Zip\7z.exe'
+          if (Test-Path $sevenZip) {
+            Push-Location 'staging'
+            & $sevenZip a -tzip -mx=9 $zip $name
+            $code = $LASTEXITCODE
+            Pop-Location
+            if ($code -ne 0) { throw "7-Zip failed with exit code $code" }
+          } else {
+            Compress-Archive -Path $stage -DestinationPath $zip -CompressionLevel Optimal
+          }
+
+          $size = [math]::Round((Get-Item $zip).Length / 1MB, 1)
+          Write-Host "created $name-green.zip ($size MB)"
+
+          "artifact=$name" >> $env:GITHUB_OUTPUT
+          "package=$name-green.zip" >> $env:GITHUB_OUTPUT
+          "builddir=$($buildDir.FullName)" >> $env:GITHUB_OUTPUT
+
+      # 安装包：同一份 install.iss，靠 TPMSMART_ARCH=x86 切到 32 位模式
+      # （ArchitecturesAllowed=x86compatible、win32 的 OpenSC MSI、VC++ x86 运行库）
+      - name: Build installer (Inno Setup)
+        id: iscc
+        shell: pwsh
+        env:
+          TPMSMART_VERSION: ${{ steps.naming.outputs.version }}
+          TPMSMART_VERSION4: ${{ steps.naming.outputs.version4 }}
+          TPMSMART_PACKAGENAME: ${{ steps.naming.outputs.name }}
+          TPMSMART_BUILDDIR: ${{ steps.pack.outputs.builddir }}
+        run: |
+          $lines = & (Join-Path $PWD 'Builds/Ensure-InnoSetup.ps1')
+          $iscc = $lines | Where-Object { $_ -match 'ISCC\.exe$' } | Select-Object -Last 1
+          if (-not $iscc -or -not (Test-Path $iscc)) { throw 'ISCC.exe not found' }
+
+          # -ImportDir 让安装包从 Import\x86 取 32 位运行时文件（默认是 64 位的 Import）
+          & (Join-Path $PWD 'Builds/Build-Installer.ps1') -Iscc $iscc -ImportDir 'Import\x86'
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed ($LASTEXITCODE)" }
+
+          $setup = Get-ChildItem 'dist' -Filter '*-setup.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $setup) { throw 'installer executable was not produced' }
+          Write-Host ("created {0} ({1:N1} MB)" -f $setup.Name, ($setup.Length / 1MB))
+          "setup=$($setup.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Verify signatures
+        if: env.TPMSMART_SIGN_ENABLED == '1'
+        shell: pwsh
+        env:
+          NAME: ${{ steps.naming.outputs.name }}
+        run: |
+          $expected = ($env:CERTUM_CERTIFICATE_SHA1 -replace '[^0-9a-fA-F]', '').ToUpperInvariant()
+          $targets = @(Get-ChildItem -Path (Join-Path 'staging' $env:NAME) -Filter '*.exe' -File -ErrorAction SilentlyContinue)
+          $targets += @(Get-ChildItem -Path 'dist' -Filter '*-setup.exe' -File -ErrorAction SilentlyContinue)
+          if (-not $targets.Count) { throw 'no signed artifacts found to verify' }
+
+          $bad = @()
+          foreach ($file in $targets) {
+            $sig = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            $thumb = if ($sig.SignerCertificate) { ($sig.SignerCertificate.Thumbprint -replace '[^0-9a-fA-F]', '').ToUpperInvariant() } else { '' }
+            $ok = ($thumb -eq $expected) -and ($sig.Status -eq 'Valid')
+            Write-Host ("{0,-44} {1,-12} {2}" -f $file.Name, $sig.Status, $thumb)
+            if (-not $ok) { $bad += $file.FullName }
+          }
+          if ($bad.Count) {
+            throw ("以下产物签名不正确（期望指纹 $expected）：`n" + ($bad -join "`n"))
+          }
+          Write-Host "全部 $($targets.Count) 个产物的签名校验通过"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.artifact }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  # 与另外两条线共用同一批 Release：已存在时只追加资产，不改标题与说明
+  publish:
+    name: Publish (${{ needs.prepare.outputs.channel }})
+    needs: [ prepare, build ]
+    if: needs.prepare.outputs.channel != 'none'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: dist
+
+      - name: Upload x86 packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          DRAFT: ${{ inputs.draft }}
+          PACKAGE: ${{ needs.build.outputs.package }}
+          SETUP: ${{ needs.build.outputs.setup }}
+        run: |
+          set -euo pipefail
+          REPO="$GITHUB_REPOSITORY"
+
+          if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            if [ "$CHANNEL" = "release" ]; then
+              draft_flag=""
+              if [ "${DRAFT}" = "true" ]; then draft_flag="--draft"; fi
+              gh release create "$TAG" --repo "$REPO" --target "$GITHUB_SHA" $draft_flag \
+                --title "V${VERSION} Release" \
+                --notes "V${VERSION}：含 cx_Freeze（x64/x86）与 Nuitka 产物，按文件名区分。"
+              echo "::warning title=Release 由本流水线创建::$TAG 通常应由 Build Client Release 创建；若之后还要用它发布 x64 产物，那条线会因「Release 已存在」中止，需要先 gh release delete $TAG"
+            else
+              gh release create "$TAG" --repo "$REPO" --prerelease --target "$GITHUB_SHA" \
+                --title "Beta Build #${{ github.run_number }}" \
+                --notes "自动构建的 Beta 测试版（每次推送到 main 覆盖更新），含 cx_Freeze（x64/x86）与 Nuitka 产物，按文件名区分。"
+            fi
+          fi
+
+          # 文件名带 -win78-x86-，与 x64 / Nuitka 的资产互不覆盖
+          for attempt in 1 2 3; do
+            if gh release upload "$TAG" dist/* --repo "$REPO" --clobber; then
+              echo "已把 $PACKAGE 与 $SETUP 上传到 $TAG"
+              exit 0
+            fi
+            echo "上传失败（第 $attempt 次），5 秒后重试…"
+            sleep 5
+          done
+
+          echo "::error::上传 32 位产物到 $TAG 失败（3 次都没成功）"
+          exit 1

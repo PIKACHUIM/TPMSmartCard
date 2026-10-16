@@ -101,6 +101,7 @@ import zipfile
 
 from Module import DPAPI
 from Module import Paths
+from Module import WinPlatform
 from Module.Version import VERSION
 
 # 备份包格式版本（后续结构变化时递增，还原时校验）
@@ -374,8 +375,27 @@ def tpm_key_state(guid):
     return tpm_key_report(guid)[0]
 
 
+def _with_reg_view(command):
+    """给 reg.exe 补上注册表视图参数（见 Module/WinPlatform.reg_view_args）。
+
+    32 位进程在 64 位系统上默认读 ``WOW6432Node``，而本模块关心的
+    ``HKLM\\SOFTWARE\\Microsoft\\Cryptography\\Calais\\Readers``（读卡器注册项）
+    与还原时写回的键都在 64 位视图里；不加 ``/reg:64`` 会查不到或写错位置。
+    ``HKLM\\SYSTEM\\CurrentControlSet\\Enum\\...`` 不受重定向影响，带上开关也无副作用。
+    """
+    if not command:
+        return command
+    if str(command[0]).lower() not in ("reg", "reg.exe"):
+        return command
+    args = list(command)
+    if any(str(item).lower().startswith("/reg:") for item in args):
+        return args
+    return args + WinPlatform.reg_view_args()
+
+
 def run_command(command, timeout=120):
     """执行外部命令，返回 (returncode, 合并后的输出)。"""
+    command = _with_reg_view(command)
     try:
         process = subprocess.run(command, capture_output=True, text=True,
                                  errors="replace", timeout=timeout)

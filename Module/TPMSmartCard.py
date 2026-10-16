@@ -1,9 +1,10 @@
 import os
 import subprocess
 import time
-from winpty import PtyProcess
 
 from Module import Paths
+from Module import PtyCompat
+from Module import WinPlatform
 
 
 class TPMSmartCard:
@@ -14,9 +15,10 @@ class TPMSmartCard:
     # 系统虚拟智能卡管理程序路径 ================================================
     #   必须用系统目录里的官方版本：项目目录下若存在同名副本，
     #   cmd.exe 会优先命中当前目录的那一份（未签名、错误信息被吞、行为不一致）。
+    #   注意：32 位进程在 64 位系统上会被 WOW64 重定向到 SysWOW64（那里**没有**
+    #   tpmvscmgr.exe），system32_dir() 会改用 Sysnative 兜住（见 Module/WinPlatform）。
     def tpmVscMgr():
-        return os.path.join(os.environ.get("SystemRoot") or r"C:\Windows",
-                            "System32", "tpmvscmgr.exe")
+        return os.path.join(WinPlatform.system32_dir(), "tpmvscmgr.exe")
 
     @staticmethod
     # 当前进程是否以管理员身份运行 ==============================================
@@ -66,19 +68,21 @@ class TPMSmartCard:
                     "Please connect to the console session with 'mstsc /admin', "
                     "or run this tool on the local console.")
         # 根据参数设置命令 =========================================================
-        command = '"%s" create /name "%s"' % (mgr_path, in_tag)
-        command += " /AdminKey PROMPT" if len(in_adk) == 48 else " /AdminKey RANDOM"
-        command += " /PUK PROMPT" if len(in_puk) == 8 else ""
-        command += " /PIN PROMPT /generate\r"
-        print("创建卡片命令:", command)
+        # 注意：tpmvscmgr 的 /AdminKey /PUK /PIN 只接受 PROMPT|DEFAULT|RANDOM，
+        # 没有「把密码写在命令行上」的写法，自定义密码只能靠回答控制台提示录入
+        # （32 位进程读控制台，管道的 stdin 喂不进去，见 Module/PtyCompat）。
+        command = [mgr_path, "create", "/name", in_tag,
+                   "/AdminKey", "PROMPT" if len(in_adk) == 48 else "RANDOM"]
+        if len(in_puk) == 8:
+            command += ["/PUK", "PROMPT"]
+        command += ["/PIN", "PROMPT", "/generate"]
+        print("创建卡片命令:", " ".join(command))
         # 创建卡片 =================================================================
-        proc = PtyProcess.spawn('cmd.exe')
-        proc.write("@echo off && cls\r")
-        time.sleep(1)
-        proc.write(command)
+        proc = PtyCompat.spawn(command)
+        # 等进程起来（控制台的输入缓冲区会先存下按键，早写也不会丢）
         time.sleep(1)
         # 写入各项密码 =========================
-        # 每个 PROMPT 参数各问两次（输入 + 确认）；多写的字会被 cmd.exe 当命令执行，
+        # 每个 PROMPT 参数各问两次（输入 + 确认）；多写的字会被当成命令执行，
         # 刷出一堆 "'xxx' 不是内部或外部命令"，把真正的报错盖掉。
         if len(in_adk) == 48:
             for _ in range(0, 2):
@@ -88,7 +92,6 @@ class TPMSmartCard:
                 proc.write(str(in_puk) + "\r")
         for _ in range(0, 2):
             proc.write(str(in_pin) + "\r")
-        proc.write("\rexit\r")
         # 判断注册状态 =========================
         # 加超时保护：tpmvscmgr 若卡在交互提示，避免主程序永久挂起
         count = 0
@@ -164,18 +167,11 @@ class TPMSmartCard:
                     "Terminal Services session. (0x800704d3)\n"
                     "Please connect to the console session with 'mstsc /admin', "
                     "or run this tool on the local console.")
-        proc = PtyProcess.spawn('cmd.exe')
-        proc.write("@echo off && cls\r")
-        time.sleep(1)
-        proc.read()
-        proc.write('"%s" destroy /instance %s\r\r' % (mgr_path, in_name))
-        proc.write("\rexit\r")
-        time.sleep(1)
-        result = proc.read()
-        result = "" if result is None else str(result)
-        result = result.split("\r\n")
+        # /quiet 跳过确认提示：不需要任何控制台交互，直接 subprocess 拿输出即可
+        result, _ok = TPMSmartCard.runCommand(
+            [mgr_path, "destroy", "/quiet", "/instance", str(in_name)])
         print(result)
-        return "\n".join(result[2:8])
+        return result
 
     # certutil 的「证书已经在存储中」提示码：只是跳过重复添加，命令本身仍是成功的
     CERT_EXISTS_CODE = "0x80092005"
@@ -281,24 +277,18 @@ class TPMSmartCard:
 
     @staticmethod
     def changePIN(old, new, uid, type="--change-pin"):
-        command = ".\\OpenSC\\pkcs15-tool.exe --reader %s %s\r" % (uid, type)
-        proc = PtyProcess.spawn(command)
-        # proc.write("@echo off && cls\r")
-        # proc.read()
-        # proc.write(command)
-        time.sleep(1)
-        proc.write(old + "\r")
-        proc.write(new + "\r")
-        proc.write(new + "\r")
-        # proc.write("\rexit\r")
-        time.sleep(1)
-        result = proc.read()
-        result = "" if result is None else str(result)
-        result = result.split(": ")[-1]
-        if len(result) == 0:
-            result = "OK"
+        # pkcs15-tool 支持用命令行传 PIN（--pin / --puk / --new-pin），
+        # 不必再用伪控制台回答提示（32 位构建没有 pywinpty，这条路也更稳）
+        command = [Paths.resource("OpenSC", "pkcs15-tool.exe"),
+                   "--reader", str(uid), type]
+        if type == "--unblock-pin":
+            command += ["--puk", str(old)]
+        else:
+            command += ["--pin", str(old)]
+        command += ["--new-pin", str(new)]
+        result, _ok = TPMSmartCard.runCommand(command)
         print(result)
-        return result
+        return result.strip() or "OK"
 
     @staticmethod
     def createCSR(in_file, in_path):

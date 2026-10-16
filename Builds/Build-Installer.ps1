@@ -28,6 +28,7 @@ param(
     [string]$Iscc = '',
     [string[]]$IsccArgs = @(),
     [string]$SetupDir = 'dist',   # 编译产物目录（与 install.iss 的 OutputDir 一致），用于汇报签名结果
+    [string]$ImportDir = 'Import',  # Import 运行时的来源目录（32 位包传 Import\x86）
     [switch]$NoSign,
     [switch]$Quiet
 )
@@ -103,10 +104,18 @@ if (-not $signToolDefinition) {
 # Import\TPMImport.exe（程序会以管理员身份调用它）先签好再打包：
 # Inno 的 [Files] SignTool 参数要 6.5+，而且签名条目不压缩会撑大安装包，
 # 所以在临时目录签好、再让 install.iss 从那里取文件，安装包本身仍正常压缩。
+# -ImportDir 指定来源（32 位包用 Import\x86 指向 32 位运行时文件）。
+$importSourceDir = if ([IO.Path]::IsPathRooted($ImportDir)) { $ImportDir }
+                   else { Join-Path $repoRoot $ImportDir }
+if (-not (Test-Path -LiteralPath $importSourceDir)) {
+    Write-SignLog "找不到 Import 来源目录：$importSourceDir" 'ERROR'
+    exit 1
+}
+
 if ($signToolDefinition) {
     $importStageDir = Join-Path $env:TEMP ('TPMSmartCard-import-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
     New-Item -ItemType Directory -Force -Path $importStageDir | Out-Null
-    Copy-Item -Path (Join-Path $repoRoot 'Import\*') -Destination $importStageDir -Recurse -Force
+    Copy-Item -Path (Join-Path $importSourceDir '*') -Destination $importStageDir -Recurse -Force
 
     $importTargets = @(foreach ($name in @('TPMImport.exe', 'TPMImport.dll')) {
             $candidate = Join-Path $importStageDir $name
@@ -143,6 +152,9 @@ try {
         $env:TPMSMART_IMPORTDIR = $importStageDir
     } else {
         Remove-Item Env:\TPMSMART_SIGNTOOL -ErrorAction SilentlyContinue
+        # 不签名时直接让 install.iss 从调用方指定的来源目录取 Import
+        # （32 位包是 Import\x86，不设置的话会拿成 64 位的 Import 目录）
+        $env:TPMSMART_IMPORTDIR = $importSourceDir
     }
 
     $arguments = @()
