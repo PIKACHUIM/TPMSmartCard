@@ -36,7 +36,6 @@ from Module.TrayIcon import TrayIcon
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 
 from SubApp.CertImport import CertImport
-from SubApp.MoreConfig import MoreConfig
 from SubApp.SystemSettings import SystemSettings
 
 # 界面默认字体；语言包里的 _font 可为特定语言覆盖（如韩语需要 Hangul 字体）
@@ -520,10 +519,10 @@ class SmartCardAPP:
                 self.i18n("msg_tpm_check_none") % self.i18n("msg_tpm_unknown")
             )
         # OpenSC -----------------------------------------------------------------------------
-        # 未检测到 OpenSC 时问一次是否安装；只有装成功才重启（见 install_osc_check）
-        if not MoreConfig.openscPath():
-            if messagebox.askquestion(self.i18n("sc_title"), self.i18n("sc_datas")) == 'yes':
-                self.install_osc_check()
+        # 首次启动**不再**提示安装系统级 OpenSC：程序读卡用的是随包的 OpenSC\ 工具目录
+        # （见 Module.OpenSCDealer / Module.TPMSmartCard / Module.TPMBackup），系统安装只
+        # 影响「其它软件」（PKCS#11、物理卡的 minidriver 等）；安装包已默认勾选装它，
+        # 需要补装时走「系统设置 - OpenSC」，安装逻辑见 SubApp.MoreConfig。
 
     def get_screens(self):
         # 获取窗口的宽度和高度
@@ -1292,44 +1291,6 @@ class SmartCardAPP:
                 messagebox.showwarning(self.i18n("msg_tpm_check_text"),
                                        self.i18n("msg_tpm_check_none") % results)
         return status
-
-    def install_osc(self):
-        """安装随程序分发的 OpenSC，返回 ``(是否成功, 退出码, 日志路径)``。"""
-        return MoreConfig.installOpenSC()
-
-    def install_osc_check(self):
-        """安装 OpenSC，并按安装结果决定是否重启。
-
-        旧实现不看结果就 ``restart_app()``：安装失败（组策略禁止 MSI、找不到安装包等）
-        时程序照样重启，重启后又提示未安装，用户只看到「反复提示 + 什么都没装上」。
-        现在失败会把退出码、原因、日志与手动安装包路径摆出来，并且**不重启**。
-        """
-        ok, code, log_path = self.install_osc()
-        if ok:
-            messagebox.showinfo(self.i18n("sc_title"), self.i18n("msg_osc_installed"))
-            self.restart_app()
-            return True
-        messagebox.showerror(self.i18n("sc_title"),
-                             MoreConfig.installFailText(self.i18n_data, code, log_path))
-        return False
-
-    def restart_app(self):
-        """安装 OpenSC 后重启自身，让新装的驱动/服务在新进程里生效。
-
-        注意：不能使用内置的 ``exit()`` / ``quit()``，它们由 ``site`` 模块注入，
-        而 cx_Freeze 冻结后的解释器不会执行 site 初始化，会抛 NameError: name 'exit' is not defined。
-        统一改用 ``sys.exit()``（sys 已导入，任何环境都存在）。
-        """
-        if getattr(sys, "frozen", False):
-            # 打包后 sys.executable 就是应用本体
-            os.startfile(sys.executable)
-        else:
-            # 源码运行：exe 是 python.exe，需要把脚本路径一并传过去
-            os.startfile(sys.executable, "open",
-                         '"%s"' % os.path.abspath(sys.argv[0]))
-        # 先正常收尾（摘托盘、销毁主窗口），再退出当前进程
-        self.quit_app()
-        sys.exit(0)
 
     def card_change(self, in_type="pin"):
         if not self.pick["card"] or self.pick["card"] not in self.data.cards:

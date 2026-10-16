@@ -268,7 +268,7 @@ def check_tpm(manifest):
     saved = manifest.get("tpm") or {}
     saved_ek = str(saved.get("ek") or "").strip().lower()
     if not saved_ek:
-        return "unknown", "备份里没有 TPM 指纹（旧版备份无法校验）"
+        return "unknown", "备份里没有 TPM 指纹（备份时读取失败，或旧版备份无法校验）"
     now = tpm_identity()
     if not now["ek"]:
         return "unknown", "本机 TPM 指纹读取失败（需要管理员权限）"
@@ -707,14 +707,27 @@ def _sha256(path):
     return digest.hexdigest()
 
 
-def _collect_files(source_root, prefix=""):
+def _collect_files(source_root, prefix="", skipped=None):
     """遍历 source_root，返回 [(包内相对路径, 绝对路径, 大小, sha256)]。
 
     ``prefix`` 会拼到相对路径前面（如 ``files/<条目名>/x.dat``），
     为空时按备份包根目录计。
+
+    ``skipped`` 传入列表时，**读不进去的子目录**会记一条说明进去；不传（默认）则
+    直接抛 ``BackupError``。``os.walk`` 默认会把没权限的目录**静默跳过** ——
+    "包里少了文件但谁都不知道"是这类备份最危险的失败方式，所以这里显式处理：
+    卡片数据目录必须全部拿到（默认抛错），辅助目录（TPM 密钥索引）允许缺但要在
+    日志里说清楚。
     """
     results = []
-    for root, dirs, files in os.walk(source_root):
+
+    def _on_error(exc):
+        message = "遍历目录失败: %s (%s)" % (getattr(exc, "filename", source_root), exc)
+        if skipped is None:
+            raise BackupError(message)
+        skipped.append(message)
+
+    for root, dirs, files in os.walk(source_root, onerror=_on_error):
         dirs.sort()
         for name in sorted(files):
             full = os.path.join(root, name)
@@ -829,11 +842,15 @@ def create_backup(dest_path, name="", uid=""):
         if not os.path.isdir(folder):
             log.append("TPM 密钥索引目录不存在（跳过）: %s" % folder)
             continue
+        pcp_skipped = []
         try:
-            picked = _collect_files(folder, "%s/%d" % (PCP_DIR, index))
+            picked = _collect_files(folder, "%s/%d" % (PCP_DIR, index), skipped=pcp_skipped)
         except (PermissionError, OSError) as err:
             log.append("读取 TPM 密钥索引目录失败（跳过）: %s (%s)" % (folder, err))
             continue
+        if pcp_skipped:
+            log.append("TPM 密钥索引目录内有读不进去的子目录（少收 %d 处）: %s"
+                       % (len(pcp_skipped), "；".join(pcp_skipped[:2])))
         copied.extend(picked)
         pcp.append({"index": index, "dir": folder, "files": len(picked)})
     if pcp:
@@ -849,12 +866,19 @@ def create_backup(dest_path, name="", uid=""):
     # 驱动也不会向 PC/SC 发布读卡器，卡片自然就"没有出现"。
     properties = read_device_properties(card["instance"])
     vendor_props = vendor_property_count(properties)
-    log.append("已备份设备属性: %d 项（其中厂商卡片身份 %d 项）"
-               % (len(properties), vendor_props))
-    if not vendor_props:
-        log.append("警告: 这台设备缺少卡片身份属性（卡片名 / 卡片 GUID），还原后读卡器不会"
-                   "被发布到 PC/SC —— 该卡片多半是手动重建的设备节点，而不是卡片管理里"
-                   "正常创建 / 还原出来的")
+    if properties is None:
+        # 读失败与"这台设备没有属性"必须分开报：前者任何卡都可能碰上，
+        # 后者说明设备本身不是正常创建出来的。
+        properties = []
+        log.append("警告: 读取设备属性失败，这次备份缺少卡片身份 / store 绑定信息，"
+                   "还原后读卡器可能不会出现；请把这份日志发出来定位")
+    else:
+        log.append("已备份设备属性: %d 项（其中厂商卡片身份 %d 项）"
+                   % (len(properties), vendor_props))
+        if not vendor_props:
+            log.append("警告: 这台设备缺少卡片身份属性（卡片名 / 卡片 GUID），还原后读卡器"
+                       "不会被发布到 PC/SC —— 该卡片多半是手动重建的设备节点，而不是"
+                       "卡片管理里正常创建 / 还原出来的")
 
     # ---- 1d. DPAPI：卡上的密钥 / PIN 映射必须在本机解开后再收进备份 --------- #
     # keymaps / pinmaps / pinpolicy / blobs\* 都不是明文，而是 DPAPI blob
@@ -1374,17 +1398,26 @@ def _open_device(setupapi, devinfo, uid):
 
 
 def _property_entries(setupapi, devinfo, propkey, info, data):
-    """枚举设备上的 PnP 属性，返回 ``[(键, 类型, 原始字节)]``。"""
+    """枚举设备上的 PnP 属性，返回 ``[(键, 类型, 原始字节)]``。
+
+    **枚举本身失败时抛 ``OSError``**：调用方必须能区分"这台设备确实没有属性"与
+    "属性读失败了"。把失败当成空表会让备份悄悄丢掉卡片身份属性、还会打出
+    「缺少卡片身份属性」的假警告（§13.11 就是这一类问题的另一种形态）。
+    """
     import ctypes
     needed = ctypes.c_uint32(0)
+    # 第一次是容量查询：返回值可能是 FALSE 但已经填好 needed，不能据此判失败
     setupapi.SetupDiGetDevicePropertyKeys(info, ctypes.byref(data), None, 0,
                                           ctypes.byref(needed), 0)
     if needed.value <= 0:
-        return []
+        code = ctypes.get_last_error()
+        if code:
+            raise OSError(code, "SetupDiGetDevicePropertyKeys 查询属性数量失败")
+        return []                       # 设备上确实一个属性都没有
     buffer = ctypes.create_string_buffer(needed.value * DEVPROPKEY_SIZE)
     if not setupapi.SetupDiGetDevicePropertyKeys(info, ctypes.byref(data), buffer,
                                                  needed.value, ctypes.byref(needed), 0):
-        return []
+        raise OSError(ctypes.get_last_error(), "SetupDiGetDevicePropertyKeys 读取属性列表失败")
     results = []
     for index in range(needed.value):
         raw = buffer.raw[index * DEVPROPKEY_SIZE:(index + 1) * DEVPROPKEY_SIZE]
@@ -1411,25 +1444,30 @@ def _property_entries(setupapi, devinfo, propkey, info, data):
 def read_device_properties(uid=""):
     """读设备的全部 PnP 属性（含 ACL 受保护、``reg export`` 读不到的 ``Properties``）。
 
-    :return: ``[{"fmtid", "pid", "type", "data"}]``，``data`` 是 base64；读不到返回空表
+    :return: ``[{"fmtid", "pid", "type", "data"}]``（``data`` 是 base64）；
+        **读取失败返回 ``None``**，设备确实没有属性时返回空表 —— 两者必须分清，
+        否则备份会把"读失败"写成"没有卡片身份属性"。
     """
     uid = instance_id(uid)
     if not uid:
-        return []
+        return None
     try:
         setupapi, devinfo, propkey = _setupapi_props()
     except Exception as err:
         print("Load setupapi Error:", err)
-        return []
+        return None
     info, data = _open_device(setupapi, devinfo, uid)
     if info is None:
-        return []
+        return None
     try:
         return [{"fmtid": _fmtid_text(key.fmtid),
                  "pid": key.pid,
                  "type": ptype,
                  "data": base64.b64encode(blob).decode("ascii")}
                 for key, ptype, blob in _property_entries(setupapi, devinfo, propkey, info, data)]
+    except OSError as err:
+        print("Read Device Properties Error:", err)
+        return None
     finally:
         setupapi.SetupDiDestroyDeviceInfoList(info)
 
@@ -1961,10 +1999,13 @@ def _diagnostics(uid="", guid=""):
     lines.append("设备节点 ROOT\\SMARTCARDREADER\\%s: %s（%s）" % (uid, state, text))
     lines.append("设备绑定的 store 路径: %s" % (device_store_path(uid) or "（空）"))
     props = read_device_properties(uid)
-    vendor = vendor_property_count(props)
-    lines.append("设备属性: %d 项，其中厂商卡片身份 %d 项%s"
-                 % (len(props), vendor,
-                    "" if vendor else "  ← 缺少卡片身份属性，读卡器不会被发布到 PC/SC"))
+    if props is None:
+        lines.append("设备属性: 读取失败（无法判断卡片身份属性是否齐全）")
+    else:
+        vendor = vendor_property_count(props)
+        lines.append("设备属性: %d 项，其中厂商卡片身份 %d 项%s"
+                     % (len(props), vendor,
+                        "" if vendor else "  ← 缺少卡片身份属性，读卡器不会被发布到 PC/SC"))
     lines.extend(pcp_index_lines())
     state, text = dpapi_state(guid)
     lines.append("卡片数据 DPAPI（%s）: %s" % (state, text))

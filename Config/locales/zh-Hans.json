@@ -236,8 +236,6 @@
   "anyUsage": "任意用途",
   "pfx_text": "注意：只能导入RSA1024/2048和SHA1/256单文件",
   "cer_text": "注意：只能导入当前智能卡已存在对应密钥证书",
-  "sc_title": "未安装OpenSC",
-  "sc_datas": "您似乎还没有安装OpenSC\n是否立即安装?",
   "csp_sets": "使用自定义CSP",
   "csp_set_": "选择CSP",
   "msg_dlg_save_as": "保存为",

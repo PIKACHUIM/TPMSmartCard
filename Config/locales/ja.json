@@ -236,8 +236,6 @@
   "anyUsage": "任意の用途",
   "pfx_text": "PFXのみ（RSA1024/2048 + SHA1/256）",
   "cer_text": "鍵がカードにある証明書のみ",
-  "sc_title": "OpenSCが未インストール",
-  "sc_datas": "OpenSCがインストールされていないようです\n今すぐインストールしますか?",
   "csp_sets": "カスタムCSP",
   "csp_set_": "CSPを選択",
   "msg_dlg_save_as": "名前を付けて保存",

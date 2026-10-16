@@ -423,7 +423,7 @@ jobs:
           cat > notes.md <<EOF
           自动构建的 Beta 测试版，每次推送到 \`main\` 分支都会覆盖更新。
 
-          - 安装包：\`$SETUP\`（默认安装 OpenSC；SSH 密钥代理可在安装时勾选）
+          - 安装包：\`$SETUP\`（默认勾选安装系统级 OpenSC，可取消 —— 读卡工具已随程序分发，装它仅供其它软件使用；SSH 密钥代理可在安装时勾选）
           - 免安装绿色版：\`$PACKAGE\`
           - 提交：\`$GITHUB_SHA\`
           - 触发方式：${{ github.event_name }}
@@ -467,9 +467,9 @@ jobs:
           cat > notes.md <<EOF
           ## TPM 虚拟智能卡管理工具 V${VERSION}
 
-          - 安装包：\`$SETUP\`（默认安装 OpenSC；SSH 密钥代理可在安装时勾选，推荐）
+          - 安装包：\`$SETUP\`（默认勾选安装系统级 OpenSC，可取消 —— 读卡工具已随程序分发，装它仅供其它软件使用；SSH 密钥代理可在安装时勾选，推荐）
           - 免安装绿色版：\`$PACKAGE\`（解压后运行 \`SmartCardAPP.exe\`）
-          - 使用前请先安装 [OpenSC](https://github.com/OpenSC/OpenSC/releases)
+          - 读卡所需的 OpenSC 工具已随程序分发；安装包默认安装的系统级 OpenSC 为可选项（供其它软件使用，PKCS#11 / 物理卡 minidriver）
           - 构建提交：\`$GITHUB_SHA\`
           - 构建流水线：[#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 

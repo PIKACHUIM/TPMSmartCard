@@ -236,8 +236,6 @@
   "anyUsage": "Beliebige Verwendung",
   "pfx_text": "Nur einzelne PFX: RSA1024/2048 + SHA1/256",
   "cer_text": "Nur Zertifikate mit Schlüssel auf der Karte",
-  "sc_title": "OpenSC nicht installiert",
-  "sc_datas": "OpenSC scheint nicht installiert zu sein\nJetzt installieren?",
   "csp_sets": "Eigenes CSP verwenden",
   "csp_set_": "CSP auswählen",
   "msg_dlg_save_as": "Speichern unter",

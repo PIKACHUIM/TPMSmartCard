@@ -22,9 +22,12 @@
 ;        按原用户身份启动、不继承管理员权限。
 ;
 ;  组件（向导里可勾选，见 [Components]）：
-;    · OpenSC（默认勾选）：静默安装随包分发的 OpenSC-0.25.1_win64-Light.msi，
-;      并跳过它的开始菜单快捷方式（REMOVE=OpenSC_menu）。程序读卡用到的
-;      {app}\OpenSC 工具目录与这个 MSI 无关，始终随程序主体安装；
+;    · OpenSC（默认勾选，完整/自定义两种安装类型下都默认勾选）：静默安装随包分发的
+;      OpenSC-0.25.1_win64-Light.msi，并跳过它的开始菜单快捷方式（REMOVE=OpenSC_menu）。
+;      注意：**本程序读卡/建卡不依赖它** —— 读卡用的是随程序主体安装的 {app}\OpenSC
+;      工具目录（见 Module.OpenSCDealer 等），这个 MSI 是给「其它软件」用的（PKCS#11、
+;      物理卡的 minidriver/CNG 等）。所以程序里已去掉首次启动的安装提示，装不上
+;      也只影响其它软件，不影响本程序功能；
 ;    · WinCryptSSHAgent（默认不勾选）：部署随包分发的 SSH 密钥代理
 ;      （SSHCardAgent.exe）。它的快捷方式不默认创建、安装后也不默认启动，
 ;      开机自启改由程序「系统设置 - 启动与托盘」管理；
@@ -178,7 +181,7 @@ english.StateInstalled=installed
 english.StateFailed=installation failed (exit code %1)
 english.StateUnselected=not selected, skipped
 english.PrereqWarnTitle=Some dependencies were not installed
-english.PrereqWarnBody=Setup will continue. You can retry from the app's Settings page after installation, or run the installer manually (OpenSC is in the OpenSC folder of the app directory).
+english.PrereqWarnBody=Setup will continue. You can retry from the app's Settings page after installation, or run the installer manually (OpenSC is in the OpenSC folder of the app directory). Card reading and creation use the OpenSC tool folder bundled with the app, so the app works without it.
 chinesesimplified.AppShortcut={#AppName}
 chinesesimplified.AgentShortcut=SSH 密钥代理
 chinesesimplified.GroupTasks=附加任务：
@@ -200,7 +203,7 @@ chinesesimplified.StateInstalled=安装完成
 chinesesimplified.StateFailed=安装失败（退出码 %1）
 chinesesimplified.StateUnselected=未选择安装，跳过
 chinesesimplified.PrereqWarnTitle=部分依赖未能自动安装
-chinesesimplified.PrereqWarnBody=安装程序将继续。安装完成后可在程序「系统设置」中重试，或手动运行安装包（OpenSC 位于程序目录的 OpenSC 文件夹）。
+chinesesimplified.PrereqWarnBody=安装程序将继续。安装完成后可在程序「系统设置」中重试，或手动运行安装包（OpenSC 位于程序目录的 OpenSC 文件夹）。本程序读卡与建卡使用随包的 OpenSC 工具目录，不装它不影响本程序功能。
 
 [Types]
 ; 默认类型是第一个条目 Full（Inno 没有单独的 DefaultType 指令）；带 iscustom 的
@@ -209,8 +212,11 @@ Name: "full"; Description: "{cm:TypeFull}"
 Name: "custom"; Description: "{cm:TypeCustom}"; Flags: iscustom
 
 [Components]
-; OpenSC 属于 Full 类型 → 默认勾选；SSH 代理不属于任何类型 → 默认不勾选
-Name: "opensc"; Description: "{cm:CompOpenSc}"; Types: full
+; OpenSC：默认勾选。full 与 custom 两种类型都列上——只写 full 的话，用户切到
+; 「自定义安装」时 Inno 会按该类型重新勾选，OpenSC 会被静默取消勾选。
+; 它只影响其它软件（PKCS#11 / 物理卡的 minidriver），不装也不影响本程序读卡。
+; SSH 代理不属于任何类型 → 默认不勾选
+Name: "opensc"; Description: "{cm:CompOpenSc}"; Types: full custom
 Name: "agent"; Description: "{cm:CompAgent}"
 
 [Tasks]

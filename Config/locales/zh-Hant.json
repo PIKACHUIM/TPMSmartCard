@@ -236,8 +236,6 @@
   "anyUsage": "任意用途",
   "pfx_text": "注意：只能匯入RSA1024/2048和SHA1/256單一檔案",
   "cer_text": "注意：只能匯入目前智慧卡已存在對應金鑰憑證",
-  "sc_title": "未安裝OpenSC",
-  "sc_datas": "您似乎尚未安裝OpenSC\n是否立即安裝?",
   "csp_sets": "使用自訂CSP",
   "csp_set_": "選擇CSP",
   "msg_dlg_save_as": "另存新檔",

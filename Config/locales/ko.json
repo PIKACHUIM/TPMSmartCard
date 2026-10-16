@@ -237,8 +237,6 @@
   "anyUsage": "모든 용도",
   "pfx_text": "PFX만 지원: RSA1024/2048, SHA1/256",
   "cer_text": "키가 카드에 있는 인증서만",
-  "sc_title": "OpenSC 미설치",
-  "sc_datas": "OpenSC가 설치되어 있지 않은 것 같습니다\n지금 설치하시겠습니까?",
   "csp_sets": "사용자 CSP",
   "csp_set_": "CSP 선택",
   "msg_dlg_save_as": "다른 이름으로 저장",

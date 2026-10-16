@@ -32,8 +32,8 @@ Compared to directly storing certificates within the Windows system, the advanta
   (Cost effectiveness: Compared to traditional physical smart cards, TPM virtual smart cards can save hardware and management costs.)
 
 
-<b color="red">注意：在使用本工具前，您需要提前安装[OpenSC](https://github.com/OpenSC/OpenSC/releases) </b>
-<b color="red">Notice: Before using this tool, you need to install [OpenSC](https://github.com/OpenSC/OpenSC/releases) </b>
+<b color="red">注意：读卡所需的 [OpenSC](https://github.com/OpenSC/OpenSC/releases) 工具已随程序分发（程序目录的 OpenSC 文件夹），无需另外安装；安装包默认安装的系统级 OpenSC 是可选项，仅供其它软件使用（PKCS#11 客户端、物理卡 minidriver 等）</b>
+<b color="red">Notice: The OpenSC tools needed for reading cards are bundled with the app (the OpenSC folder next to the program). Installing OpenSC system-wide is optional and only benefits other software (PKCS#11 clients, physical card minidrivers, etc.)</b>
 
 ### 功能 / Function
 
@@ -52,12 +52,12 @@ Compared to directly storing certificates within the Windows system, the advanta
 ## 要求 / Requirement
 
 - 系统：Windows 8 x86/64或者更高
-- 软件：OpenSC Certutil Tpmvscmgr
+- 软件：Certutil Tpmvscmgr（OpenSC 工具随程序分发，系统级 OpenSC 可选）
 - 硬件：TPM硬件 1.2/2.0或更高
 - 注意：创建/删除虚拟智能卡不能在远程桌面（终端服务）会话中进行，系统会拒绝并报 `(0x800704d3)`，请到本机控制台操作，或用 `mstsc /admin` 连接到控制台会话
 
 - System: Windows 8 x86/64 or higher
-- Software: OpenSC Certuti Tpmvscmgr
+- Software: Certutil Tpmvscmgr (OpenSC tools are bundled; a system-wide OpenSC install is optional)
 - Hardware: TPM hardware 1.2/2.0 or higher
 - Note: Creating/deleting a virtual smart card cannot be done inside a Remote Desktop (Terminal Services) session; Windows rejects it with `(0x800704d3)`. Use the local console, or connect with `mstsc /admin`
 

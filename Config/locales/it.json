@@ -236,8 +236,6 @@
   "anyUsage": "Qualsiasi uso",
   "pfx_text": "Solo PFX singolo: RSA1024/2048 + SHA1/256",
   "cer_text": "Solo certificati con chiave sulla carta",
-  "sc_title": "OpenSC non installato",
-  "sc_datas": "Sembra che OpenSC non sia installato\nInstallarlo ora?",
   "csp_sets": "CSP personalizzato",
   "csp_set_": "Seleziona CSP",
   "msg_dlg_save_as": "Salva con nome",
