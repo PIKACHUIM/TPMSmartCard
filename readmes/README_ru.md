@@ -1,9 +1,10 @@
 <div align="center">
+
 # Менеджер виртуальных смарт-карт TPM
 
 _Графический инструмент для создания виртуальных смарт-карт TPM и управления ими в Windows_
 
-<img src="../Images/QQ20261016-184916.png" width="760" alt="Менеджер виртуальных смарт-карт TPM">
+<img src="../Images/20261016-184916.png" width="760" alt="Менеджер виртуальных смарт-карт TPM">
 
 
 
@@ -21,6 +22,7 @@ _Графический инструмент для создания вирту�
 
 [English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | Русский | [Español](README_es.md)
 </div>
+
 ---
 
 ## ✨ Возможности

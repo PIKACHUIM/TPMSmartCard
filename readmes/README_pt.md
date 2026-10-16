@@ -1,9 +1,10 @@
 <div align="center">
+
 # Gerenciador de Cartões Inteligentes Virtuais TPM
 
 _Uma ferramenta gráfica para criar e gerenciar cartões inteligentes virtuais TPM no Windows_
 
-<img src="../Images/QQ20261016-184916.png" width="760" alt="Gerenciador de Cartões Inteligentes Virtuais TPM">
+<img src="../Images/20261016-184916.png" width="760" alt="Gerenciador de Cartões Inteligentes Virtuais TPM">
 
 
 
@@ -21,6 +22,7 @@ Permite gerar chaves e CSR localmente ou distribuir certificados com segurança 
 
 [English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | Português | [Русский](README_ru.md) | [Español](README_es.md)
 </div>
+
 ---
 
 ## ✨ Recursos

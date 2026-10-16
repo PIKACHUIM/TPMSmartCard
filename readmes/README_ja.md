@@ -1,9 +1,10 @@
 <div align="center">
+
 # TPM 仮想スマートカードマネージャー
 
 _Windows 上で TPM 仮想スマートカードを作成・管理する GUI ツール_
 
-<img src="../Images/QQ20261016-184916.png" width="760" alt="TPM 仮想スマートカードマネージャー">
+<img src="../Images/20261016-184916.png" width="760" alt="TPM 仮想スマートカードマネージャー">
 
 
 
@@ -21,6 +22,7 @@ TPM ベースの仮想スマートカードは物理カードに近い強度を�
 
 [English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | 日本語 | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
 </div>
+
 ---
 
 ## ✨ 機能

@@ -1,9 +1,10 @@
 <div align="center">
+
 # TPM 가상 스마트카드 관리자
 
 _Windows에서 TPM 가상 스마트카드를 만들고 관리하는 GUI 도구_
 
-<img src="../Images/QQ20261016-184916.png" width="760" alt="TPM 가상 스마트카드 관리자">
+<img src="../Images/20261016-184916.png" width="760" alt="TPM 가상 스마트카드 관리자">
 
 
 
@@ -21,6 +22,7 @@ TPM 기반 가상 스마트카드는 물리 카드에 가까운 강도를 제공
 
 [English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | 한국어<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
 </div>
+
 ---
 
 ## ✨ 기능

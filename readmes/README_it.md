@@ -1,9 +1,10 @@
 <div align="center">
+
 # Gestore di Smart Card Virtuali TPM
 
 _Uno strumento grafico per creare e gestire smart card virtuali TPM su Windows_
 
-<img src="../Images/QQ20261016-184916.png" width="760" alt="Gestore di Smart Card Virtuali TPM">
+<img src="../Images/20261016-184916.png" width="760" alt="Gestore di Smart Card Virtuali TPM">
 
 
 
@@ -21,6 +22,7 @@ Consente di generare chiavi e CSR in locale o di distribuire i certificati in mo
 
 [English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | Italiano | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
 </div>
+
 ---
 
 ## ✨ Funzionalità

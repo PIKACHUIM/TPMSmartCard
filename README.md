@@ -1,9 +1,10 @@
 <div align="center">
+
 # TPM Virtual Smartcard Manager
 
 _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 
-<img src="Images/QQ20261016-184916.png" width="760" alt="TPM 虚拟智能卡管理器">
+<img src="Images/20261016-184916.png" width="760" alt="TPM 虚拟智能卡管理器">
 
 
 
@@ -17,10 +18,11 @@ _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 [![Release](https://img.shields.io/github/v/release/PIKACHUIM/TPMSmartCard?include_prereleases&label=release)](https://github.com/PIKACHUIM/TPMSmartCard/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%208%2B-0078D6.svg)](#-系统要求)
 
-📘 [文档索引](docs/README.md) · 🧭 [架构说明](docs/architecture.md) · 💾 [备份还原设计](docs/design-backup-restore.md) · 🛠️ [故障排查](docs/troubleshooting.md) · 🔐 [安全模型](docs/security.md)
+📘 [文档索引](docs/README.md) · 🧭 [架构说明](docs/architecture.md) · 💾 [备份还原](docs/design-backup-restore.md) · 🛠️ [故障排查](docs/troubleshooting.md) · 🔐 [安全模型](docs/security.md)
 
-[English](readmes/README_en.md) | 简体中文 | [繁體中文](readmes/README_zh-Hant.md) | [日本語](readmes/README_ja.md) | [한국어](readmes/README_ko.md)<br>[Deutsch](readmes/README_de.md) | [Français](readmes/README_fr.md) | [Italiano](readmes/README_it.md) | [Português](readmes/README_pt.md) | [Русский](readmes/README_ru.md) | [Español](readmes/README_es.md)
+[English](readmes/README_en.md) | 简体中文 | [繁體中文](readmes/README_zh-Hant.md) | [日本語](readmes/README_ja.md) | [한국어](readmes/README_ko.md) | [Deutsch](readmes/README_de.md) <br> [Français](readmes/README_fr.md) | [Italiano](readmes/README_it.md) | [Português](readmes/README_pt.md) | [Русский](readmes/README_ru.md) | [Español](readmes/README_es.md)
 </div>
+
 ---
 
 ## ✨ 功能

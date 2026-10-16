@@ -4,7 +4,7 @@
 
 _Un outil graphique pour créer et gérer des cartes à puce virtuelles TPM sous Windows_
 
-<img src="../Images/QQ20261016-184916.png" width="760" alt="Gestionnaire de cartes à puce virtuelles TPM">
+<img src="../Images/20261016-184916.png" width="760" alt="Gestionnaire de cartes à puce virtuelles TPM">
 
 
 
@@ -22,6 +22,7 @@ Générez les clés et les CSR en local, ou recevez les certificats en toute sé
 
 [English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | Français | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
 </div>
+
 ---
 
 ## ✨ Fonctionnalités

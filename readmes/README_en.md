@@ -1,9 +1,10 @@
 <div align="center">
+
 # TPM Virtual Smartcard Manager
 
 _A graphical tool for creating and managing TPM Virtual Smart Cards on Windows_
 
-<img src="../Images/QQ20261016-184916.png" width="760" alt="TPM Virtual Smartcard Manager">
+<img src="../Images/20261016-184916.png" width="760" alt="TPM Virtual Smartcard Manager">
 
 
 
@@ -21,6 +22,7 @@ Generate keys and CSRs locally, or deliver certificates securely from the cloud 
 
 English | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
 </div>
+
 ---
 
 ## ✨ Features

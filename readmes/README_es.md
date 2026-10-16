@@ -1,9 +1,10 @@
 <div align="center">
+
 # Administrador de Tarjetas Inteligentes Virtuales TPM
 
 _Una herramienta gráfica para crear y administrar tarjetas inteligentes virtuales TPM en Windows_
 
-<img src="../Images/QQ20261016-184916.png" width="760" alt="Administrador de Tarjetas Inteligentes Virtuales TPM">
+<img src="../Images/20261016-184916.png" width="760" alt="Administrador de Tarjetas Inteligentes Virtuales TPM">
 
 
 
@@ -21,6 +22,7 @@ Permite generar claves y CSR localmente o distribuir certificados de forma segur
 
 [English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | Español
 </div>
+
 ---
 
 ## ✨ Funciones

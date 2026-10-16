@@ -1,9 +1,10 @@
 <div align="center">
+
 # TPM 虛擬智慧卡管理員
 
 _一款在 Windows 上建立與管理 TPM 虛擬智慧卡的圖形化工具_
 
-<img src="../Images/QQ20261016-184916.png" width="760" alt="TPM 虛擬智慧卡管理員">
+<img src="../Images/20261016-184916.png" width="760" alt="TPM 虛擬智慧卡管理員">
 
 
 
@@ -21,6 +22,7 @@ _一款在 Windows 上建立與管理 TPM 虛擬智慧卡的圖形化工具_
 
 [English](README_en.md) | [简体中文](../README.md) | 繁體中文 | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
 </div>
+
 ---
 
 ## ✨ 功能
