@@ -7,8 +7,10 @@
 ;  可选环境变量（都有默认值，本地直接编译也能用）：
 ;    TPMSMART_VERSION      显示版本号，如 1.6.0 / 1.6.2026.1012（默认 1.6.0）
 ;    TPMSMART_VERSION4     写入 exe 版本资源的 4 段版本号，如 1.6.0.0（默认 1.6.0.0）
-;    TPMSMART_PACKAGENAME  产物基础名，如 TPMSmartCard-1.6-win64（默认 TPMSmartCard-win64）
-;    TPMSMART_BUILDDIR     cx_Freeze 输出目录（默认 build\exe.win-amd64-3.11）
+;    TPMSMART_PACKAGENAME  产物基础名 = TPMSmartCard-<打包方式>-<通道>-<系统>-<架构>
+;                          （默认 TPMSmartCard-cxfree-local-win10-x64；安装包名在此基础上拼 -setup）
+;    TPMSMART_BUILDDIR     打包产物目录：cx_Freeze 的 build\exe.win-amd64-3.11，
+;                          或 Nuitka 的 build\nuitka\TPMSmartCard
 ;
 ;  语言：简体中文 + 英文。中文语言包使用随仓库分发的 ChineseSimplified.isl
 ;        （Inno Setup 官方翻译，维护者 Zhenghan Yang），英文用 Inno 自带的
@@ -67,10 +69,10 @@
   #define Version4 "1.6.0.0"
 #endif
 
-; ---- 产物名 ---------------------------------------------------------------
+; ---- 产物名（基础名，安装包最终叫 <PackageName>-setup.exe）-----------------
 #define PackageName GetEnv("TPMSMART_PACKAGENAME")
 #if Len(PackageName) == 0
-  #define PackageName "TPMSmartCard-win64"
+  #define PackageName "TPMSmartCard-cxfree-local-win10-x64"
 #endif
 
 ; ---- cx_Freeze 输出目录 ---------------------------------------------------

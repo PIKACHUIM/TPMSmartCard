@@ -3,8 +3,8 @@ name: Build Client (Nuitka)
 # 第二套打包方案：Nuitka（把 Python 编译成原生 exe，冷启动比 cx_Freeze 快）。
 # 构建过程与 build-client-release.yml（cx_Freeze）互相独立，发布则与它共用同一个
 # Beta 预发布 / 正式 Release，只靠文件名区分：
-#     cx_Freeze  → TPMSmartCard-<版本|beta>-win64.zip / -setup.exe
-#     Nuitka     → TPMSmartCard-nuitka-<版本|beta>-win64.zip / -setup.exe
+#     cx_Freeze  → TPMSmartCard-cxfree-<beta|v版本>-win10-x64-green.zip / -setup.exe
+#     Nuitka     → TPMSmartCard-nuitka-<beta|v版本>-win10-x64-green.zip / -setup.exe
 #   · 产物目录 build/nuitka/（cx_Freeze 的 build/exe.win-amd64-3.11 不动）；
 #   · 安装包复用 install.iss / Builds\Build-Installer.ps1，只把 TPMSMART_BUILDDIR
 #     指到 build\nuitka\TPMSmartCard（Program Files、卸载器、.tsb 关联等定义都不变）；
@@ -209,10 +209,14 @@ jobs:
 
           "version=$version" >> $env:GITHUB_OUTPUT
           "version4=$version4" >> $env:GITHUB_OUTPUT
+
+          # 产物基础名：TPMSmartCard-<打包方式>-<通道>-<系统>-<架构>（与 cx_Freeze 那条线同一套规则）
+          # 基础名之后由具体产物补后缀：绿色版 -green.zip、安装包 -setup.exe
+          # 例：TPMSmartCard-nuitka-beta-win10-x64-green.zip / -setup.exe
           if ([string]::IsNullOrWhiteSpace($version)) {
-            "name=TPMSmartCard-nuitka-beta-win64" >> $env:GITHUB_OUTPUT
+            "name=TPMSmartCard-nuitka-beta-win10-x64" >> $env:GITHUB_OUTPUT
           } else {
-            "name=TPMSmartCard-nuitka-$version-win64" >> $env:GITHUB_OUTPUT
+            "name=TPMSmartCard-nuitka-v$version-win10-x64" >> $env:GITHUB_OUTPUT
           }
 
       # Nuitka 会把编译过的 C 模块缓存起来（默认在 %LOCALAPPDATA%\Nuitka），
@@ -341,7 +345,7 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path 'dist' | Out-Null
           # absolute path: 7-Zip runs with the staging directory as working directory
-          $zip = Join-Path $PWD "dist/$name.zip"
+          $zip = Join-Path $PWD "dist/$name-green.zip"
 
           $sevenZip = 'C:\Program Files\7-Zip\7z.exe'
           if (Test-Path $sevenZip) {
@@ -355,10 +359,10 @@ jobs:
           }
 
           $size = [math]::Round((Get-Item $zip).Length / 1MB, 1)
-          Write-Host "created $name.zip ($size MB)"
+          Write-Host "created $name-green.zip ($size MB)"
 
           "artifact=$name" >> $env:GITHUB_OUTPUT
-          "package=$name.zip" >> $env:GITHUB_OUTPUT
+          "package=$name-green.zip" >> $env:GITHUB_OUTPUT
 
       # 安装包：完整复用 cx_Freeze 那条线的 install.iss（安装到 Program Files、卸载器、
       # VC++ 运行库 / OpenSC 依赖、.tsb 文件关联都不变），唯一的差别是把产物目录指向

@@ -106,7 +106,7 @@ jobs:
       package: ${{ steps.pack.outputs.package }}
       setup: ${{ steps.iscc.outputs.setup }}
     env:
-      # 与 install.aip 中引用的 build/exe.win-amd64-3.11 保持一致，方便把 CI 产物继续用于本地打安装包
+      # 与 install.iss 引用的 build/exe.win-amd64-3.11 保持一致，方便把 CI 产物继续用于本地打安装包
       PYTHON_VERSION: '3.11'
       # runner 控制台是 cp1252，显式 UTF-8 输出，避免签名/构建日志里的中文变乱码
       PYTHONIOENCODING: utf-8
@@ -202,10 +202,18 @@ jobs:
 
           "version=$version" >> $env:GITHUB_OUTPUT
           "version4=$version4" >> $env:GITHUB_OUTPUT
+
+          # 产物基础名：TPMSmartCard-<打包方式>-<通道>-<系统>-<架构>
+          #   打包方式：cxfree（本流水线）| nuitka（build-client-nuitka.yml）
+          #   通道：beta（滚动预发布）| v<版本>（正式版）
+          #   系统：win10（本流水线，实际最低 Win8.1）| win78（32 位构建）
+          # 基础名之后由具体产物补后缀：绿色版 -green.zip、安装包 -setup.exe
+          # （安装包后缀由 install.iss 按 TPMSMART_PACKAGENAME 拼）
+          # 例：TPMSmartCard-cxfree-beta-win10-x64-green.zip / -setup.exe
           if ([string]::IsNullOrWhiteSpace($version)) {
-            "name=TPMSmartCard-beta-win64" >> $env:GITHUB_OUTPUT
+            "name=TPMSmartCard-cxfree-beta-win10-x64" >> $env:GITHUB_OUTPUT
           } else {
-            "name=TPMSmartCard-$version-win64" >> $env:GITHUB_OUTPUT
+            "name=TPMSmartCard-cxfree-v$version-win10-x64" >> $env:GITHUB_OUTPUT
           }
 
       # ---- Certum 云签名环境（移植自参考项目 OpenListTeam/OpenList-Desktop）----
@@ -279,7 +287,7 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path 'dist' | Out-Null
           # absolute path: 7-Zip runs with the staging directory as working directory
-          $zip = Join-Path $PWD "dist/$name.zip"
+          $zip = Join-Path $PWD "dist/$name-green.zip"
 
           $sevenZip = 'C:\Program Files\7-Zip\7z.exe'
           if (Test-Path $sevenZip) {
@@ -293,10 +301,10 @@ jobs:
           }
 
           $size = [math]::Round((Get-Item $zip).Length / 1MB, 1)
-          Write-Host "created $name.zip ($size MB)"
+          Write-Host "created $name-green.zip ($size MB)"
 
           "artifact=$name" >> $env:GITHUB_OUTPUT
-          "package=$name.zip" >> $env:GITHUB_OUTPUT
+          "package=$name-green.zip" >> $env:GITHUB_OUTPUT
           "builddir=$($buildDir.FullName)" >> $env:GITHUB_OUTPUT
 
       - name: Build installer (Inno Setup)
