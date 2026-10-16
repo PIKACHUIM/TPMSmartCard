@@ -806,7 +806,6 @@ def create_backup(dest_path, name="", uid=""):
                         copied.extend(_collect_files(source, arcname))
                     else:
                         copied.append(_file_entry(source, arcname))
-                    log.append("已备份卡片数据条目: %s" % entry)
             else:
                 # 无法定位到具体条目：退化为整目录备份（还原时会覆盖整个数据目录）
                 scope = "store"
@@ -837,8 +836,11 @@ def create_backup(dest_path, name="", uid=""):
             continue
         copied.extend(picked)
         pcp.append({"index": index, "dir": folder, "files": len(picked)})
-        log.append("已备份 TPM 密钥索引: %s（%d 个文件）" % (folder, len(picked)))
-    if not pcp:
+    if pcp:
+        log.append("已备份 TPM 密钥索引: 共 %d 个文件（各目录 %s）"
+                   % (sum(item["files"] for item in pcp),
+                      " / ".join(str(item["files"]) for item in pcp)))
+    else:
         log.append("警告: 没有备份到任何 TPM 密钥索引，换系统 / 重装后卡片将无法启动")
 
     # ---- 1c. 设备属性（卡片身份）----------------------------------------- #
@@ -850,7 +852,9 @@ def create_backup(dest_path, name="", uid=""):
     log.append("已备份设备属性: %d 项（其中厂商卡片身份 %d 项）"
                % (len(properties), vendor_props))
     if not vendor_props:
-        log.append("警告: 没读到厂商卡片身份属性，还原后读卡器很可能不会出现")
+        log.append("警告: 这台设备缺少卡片身份属性（卡片名 / 卡片 GUID），还原后读卡器不会"
+                   "被发布到 PC/SC —— 该卡片多半是手动重建的设备节点，而不是卡片管理里"
+                   "正常创建 / 还原出来的")
 
     # ---- 1d. DPAPI：卡上的密钥 / PIN 映射必须在本机解开后再收进备份 --------- #
     # keymaps / pinmaps / pinpolicy / blobs\* 都不是明文，而是 DPAPI blob
@@ -893,13 +897,10 @@ def create_backup(dest_path, name="", uid=""):
         dpapi_records.append({"path": inner, "file": arcname, "account": account,
                               "flags": info["flags"], "master_key": info["master_key"],
                               "size": len(plain)})
-        log.append("DPAPI 已解密: %s（%s；主密钥 %s%s）"
-                   % (inner, note, info["master_key"],
-                      "，属于 %s" % account if account else "，未能在本机定位所属账户"))
+        # 成功时不再逐条打印细节（用户要求精简）；失败分支仍保留完整原因便于定位
     if dpapi_records:
-        log.append("已解密 %d 个 DPAPI 保护文件；还原时会用目标机的 DPAPI 重新加密。"
-                   "注意：备份包因此包含卡上密钥材料的明文，请妥善保管备份文件"
-                   % len(dpapi_records))
+        log.append("已解密 %d 个 DPAPI 保护文件（%s），还原时用目标机 DPAPI 重新加密"
+                   % (len(dpapi_records), _dpapi_summary(dpapi_records)))
     elif dpapi_failed:
         log.append("卡片上有 %d 个 DPAPI 保护文件，但**全部解密失败**（见上文）："
                    "这次备份里它们只是密文，换系统还原时无法用目标机 DPAPI 重新加密，"
@@ -943,15 +944,16 @@ def create_backup(dest_path, name="", uid=""):
                         continue
                     archive.write(reg_file, "%s/%s.reg" % (REGISTRY_DIR, tag))
                     registry.append({"key": key, "file": "%s/%s.reg" % (REGISTRY_DIR, tag)})
-                    log.append("已导出注册表: %s" % key)
             if not registry:
                 raise BackupError("注册表导出失败：未拿到任何卡片设备节点，请确认卡片存在且以管理员运行")
+            log.append("已导出注册表: %d 项" % len(registry))
 
             # ---- 4. 清单 -------------------------------------------------- #
             tpm = tpm_identity()
-            log.append("本机 TPM 指纹: %s" % (tpm["ek"] or "读取失败（需管理员权限）"))
-            if tpm["info"]:
-                log.append("本机 TPM: %s" % tpm["info"])
+            ek = tpm["ek"] or ""
+            log.append("本机 TPM: %s | EK=%s"
+                       % (tpm["info"] or "型号未知",
+                          ("%s…" % ek[:16]) if ek else "读取失败（需管理员权限）"))
             manifest = {
                 "format": BACKUP_FORMAT,
                 "tool": "TPMSmartCard",
@@ -1302,9 +1304,25 @@ def _guid_raw(text):
 
 
 def _fmtid_text(value):
-    """把属性集 GUID（bytes 或字符串）规范成不带花括号的小写文本，便于比较。"""
+    """把属性集 GUID 规范成不带花括号的小写文本，便于比较。
+
+    入参可能是三种形态：``DEVPROPKEY.fmtid``（**ctypes 的 ``c_byte * 16`` 数组**）、
+    ``bytes``、或清单里读回来的 ``str``。
+
+    早期版本只判断了 ``bytes``，于是 ctypes 数组会走到字符串分支 —— 结果每个 fmtid 都
+    变成 ``<c_byte_array_16 object at 0x…>``，同一个属性集每次取值还不一样。
+    后果是厂商卡片身份属性**永远匹配不上**：备份时误报「厂商卡片身份 0 项」并给出
+    「还原后读卡器很可能不会出现」的假警告，还原时也判断不出「本机已有且一致」。
+    实测（真机 B）确认了这一点，故在此显式支持 ctypes 数组（``bytes(value)``）。
+    """
     if isinstance(value, (bytes, bytearray)):
         return str(uuid.UUID(bytes_le=bytes(value)))
+    try:
+        raw = bytes(value)                      # ctypes 的 c_byte * 16
+    except (TypeError, ValueError):
+        raw = b""
+    if len(raw) == 16:
+        return str(uuid.UUID(bytes_le=raw))
     return str(value or "").strip().strip("{}").lower()
 
 
@@ -1793,8 +1811,26 @@ def _reprotect_dpapi(reader, record, fallback, log):
     if blob is None:
         log.append("DPAPI 重新加密失败（%s），按原始密文写回: %s" % (note, inner))
         return fallback
-    log.append("DPAPI 已用 %s 重新加密: %s（%s）" % (account, inner, note))
+    # 成功不逐条打印（日志精简）；失败分支会写明原因
     return blob
+
+
+def _dpapi_summary(records):
+    """把 DPAPI 记录汇总成一句短语（账户 + 作用域），用于精简日志。
+
+    成功路径不再逐条打印（用户反馈日志太长）；需要细节时看失败分支，
+    或看备份包清单里的 ``dpapi`` 记录（含主密钥 GUID）。
+    """
+    accounts = []
+    machine = False
+    for item in records or []:
+        name = str(item.get("account") or "") or "当前身份"
+        if name not in accounts:
+            accounts.append(name)
+        if int(item.get("flags") or 0) & DPAPI.FLAG_MACHINE:
+            machine = True
+    return "%s，%s作用域" % ("/".join(accounts) or "当前身份",
+                             "机器" if machine else "用户")
 
 
 def dpapi_state(guid=""):

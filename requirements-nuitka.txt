@@ -1,0 +1,18 @@
+# Nuitka 打包方案（BuildNuitka.py）的依赖清单。
+#
+# 用法：
+#     pip install -r requirements-nuitka.txt
+#
+# 说明：cx_Freeze 那条线（BuildPackage.py / check_imports.py）只读 requirements.txt，
+# 不读这个文件，所以这里额外装的东西不会影响正式包；反过来本文件先 -r 引用了
+# requirements.txt，保证两套方案用的运行时依赖完全一致。
+
+-r requirements.txt
+
+# Nuitka 本体
+Nuitka
+
+# Nuitka 的辅助依赖：ordered-set 用于编译前处理，zstandard 用于 onefile 压缩
+# （standalone 也需要它才能处理部分压缩数据）
+ordered-set
+zstandard

@@ -1,0 +1,368 @@
+name: Build Client (Nuitka)
+
+# 第二套打包方案：Nuitka（把 Python 编译成原生 exe，冷启动比 cx_Freeze 快）。
+# 与 build-client-release.yml（cx_Freeze）完全独立：
+#   · 产物名带 -nuitka 前缀，Actions 产物名也不同；
+#   · 不碰 beta / 正式 Release，只在勾选 publish 时发到 nuitka-beta 预发布；
+#   · 不参与 install.aip（Advanced Installer 工程仍指向 cx_Freeze 的
+#     build\exe.win-amd64-3.11），要打 Inno 安装包时把 TPMSMART_BUILDDIR 指到
+#     build\nuitka\TPMSmartCard 再跑 Builds\Build-Installer.ps1 即可。
+#
+# 触发方式：
+#   · 推送改动本方案的文件到 main（paths 过滤，避免每次提交都跑完整原生编译）；
+#   · 手动 workflow_dispatch（可只构建部分入口、可控制是否发布）。
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'BuildNuitka.py'
+      - 'requirements-nuitka.txt'
+      - '.github/workflows/build-client-nuitka.yml'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: '发布到 nuitka-beta 预发布（不勾选则只上传 Actions 产物）'
+        type: boolean
+        default: false
+      version:
+        description: '版本号（留空取 Module/Version.py 的默认值，例如 1.6.0）'
+        required: false
+        type: string
+      targets:
+        description: '只构建部分入口：app,web,certimport（留空 = 全部）'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+# 与 cx_Freeze 流水线共用同一批 Certum 云签名凭据（三个都配齐才签名）
+env:
+  CERTUM_OTP_URI: ${{ secrets.CERTUM_OTP_URI }}
+  CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+  CERTUM_CERTIFICATE_SHA1: ${{ secrets.CERTUM_CERTIFICATE_SHA1 }}
+
+concurrency:
+  group: client-nuitka-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Windows x64 (Nuitka)
+    runs-on: windows-latest
+    outputs:
+      artifact: ${{ steps.pack.outputs.artifact }}
+      package: ${{ steps.pack.outputs.package }}
+    env:
+      # 与 cx_Freeze 流水线保持一致：install.iss / install.aip 都按 3.11 产物写死
+      PYTHON_VERSION: '3.11'
+      # runner 控制台是 cp1252，显式 UTF-8 输出，避免中文日志变乱码
+      PYTHONIOENCODING: utf-8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect Certum signing secrets
+        id: signing
+        shell: pwsh
+        run: |
+          if ($env:CERTUM_CERTIFICATE_SHA1 -and $env:CERTUM_OTP_URI -and $env:CERTUM_USERNAME) {
+            "TPMSMART_SIGN_ENABLED=1" >> $env:GITHUB_ENV
+            "TPMSMART_SIGN_REQUIRED=1" >> $env:GITHUB_ENV
+            Write-Host "Certum 云签名已启用（证书指纹 $env:CERTUM_CERTIFICATE_SHA1）"
+          } else {
+            "TPMSMART_SIGN_ENABLED=0" >> $env:GITHUB_ENV
+            Write-Host "::warning title=未启用代码签名::缺少 CERTUM_USERNAME / CERTUM_OTP_URI / CERTUM_CERTIFICATE_SHA1 Secrets，本次产物不带数字签名"
+          }
+
+      - name: Ensure OpenSC installer
+        shell: pwsh
+        env:
+          MSI_NAME: 'OpenSC-0.25.1_win64-Light.msi'
+          MSI_URL: 'https://github.com/OpenSC/OpenSC/releases/download/0.25.1/OpenSC-0.25.1_win64-Light.msi'
+          MSI_SHA256: '3FD9CABDF54AD1D757E49D5B33CC5834A2186D8E67B0F4DCBD5882E02D6A3EB0'
+        run: |
+          # OpenSC\ 整个目录会随程序分发（程序里的工具、安装时的 MSI 都从这里取），
+          # 仓库里可能没有它（*.msi 被全局 gitignore 挡住），缺失时下载同一份并校验
+          $target = Join-Path 'OpenSC' $env:MSI_NAME
+          if (Test-Path $target) {
+            $hash = (Get-FileHash $target -Algorithm SHA256).Hash
+            if ($hash -eq $env:MSI_SHA256) {
+              Write-Host "found $target (sha256 ok)"
+            } else {
+              Write-Host "WARNING: $target sha256 = $hash (expected $env:MSI_SHA256)"
+            }
+            exit 0
+          }
+
+          New-Item -ItemType Directory -Force -Path 'OpenSC' | Out-Null
+          Write-Host "not found in repo, downloading $env:MSI_URL"
+          Invoke-WebRequest -Uri $env:MSI_URL -OutFile $target -UseBasicParsing -TimeoutSec 300
+
+          $hash = (Get-FileHash $target -Algorithm SHA256).Hash
+          if ($hash -ne $env:MSI_SHA256) {
+            Remove-Item $target -Force -ErrorAction SilentlyContinue
+            throw "OpenSC msi sha256 mismatch: expected $env:MSI_SHA256, got $hash"
+          }
+          Write-Host "downloaded $target ($([math]::Round((Get-Item $target).Length / 1MB, 2)) MB)"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x64
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-nuitka.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-nuitka.txt
+
+      # cx_Freeze / Nuitka 对缺失模块都只告警，产物要到运行那一行才报
+      # ModuleNotFoundError，所以先确认 requirements.txt 覆盖了项目里全部 import
+      - name: Check declared dependencies
+        run: python Builds/check_imports.py
+
+      - name: Resolve package name
+        id: naming
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          $version = "$env:INPUT_VERSION".Trim() -replace '^[vV]', ''
+          "version=$version" >> $env:GITHUB_OUTPUT
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            "name=TPMSmartCard-nuitka-beta-win64" >> $env:GITHUB_OUTPUT
+          } else {
+            "name=TPMSmartCard-nuitka-$version-win64" >> $env:GITHUB_OUTPUT
+          }
+
+      # Nuitka 会把编译过的 C 模块缓存起来（默认在 %LOCALAPPDATA%\Nuitka），
+      # 缓存命中后重复构建能省掉大半时间
+      - name: Cache Nuitka compilation
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\Nuitka\Nuitka\Cache
+          key: nuitka-windows-py311-${{ hashFiles('requirements-nuitka.txt', 'BuildNuitka.py') }}
+          restore-keys: |
+            nuitka-windows-py311-
+
+      # ---- Certum 云签名环境（与 cx_Freeze 流水线同一套脚本）----------------
+      - name: Setup Certum SimplySign
+        if: env.TPMSMART_SIGN_ENABLED == '1'
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File Builds/Sign-SetupCertum.ps1 -Install -ConfigureRegistry
+
+      - name: Authenticate Certum
+        if: env.TPMSMART_SIGN_ENABLED == '1'
+        shell: pwsh
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            pwsh -NoProfile -ExecutionPolicy Bypass -File Builds/Sign-SetupCertum.ps1 -Connect -Verify
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "Certum 认证第 $attempt 次失败，10 秒后重试"
+            Start-Sleep -Seconds 10
+          }
+          throw 'Certum 云签名认证失败（3 次重试都没能把云证书挂到证书库）'
+
+      # 编译三个入口（主程序 + WEB + 证书导入）并合并成 build/nuitka/TPMSmartCard，
+      # 原生编译比较慢（CI 上通常 20~40 分钟），但产物冷启动明显快于 cx_Freeze
+      - name: Build with Nuitka
+        shell: pwsh
+        env:
+          TPMSMART_VERSION: ${{ steps.naming.outputs.version }}
+          TARGETS: ${{ inputs.targets }}
+        run: |
+          $nuitkaArgs = @()
+          if (-not [string]::IsNullOrWhiteSpace($env:TARGETS)) {
+            $nuitkaArgs += @('--targets', $env:TARGETS)
+          }
+          $watch = [System.Diagnostics.Stopwatch]::StartNew()
+          python BuildNuitka.py @nuitkaArgs
+          $code = $LASTEXITCODE
+          $watch.Stop()
+          Write-Host ("Nuitka 构建用时 {0:N1} 分钟" -f $watch.Elapsed.TotalMinutes)
+          if ($code -ne 0) { throw "Nuitka 构建失败（退出码 $code）" }
+
+      # 冒烟测试：从 C:\ 启动 WEB 入口（故意用「非程序目录」的工作目录，模拟双击
+      # .tsb / 开机自启的场景），要求它靠 Module/Paths.py 自己切回产物目录并渲染出
+      # 上传页。这一步能一次性发现 Nuitka 漏收的隐藏依赖、缺失的数据文件
+      # （templates/locales/ttkbootstrap 主题）以及程序根目录判定错误。
+      - name: Smoke test (WEB exe from a foreign working directory)
+        shell: pwsh
+        run: |
+          $dist = Join-Path $PWD 'build/nuitka/TPMSmartCard'
+          $exe = Join-Path $dist 'SmartCardWEB.exe'
+          if (-not (Test-Path $exe)) {
+            Write-Host "::warning title=跳过冒烟测试::本次构建未包含 web 入口（--targets 里没有 web）"
+            exit 0
+          }
+
+          $out = Join-Path $env:TEMP 'nuitka-smoke.out.txt'
+          $err = Join-Path $env:TEMP 'nuitka-smoke.err.txt'
+          Remove-Item $out, $err -Force -ErrorAction SilentlyContinue
+
+          $proc = Start-Process -FilePath $exe -WorkingDirectory 'C:\' -PassThru `
+              -RedirectStandardOutput $out -RedirectStandardError $err
+
+          $url = 'http://127.0.0.1:1080/web/cert'
+          $ok = $false
+          try {
+            $deadline = (Get-Date).AddSeconds(90)
+            while ((Get-Date) -lt $deadline) {
+              Start-Sleep -Seconds 2
+              if ($proc.HasExited) { break }
+              try {
+                $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
+                if ($resp.StatusCode -eq 200) { $ok = $true; break }
+              } catch { }
+            }
+          } finally {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+            Get-Process -Name 'SmartCardWEB' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          }
+
+          if ($ok) {
+            Write-Host "冒烟测试通过：$url 返回 200（程序根目录、模板与数据文件都正常）"
+            exit 0
+          }
+
+          Write-Host '--- stdout ---'
+          Get-Content $out -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+          Write-Host '--- stderr ---'
+          Get-Content $err -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+          throw "冒烟测试失败：$url 未返回 200（产物可能缺少隐藏依赖，或程序根目录判定不正确）"
+
+      - name: Package (portable zip)
+        id: pack
+        shell: pwsh
+        env:
+          NAME: ${{ steps.naming.outputs.name }}
+        run: |
+          $name = $env:NAME
+          $buildDir = Join-Path $PWD 'build/nuitka/TPMSmartCard'
+          if (-not (Test-Path $buildDir)) { throw "Nuitka output directory not found: $buildDir" }
+
+          $stage = Join-Path 'staging' $name
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item -Path (Join-Path $buildDir '*') -Destination $stage -Recurse -Force
+
+          # 主程序 exe 在 BuildNuitka.py 里已经签好名，这里只补 Import 组件的副本
+          # （仓库里的 Import\ 保持原样，不就地签名）
+          if ($env:TPMSMART_SIGN_ENABLED -eq '1') {
+            $importTargets = @(Get-ChildItem -Path (Join-Path $stage 'Import') -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -in @('TPMImport.exe', 'TPMImport.dll') } |
+                ForEach-Object { $_.FullName })
+            if ($importTargets.Count) {
+              & (Join-Path $PWD 'Builds/Sign-Windows.ps1') -Path ($importTargets -join ';')
+              if ($LASTEXITCODE -ne 0) { throw "signing Import components failed ($LASTEXITCODE)" }
+            }
+          }
+
+          New-Item -ItemType Directory -Force -Path 'dist' | Out-Null
+          # absolute path: 7-Zip runs with the staging directory as working directory
+          $zip = Join-Path $PWD "dist/$name.zip"
+
+          $sevenZip = 'C:\Program Files\7-Zip\7z.exe'
+          if (Test-Path $sevenZip) {
+            Push-Location 'staging'
+            & $sevenZip a -tzip -mx=9 $zip $name
+            $code = $LASTEXITCODE
+            Pop-Location
+            if ($code -ne 0) { throw "7-Zip failed with exit code $code" }
+          } else {
+            Compress-Archive -Path $stage -DestinationPath $zip -CompressionLevel Optimal
+          }
+
+          $size = [math]::Round((Get-Item $zip).Length / 1MB, 1)
+          Write-Host "created $name.zip ($size MB)"
+
+          "artifact=$name" >> $env:GITHUB_OUTPUT
+          "package=$name.zip" >> $env:GITHUB_OUTPUT
+
+      # 签名兜底校验：确认产物真的由那张 Certum 云证书签了名，避免「构建成功但
+      # 产物没签上」被静默发布
+      - name: Verify signatures
+        if: env.TPMSMART_SIGN_ENABLED == '1'
+        shell: pwsh
+        env:
+          NAME: ${{ steps.naming.outputs.name }}
+        run: |
+          $expected = ($env:CERTUM_CERTIFICATE_SHA1 -replace '[^0-9a-fA-F]', '').ToUpperInvariant()
+          $targets = @(Get-ChildItem -Path (Join-Path 'staging' $env:NAME) -Filter '*.exe' -File -ErrorAction SilentlyContinue)
+          if (-not $targets.Count) { throw 'no signed artifacts found to verify' }
+
+          $bad = @()
+          foreach ($file in $targets) {
+            $sig = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            $thumb = if ($sig.SignerCertificate) { ($sig.SignerCertificate.Thumbprint -replace '[^0-9a-fA-F]', '').ToUpperInvariant() } else { '' }
+            $ok = ($thumb -eq $expected) -and ($sig.Status -eq 'Valid')
+            Write-Host ("{0,-40} {1,-12} {2}" -f $file.Name, $sig.Status, $thumb)
+            if (-not $ok) { $bad += $file.FullName }
+          }
+          if ($bad.Count) {
+            throw ("以下产物签名不正确（期望指纹 $expected）：`n" + ($bad -join "`n"))
+          }
+          Write-Host "全部 $($targets.Count) 个产物的签名校验通过"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.artifact }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  # 默认不发布：只有手动触发并勾选 publish 时才发到 nuitka-beta 预发布，
+  # 与正式/滚动 beta 产物完全隔离
+  publish:
+    name: Publish Nuitka preview
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: dist
+
+      - name: Publish nuitka-beta
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE: ${{ needs.build.outputs.package }}
+        run: |
+          set -euo pipefail
+          REPO="$GITHUB_REPOSITORY"
+          TAG="nuitka-beta"
+          TITLE="Nuitka Preview Build #${{ github.run_number }}"
+
+          cat > notes.md <<EOF
+          Nuitka 打包方案的预览产物（与 cx_Freeze 正式包并行，仅用于对比和测试）。
+
+          - 免安装绿色版：\`$PACKAGE\`（解压后运行 \`SmartCardAPP.exe\`）
+          - 提交：\`$GITHUB_SHA\`
+          - 触发方式：${{ github.event_name }}
+          - 构建流水线：[#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          > Nuitka 走原生编译，冷启动比 cx_Freeze 快；该产物仅供测试，请勿用于生产环境。
+          EOF
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            if gh api -X PATCH "repos/$REPO/git/refs/tags/$TAG" -f sha="$GITHUB_SHA" -F force=true >/dev/null 2>&1; then
+              gh release edit "$TAG" --repo "$REPO" --title "$TITLE" --notes-file notes.md --prerelease
+            else
+              gh release delete "$TAG" --repo "$REPO" --yes
+              gh api -X DELETE "repos/$REPO/git/refs/tags/$TAG" >/dev/null 2>&1 || true
+              gh release create "$TAG" --repo "$REPO" --prerelease --target "$GITHUB_SHA" \
+                --title "$TITLE" --notes-file notes.md
+            fi
+          else
+            gh release create "$TAG" --repo "$REPO" --prerelease --target "$GITHUB_SHA" \
+              --title "$TITLE" --notes-file notes.md
+          fi
+
+          gh release upload "$TAG" dist/* --repo "$REPO" --clobber
