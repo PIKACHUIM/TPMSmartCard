@@ -3,13 +3,18 @@
 本站用 **VitePress** 构建、用 **GitHub Actions** 发布到 **GitHub Pages**，
 并且**同时支持两种访问地址**：
 
-| 地址 | base | 说明 |
+| 地址 | 站点 base | 说明 |
 |---|---|---|
-| `https://<owner>.github.io/<repo>/` | `/TPMSmartCard/` | GitHub Pages 默认地址（项目站点） |
+| `https://<owner>.github.io/<repo>/` | `/<repo>/` | GitHub Pages 默认地址（项目站点） |
 | `https://<你的域名>/` | `/` | 自定义域名（可选，跑在根路径） |
 
-关键点在于：**站点 base 不能写死**。本项目把它做成构建期参数（环境变量 `DOCS_BASE`），
-由工作流按"有没有自定义域名"自动推导 —— 所以同一份源码既能部署在子路径，也能部署在域名根路径。
+难点在于 **base 不能写死**：静态站点的资源路径在构建时就固定了，base 写错就会"页面能打开但没样式"。
+本项目的做法是：
+
+1. **base 做成构建期参数**（环境变量 `DOCS_BASE`），由工作流按"有没有自定义域名"自动推导；
+2. 当站点跑在自定义域名根路径（base = `/`）时，**再构建一份 `base = /<repo>/` 的副本**放进
+   产物的 `<repo>/` 子目录 —— 这样一个产物里有两套各自自洽的页面，
+   两个地址都能**独立完整地渲染**，不依赖 GitHub 的任何重定向行为。
 
 ## 1. 目录结构
 
@@ -28,7 +33,17 @@ docs/
 └─ README.md              工程文档索引
 ```
 
-产物：`docs/.vitepress/dist/`（含 `CNAME`，当使用自定义域名时）。
+产物：`docs/.vitepress/dist/`。使用自定义域名时，产物结构会是这样（两套页面并存）：
+
+```
+docs/.vitepress/dist/
+├─ index.html assets/ …   ← base = /        自定义域名根路径用
+├─ CNAME                 ← 自定义域名（CI 生成）
+├─ guide/… .html         ← 上述站点的内页
+└─ TPMSmartCard/         ← base = /TPMSmartCard/ 的副本（github.io 项目路径用）
+   ├─ index.html assets/ …
+   └─ guide/… .html
+```
 
 ## 2. 本地开发与预览
 
@@ -53,6 +68,7 @@ npm run docs:build
 |---|---|---|
 | `DOCS_BASE` | 站点 base，必须以 `/` 开头、以 `/` 结尾 | `/` |
 | `DOCS_SITE_URL` | 站点绝对地址，用于 `canonical`、`sitemap.xml`、`og:image` | `https://pikachuim.github.io/TPMSmartCard` |
+| `DOCS_OUT_DIR` | 产物目录（相对 `docs/`），CI 用它把副本构建到临时目录 | `.vitepress/dist` |
 
 ## 3. 怎么写新页面
 
@@ -72,9 +88,10 @@ npm run docs:build
 |---|---|
 | Checkout（`fetch-depth: 0`） | 取完整 git 历史，让页脚"最后更新"时间可读 |
 | `actions/configure-pages` | 读取仓库 Pages 配置，输出 `base_path` / `base_url` |
-| **Resolve site config** | 推导 `base`、站点绝对地址，必要时写入 `docs/public/CNAME`；结果写入 Job Summary |
-| `npm ci` + `npm run docs:build` | 在 `docs/` 下安装依赖并构建，注入 `DOCS_BASE` / `DOCS_SITE_URL` |
-| `actions/upload-pages-artifact` | 上传 `docs/.vitepress/dist` |
+| **Resolve site config** | 推导 `base`、站点绝对地址、是否要出子路径副本，必要时写入 `docs/public/CNAME`；结果写入 Job Summary |
+| `npm ci` + `npm run docs:build` | 主构建，注入 `DOCS_BASE` / `DOCS_SITE_URL` |
+| **Build nested copy** | 仅当主构建 base 为 `/`：用 `DOCS_OUT_DIR=.vitepress/dist-nested` 再构建一份 `base=/<repo>/` 的副本，去掉重复的 `sitemap.xml` 后拷进 `dist/<repo>/` |
+| `actions/upload-pages-artifact` | 上传 `docs/.vitepress/dist`（含两套页面） |
 | `actions/deploy-pages` | 发布到 GitHub Pages（`github-pages` environment） |
 
 base 的推导优先级：
@@ -84,7 +101,11 @@ base 的推导优先级：
 | 1 | `workflow_dispatch` 输入 `base` | 手动指定（调试用） |
 | 2 | 有自定义域名（输入 `custom_domain` 或仓库变量 `DOCS_CUSTOM_DOMAIN`） | `/` |
 | 3 | `configure-pages` 的 `base_path` | 通常是 `/TPMSmartCard` |
-| 4 | 兜底 | `/<仓库名>/` |
+| 4 | `configure-pages` 的 `base_url` 路径部分（Settings 里配了自定义域名时 `base_path` 可能为空，用这里兜底） | `/` 或 `/<repo>` |
+| 5 | 兜底 | `/<仓库名>/` |
+
+副本（`nested_base`）只在「主构建 base = `/` 且仓库名不是 `<owner>.github.io`」时生成，
+其余情况不需要 —— 那时主构建本身就在 github.io 项目路径上。
 
 ## 5. 一次性启用 Pages
 
@@ -104,14 +125,14 @@ base 的推导优先级：
 
 ### 方式 B：Settings → Pages → Custom domain
 
-在 **Settings → Pages → Custom domain** 里填域名并保存。平台会自行维护 `CNAME`，
-并把默认地址的请求重定向到自定义域名。此方式下工作流通常也能从 `configure-pages`
-拿到正确的 `base`（自定义域名 = 根路径），无需额外配置。
+在 **Settings → Pages → Custom domain** 里填域名并保存。平台会自行维护 `CNAME`。
+此方式下工作流从 `configure-pages` 的输出里识别"站点在根路径"，因此仍然会按 `base = /` 构建
+（`base_path` 为空时用 `base_url` 的路径部分兜底，见 §4）。
 
 | 对比 | 方式 A（仓库变量） | 方式 B（Settings 填写） |
 |---|---|---|
 | CNAME 来源 | 构建产物里的 `CNAME` | 平台自动维护 |
-| base 推导 | 明确按 `/` 构建 | 依赖 `configure-pages` 输出，通常同样得到 `/` |
+| base 推导 | 明确按 `/` 构建 | 从 `configure-pages` 输出推导，同样得到 `/` |
 | 适合 | 想用代码/配置固化域名、审计清晰 | 只想点几下 |
 
 ### DNS 设置
@@ -131,17 +152,24 @@ base 的推导优先级：
 
 ## 7. "同时支持两个域名"到底怎么实现
 
-| 情况 | 行为 |
-|---|---|
-| 配置了自定义域名 | 站点按 `base = /` 构建；`https://<owner>.github.io/<repo>/` 上的请求会被 GitHub Pages **重定向到自定义域名**，所以两个地址都指向同一份站点（内容完全一致） |
-| 没配置自定义域名 | 站点按 `base = /<repo>/` 构建；只有 github.io 项目路径可用 |
-| 想验证子路径产物 | 手动触发工作流时把 `base` 输入设为 `/TPMSmartCard/`，构建完在本地 `npm run docs:preview` 观察 |
+因为静态站点的资源路径在构建期就写死了，**一个产物只能匹配一个 base**。所以本工作流的做法是
+**一次部署、两套自洽页面**：
 
-::: warning 一个产物只能匹配一个 base
-静态站点的资源路径是构建时写死的。因此**不要**期望"同一个产物在 `https://domain/` 与
-`https://<owner>.github.io/<repo>/` 下都能独立正常渲染" —— 自定义域名为准（base = `/`）、
-默认地址走平台重定向，才是 GitHub Pages 上唯一稳妥的组合。
-:::
+| 情况 | 产物 | 效果 |
+|---|---|---|
+| 配了自定义域名 | 主构建 `base = /`；另在 `dist/<repo>/` 放一份 `base = /<repo>/` 的副本 | `https://你的域名/` 与 `https://<owner>.github.io/<repo>/` **都能独立完整地渲染**，不依赖任何重定向 |
+| 没配自定义域名 | 只有一个 `base = /<repo>/` 的构建 | github.io 项目路径可用 |
+| 用户/组织站点（仓库名为 `<owner>.github.io`） | 跳过副本 | 该仓库本身就在 github.io 根路径 |
+
+几点说明：
+
+* 副本里的 `sitemap.xml` 会在拷贝前删除，且副本的 `canonical` 指向**主域名** ——
+  搜索引擎只会把主域名当正式地址，避免重复内容；
+* 代价是构建时间与产物体积大约翻倍（本项目约 1 分钟 / 十几 MB），对文档站可以接受；
+* 想只留一套：把仓库变量 `DOCS_CUSTOM_DOMAIN` 清掉、并确保 Settings → Pages 里没有自定义域名，
+  工作流就会只出 `base = /<repo>/` 的一份；
+* 想本地复现完整产物，按上面的顺序跑两次构建，并把副本拷进 `dist/<repo>/`
+  （CI 里的命令见 `.github/workflows/build-docs.yml` 的 "Build nested copy" 步骤）。
 
 ## 8. 发布后自检清单
 
@@ -152,8 +180,9 @@ base 的推导优先级：
 | 导航与侧边栏 | 每个链接都能打开，浏览器控制台没有 404 资源 |
 | 搜索 | 右上角搜索能搜到中文关键词（如"备份"） |
 | 页脚 | "最后更新"有日期；"在 GitHub 上编辑此页"能打开对应源码 |
-| `sitemap.xml` | `https://站点地址/sitemap.xml` 可访问，里面是**自定义域名**（若配置了） |
+| `sitemap.xml` | 只在根路径存在一份（副本里的会被删掉），里面是**自定义域名**（若配置了） |
 | 自定义域名 | 首页可访问且浏览器显示 HTTPS 锁；`http://` 自动跳 `https://` |
+| **github.io 子路径副本** | 配了自定义域名时，`https://<owner>.github.io/<repo>/` 也要**样式正常**（说明 `<repo>/` 副本已生成） |
 
 ## 9. 常见问题
 
@@ -161,7 +190,7 @@ base 的推导优先级：
 |---|---|---|
 | 工作流报 `Get Pages site failed` / `Pages site not found` | 仓库还没启用 Pages（或 Source 不是 GitHub Actions） | 按本文 §5 启用后再跑 |
 | 全站 404，但工作流成功 | Pages 的 Source 选成了 "Deploy from a branch"，与产物式部署冲突 | 改成 **GitHub Actions** |
-| 页面能打开但**没有任何样式**（裸 HTML） | base 与实际访问路径不匹配 | 检查并修正（自定义域名 → `DOCS_BASE=/`；只走 github.io → `/TPMSmartCard/`），或在手动触发时用 `base` 输入覆盖 |
+| 页面能打开但**没有任何样式**（裸 HTML） | base 与实际访问路径不匹配 | 修正 base（自定义域名 → `/`；只走 github.io → `/<repo>/`），或用 `base` 输入覆盖；若只是 github.io 子路径没样式，检查产物里有没有 `<repo>/` 副本（§4 的 "Build nested copy" 步骤是否跳过/失败） |
 | 内页链接 404 | Markdown 里写了死链；VitePress 默认会让构建**失败** | 按构建日志修正链接（页面链接不带 `.md` 后缀也可以，但推荐统一风格） |
 | 自定义域名访问证书报错 | DNS 未生效 / 证书还在签发 / CDN 代理模式干扰 | 确认 DNS 记录、等证书签发、CDN 先关闭代理 |
 | 页脚没有"最后更新" | Checkout 没有取完整历史 | 确认 `fetch-depth: 0` 未被改动 |
