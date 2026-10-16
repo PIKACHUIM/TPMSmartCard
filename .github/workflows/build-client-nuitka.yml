@@ -123,8 +123,9 @@ jobs:
       package: ${{ steps.pack.outputs.package }}
       setup: ${{ steps.iscc.outputs.setup }}
     env:
-      # Nuitka 是纯 Python（py3-none-any），不依赖 cx_Freeze，可以跟到官方最高支持的 3.14
-      PYTHON_VERSION: '3.14'
+      # 3.13：Nuitka 官方 classifiers 里写到了 3.14，但实测 3.14 上原生编译失败
+      # （同一份 BuildNuitka.py 在 3.11 上跑通过，Nuitka 版本也没变），先用 3.13
+      PYTHON_VERSION: '3.13'
       # runner 控制台是 cp1252，显式 UTF-8 输出，避免中文日志变乱码
       PYTHONIOENCODING: utf-8
     steps:
