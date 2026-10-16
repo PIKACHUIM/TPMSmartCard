@@ -874,11 +874,17 @@ def create_backup(dest_path, name="", uid=""):
         if not info:
             continue
         inner = rel[len(FILES_DIR) + 1:]
-        plain, note = DPAPI.unprotect(raw)
+        # DPAPI 这一层出任何问题都只跳过这一个文件：设备注册表、store 密文、
+        # 密钥索引照样要备份，不能因为解不开就整体失败（原实现会直接抛异常中断备份）。
+        try:
+            plain, note = DPAPI.unprotect(raw)
+            account = DPAPI.master_key_owner(info["master_key"])[0]
+        except Exception as err:
+            log.append("DPAPI 处理失败，跳过该文件（仍按密文备份）: %s (%s)" % (inner, err))
+            continue
         if plain is None:
             log.append("DPAPI 解密失败: %s（%s）" % (inner, note))
             continue
-        account = DPAPI.master_key_owner(info["master_key"])[0]
         arcname = "%s/%s" % (DPAPI_DIR, inner)
         plain_blobs.append((arcname, plain))
         dpapi_records.append({"path": inner, "file": arcname, "account": account,
@@ -1772,7 +1778,11 @@ def _reprotect_dpapi(reader, record, fallback, log):
     except (KeyError, OSError) as err:
         log.append("读取 DPAPI 明文失败，按原始密文写回: %s (%s)" % (inner, err))
         return fallback
-    blob, note = DPAPI.protect(plain, account=account, flags=flags)
+    try:
+        blob, note = DPAPI.protect(plain, account=account, flags=flags)
+    except Exception as err:
+        log.append("DPAPI 重新加密异常，按原始密文写回: %s (%s)" % (inner, err))
+        return fallback
     if blob is None:
         log.append("DPAPI 重新加密失败（%s），按原始密文写回: %s" % (note, inner))
         return fallback
@@ -1798,10 +1808,16 @@ def dpapi_state(guid=""):
                     raw = handle.read()
             except OSError:
                 continue
-            if not DPAPI.blob_info(raw):
+            try:
+                if not DPAPI.blob_info(raw):
+                    continue
+            except Exception:
                 continue
             blobs += 1
-            plain, _ = DPAPI.unprotect(raw)
+            try:
+                plain, _ = DPAPI.unprotect(raw)
+            except Exception:
+                plain = None
             if plain is None:
                 failed.append(os.path.relpath(path, target).replace("\\", "/"))
     if not blobs:

@@ -167,6 +167,26 @@ class _Structs(object):
         advapi32.RevertToSelf.restype = ctypes.c_bool
         advapi32.GetTokenInformation.restype = ctypes.c_bool
         advapi32.ConvertSidToStringSidW.restype = ctypes.c_bool
+
+        # 句柄一律声明成 ``c_void_p`` / ``POINTER(c_void_p)``。Windows 的句柄是
+        # **64 位**：只设 restype、不声明 argtypes 时，ctypes 会把拿回来的 Python int
+        # 当 C ``int``（32 位）转换，句柄值超过 2^31 就抛
+        # ``OverflowError: int too long to convert``（SetupDi 那边已经踩过一次，
+        # 见 devlog §12.6，这里把同类坑一次补齐）。
+        kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+        advapi32.OpenProcessToken.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
+                                             ctypes.POINTER(ctypes.c_void_p)]
+        advapi32.DuplicateTokenEx.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
+                                              ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+                                              ctypes.POINTER(ctypes.c_void_p)]
+        advapi32.SetThreadToken.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        advapi32.GetTokenInformation.argtypes = [ctypes.c_void_p, ctypes.c_int,
+                                                 ctypes.c_void_p, ctypes.c_uint32,
+                                                 ctypes.POINTER(ctypes.c_uint32)]
+        advapi32.ConvertSidToStringSidW.argtypes = [ctypes.c_void_p,
+                                                    ctypes.POINTER(ctypes.c_wchar_p)]
         self.crypt32 = crypt32
         self.kernel32 = kernel32
         self.advapi32 = advapi32
@@ -213,7 +233,7 @@ def _sid_of_token(token):
     try:
         return str(text.value or "")
     finally:
-        api.kernel32.LocalFree(text)
+        api.kernel32.LocalFree(ctypes.cast(text, ctypes.c_void_p))
 
 
 def _token_of_account(account, max_pids=400):
@@ -228,13 +248,15 @@ def _token_of_account(account, max_pids=400):
     # 直接遍历 pid：为拿"某个账户的令牌"引入 EnumProcesses/Toolhelp 不划算，
     # 打开进程失败会立刻返回，代价很低。
     for pid in range(1, max_pids):
-        handle = api.kernel32.OpenProcess(SYSTEM_QUERY_LIMITED, False, pid)
+        handle = api.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
         if not handle:
             continue
         try:
             token = ctypes.c_void_p()
             if not api.advapi32.OpenProcessToken(handle, TOKEN_QUERY | TOKEN_DUPLICATE,
                                                  ctypes.byref(token)):
+                continue
+            if not token.value:
                 continue
             try:
                 if _sid_of_token(token) != want:
@@ -244,7 +266,9 @@ def _token_of_account(account, max_pids=400):
                                                      None, SECURITY_IMPERSONATION,
                                                      TOKEN_IMPERSONATION, ctypes.byref(dup)):
                     continue
-                return dup.value or 0
+                if not dup.value:
+                    continue
+                return dup.value
             finally:
                 api.kernel32.CloseHandle(token)
         finally:
