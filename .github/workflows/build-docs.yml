@@ -164,8 +164,9 @@ jobs:
             echo "|---|---|"
             echo "| 站点 base | \`$BASE\` |"
             echo "| 站点地址（canonical / sitemap） | \`$ORIGIN\` |"
-            echo "| 自定义域名 | \`${DOMAIN:-未设置，仅使用 github.io}\` |"
+            echo "| 自定义域名 | \`${DOMAIN:-${CUSTOM_HOST:-未设置，仅使用 github.io}}\` |"
             echo "| Pages 默认地址 | \`$DEFAULT_ORIGIN/$REPO_NAME/\` |"
+            echo "| 检测到的主机名 | \`$HOST\` |"
             echo "| 子路径副本 base | \`${NESTED_BASE:-（不需要）}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
