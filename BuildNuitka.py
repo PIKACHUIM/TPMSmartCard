@@ -167,6 +167,10 @@ def build_command(target, build_version4):
         "--include-package=SubApp",
         # winpty(pywinpty) 带原生 winpty.dll / winpty-agent.exe，必须连数据一起收
         "--include-package=winpty",
+        # ttkbootstrap 的 style.py 用「from ttkbootstrap import utility」这种包内
+        # 子模块导入，静态分析容易只看名字不看包，干脆整包收进来（cx_Freeze
+        # 线踩过这个坑：漏收 utility.pyc 会报 cannot import name 'utility'）
+        "--include-package=ttkbootstrap",
         "--include-package-data=winpty",
         "--include-package-data=certifi",
         "--include-package-data=ttkbootstrap",

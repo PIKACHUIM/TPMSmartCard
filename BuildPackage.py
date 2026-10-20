@@ -150,7 +150,23 @@ setup(
     description="TPM Virtual Smart Card Manager",
     author="Pikachu Ren",
     options={'build_exe': {
-        'include_files': files
+        'include_files': files,
+        # cx_Freeze 的静态分析抓不到「包内 from 包 import 子模块」的写法。
+        # ttkbootstrap/style.py 第 13~14 行正是
+        #     from ttkbootstrap import utility as util
+        #     from ttkbootstrap import colorutils
+        # 漏收这几个子模块后，冻结环境 import ttkbootstrap 会变成：
+        #     ImportError: cannot import name 'utility' from partially
+        #     initialized module 'ttkbootstrap'（看起来像循环导入，其实是
+        #     子模块在 lib\ttkbootstrap 里不存在）
+        # 所以整包 + 关键子模块都显式收进来。
+        'packages': ['ttkbootstrap'],
+        'includes': [
+            'ttkbootstrap.utility',
+            'ttkbootstrap.colorutils',
+            'ttkbootstrap.publisher',
+            'ttkbootstrap.themes.standard',
+        ],
     }
     },
     # build_exe 换成带签名的子类：cx_Freeze 输出完成后调用 Builds\Sign-Windows.ps1
