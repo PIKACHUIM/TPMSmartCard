@@ -31,12 +31,13 @@ English | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [�
 
 * **Virtual smart cards**: create and delete cards; change or reset PIN, PUK and admin key
 * **Certificates and keys**: import, delete and inspect X.509 certificates and on-card key objects; view certificate chains and key usages
-* **Generation and delivery**: generate key + CSR locally and get it signed, or receive certificates securely from the cloud (X25519 key agreement + AES, pickup code delivered out of band)
+* **Generation and delivery**: generate key + CSR locally and get it signed, or receive certificates securely from the cloud (X25519 key agreement + AES encryption)
 
 ### Backup and restore
 
 * **Full-card backup**: package a card into a `.tsb` (card data + device registry + TPM key index + device properties + DPAPI plaintext)
-* **Same-TPM restore**: a backup can only be restored on the **same TPM** (reinstalling Windows on that machine works; **another machine / another TPM does not**, and **a deleted card cannot be restored**); DPAPI data is decrypted when backing up and re-encrypted with the local master key when restoring (see [backup & restore design](../docs/design-backup-restore.md))
+* **Same-TPM restore**: a backup can only be restored on the **same TPM** (reinstalling Windows on that machine works; **another machine / another TPM does not**, and **a deleted card cannot be restored**)
+* DPAPI data is decrypted when backing up and re-encrypted with the local master key when restoring (see [backup & restore design](../docs/design-backup-restore.md))
 * **Restore diagnostics**: after a restore the tool checks the device node / PC-SC reader / DPAPI layers and reports an actionable verdict with logs
 
 ### Scenarios and tools
@@ -56,6 +57,7 @@ English | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [�
 
 > [!IMPORTANT]
 > **Creating / deleting a virtual smart card cannot be done inside a Remote Desktop (Terminal Services) session**; Windows rejects it with `0x800704d3`.
+>
 > Use the local console, or connect with `mstsc /admin`.
 
 > [!TIP]
@@ -81,7 +83,7 @@ English | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [�
 |---|---|
 | Language / runtime | Python **3.11** |
 | UI | Tkinter + ttkbootstrap (UI built entirely in code; layouts driven by `Config/*.json`) |
-| Card operations | `tpmvscmgr` (create / delete / change PIN) + OpenSC (card and certificate reading) + in-house PnP / SetupAPI layer (device nodes and properties) |
+| Card operations | `tpmvscmgr` (create / delete / change PIN) + OpenSC (card and certificate reading) + in-house PnP / SetupAPI layer |
 | Backup and restore | in-house `.tsb` (zip) packaging; `Module/DPAPI.py` handles DPAPI encryption/decryption and token impersonation |
 | Packaging | two pipelines: **cx_Freeze** (release builds, installer via Inno Setup) and **Nuitka** (standalone folder) |
 | Localization | `Config/locales/*.json`, 11 languages |
@@ -125,6 +127,7 @@ A usable TPM Virtual Smart Card consists of **five parts**, and a `.tsb` capture
 
 > [!WARNING]
 > Because the last item is included, a `.tsb` is **equivalent to card key material**: keep it safe offline and never put it into version control, cloud drives or chat tools.
+>
 > On restore the tool re-encrypts it with the target machine's DPAPI before writing it back; keep the card name, PIN, PUK and admin key safe as well.
 
 Other notes:
@@ -137,26 +140,35 @@ Other notes:
 
 ## ❓ FAQ
 
-**Q: Why does creating a card fail inside a Remote Desktop session with `0x800704d3`?**
-A: Windows forbids creating / deleting virtual smart cards in a Terminal Services session. Use the local console, or connect with `mstsc /admin`.
-
-**Q: Can a backup be restored on another machine?**
-A: **No.** A backup only applies to the **same TPM**: it works after reinstalling Windows on that machine, but not on another machine or another TPM; and a **deleted card**
-**cannot be restored** (deleting a card removes its persistent TPM key). If the card does not appear after a restore, restart the device or reboot first.
-
-**Q: After a restore the card does not show up. What should I do?**
-A: **Restart first**: the card may need a device (driver) restart or a system reboot before it appears in the reader list. If it still does not appear,
-read the three-layer verdict in the restore log (device node / reader / DPAPI): the usual causes are a backup made by an older version or missing card identity properties — follow the [troubleshooting guide](../docs/troubleshooting.md).
-
-**Q: After a restore the reader does not appear, or certificates do not show up. What now?**
-A: Read the three-layer verdict in the restore log (device node / reader / DPAPI). The most common causes are a backup made by an older version or missing card identity properties;
-follow the [troubleshooting guide](../docs/troubleshooting.md) step by step, or attach the log to an issue.
-
-**Q: Does it need a network connection?**
-A: Everything works offline except "cloud certificate delivery".
-
-**Q: The certificate chain reports `CERT_E_CHAINING`?**
-A: The issuing intermediate CA is not installed on this machine — import it into the trusted root/intermediate store.
+> **Q: Why does creating a card fail inside a Remote Desktop session with `0x800704d3`?**
+>
+> A: Windows forbids creating / deleting virtual smart cards in a Terminal Services session. Use the local console, or connect with `mstsc /admin`.
+>
+> **Q: Can a backup be restored on another machine?**
+>
+> A: **No.** A backup only applies to the **same TPM**: it works after reinstalling Windows on that machine, but not on another machine or another TPM; and a **deleted card**
+>
+> **cannot be restored** (deleting a card removes its persistent TPM key). If the card does not appear after a restore, restart the device or reboot first.
+>
+> **Q: After a restore the card does not show up. What should I do?**
+>
+> A: **Restart first**: the card may need a device (driver) restart or a system reboot before it appears in the reader list. If it still does not appear,
+>
+> read the three-layer verdict in the restore log (device node / reader / DPAPI): the usual causes are a backup made by an older version or missing card identity properties.
+>
+> **Q: After a restore the reader does not appear, or certificates do not show up. What now?**
+>
+> A: Read the three-layer verdict in the restore log (device node / reader / DPAPI). The most common causes are a backup made by an older version or missing card identity properties;
+>
+> follow the [troubleshooting guide](../docs/troubleshooting.md) step by step, or attach the log to an issue.
+>
+> **Q: Does it need a network connection?**
+>
+> A: Everything works offline except "cloud certificate delivery".
+>
+> **Q: The certificate chain reports `CERT_E_CHAINING`?**
+>
+> A: The issuing intermediate CA is not installed on this machine — import it into the trusted root/intermediate store.
 
 ---
 

@@ -31,12 +31,13 @@ Permite generar claves y CSR localmente o distribuir certificados de forma segur
 
 * **Tarjetas inteligentes virtuales**: crear y eliminar tarjetas; cambiar o restablecer PIN, PUK y clave de administración
 * **Certificados y claves**: importar, eliminar y consultar certificados X.509 y objetos de clave en la tarjeta; ver la cadena de certificación y los usos de la clave
-* **Generación y distribución**: generar clave + CSR localmente y firmarlo, o recibir certificados de forma segura desde la nube (acuerdo de claves X25519 + AES, código de recogida fuera de banda)
+* **Generación y distribución**: generar clave + CSR localmente y firmarlo, o recibir certificados de forma segura desde la nube (acuerdo de claves X25519 + cifrado AES)
 
 ### Copia de seguridad y restauración
 
 * **Copia completa de la tarjeta**: empaqueta una tarjeta en un `.tsb` (datos de la tarjeta + registro del dispositivo + índice de claves TPM + propiedades del dispositivo + texto en claro DPAPI)
-* **Restauración en el mismo TPM**: una copia solo se puede restaurar en el **mismo TPM** (reinstalar Windows en ese equipo: sí; **otro equipo / otro TPM: no**, y **una tarjeta eliminada no se puede restaurar**); los datos DPAPI se descifran al copiar y se vuelven a cifrar con la clave maestra local al restaurar (ver [diseño de copia y restauración](../docs/design-backup-restore.md))
+* **Restauración en el mismo TPM**: una copia solo se puede restaurar en el **mismo TPM** (reinstalar Windows en ese equipo: sí; **otro equipo / otro TPM: no**, y **una tarjeta eliminada no se puede restaurar**)
+* Los datos DPAPI se descifran al copiar y se vuelven a cifrar con la clave maestra local al restaurar (ver [diseño de copia y restauración](../docs/design-backup-restore.md))
 * **Diagnóstico de restauración**: tras restaurar, la herramienta evalúa las tres capas (nodo de dispositivo / lector PC-SC / DPAPI) y ofrece una conclusión accionable con registros
 
 ### Escenarios y herramientas
@@ -56,6 +57,7 @@ Permite generar claves y CSR localmente o distribuir certificados de forma segur
 
 > [!IMPORTANT]
 > **Crear / eliminar tarjetas inteligentes virtuales no se puede hacer dentro de una sesión de Escritorio remoto (Servicios de Terminal Server)**; Windows lo rechaza con `0x800704d3`.
+>
 > Usa la consola local o conéctate con `mstsc /admin`.
 
 > [!TIP]
@@ -81,7 +83,7 @@ Permite generar claves y CSR localmente o distribuir certificados de forma segur
 |---|---|
 | Lenguaje / runtime | Python **3.11** |
 | Interfaz | Tkinter + ttkbootstrap (interfaz construida íntegramente por código; los diseños se definen en `Config/*.json`) |
-| Operaciones sobre la tarjeta | `tpmvscmgr` (crear / eliminar / cambiar PIN) + OpenSC (lectura de tarjeta y certificados) + capa propia PnP / SetupAPI (nodos y propiedades del dispositivo) |
+| Operaciones sobre la tarjeta | `tpmvscmgr` (crear / eliminar / cambiar PIN) + OpenSC (lectura de tarjeta y certificados) + capa propia PnP / SetupAPI |
 | Copia y restauración | empaquetado propio `.tsb` (zip); `Module/DPAPI.py` gestiona el cifrado/descifrado DPAPI y la suplantación de token |
 | Empaquetado | dos canalizaciones: **cx_Freeze** (compilaciones de versión, instalador con Inno Setup) y **Nuitka** (carpeta standalone) |
 | Idiomas | `Config/locales/*.json`, 11 idiomas |
@@ -125,6 +127,7 @@ Una tarjeta inteligente virtual TPM utilizable consta de **cinco partes**, y el 
 
 > [!WARNING]
 > Como se incluye el último elemento, un `.tsb` **equivale al material de claves de la tarjeta**: guárdalo sin conexión y no lo pongas en control de versiones, nubes ni herramientas de chat.
+>
 > Al restaurar, la herramienta lo vuelve a cifrar con el DPAPI del equipo de destino antes de escribirlo; guarda también el nombre de la tarjeta, el PIN, el PUK y la clave de administración.
 
 Otras notas:
@@ -137,26 +140,35 @@ Otras notas:
 
 ## ❓ Preguntas frecuentes
 
-**P: ¿Por qué falla la creación de una tarjeta en Escritorio remoto con `0x800704d3`?**
-R: Windows prohíbe crear / eliminar tarjetas inteligentes virtuales en una sesión de Servicios de Terminal Server. Usa la consola local o conéctate con `mstsc /admin`.
-
-**P: ¿Se puede restaurar una copia en otro equipo?**
-R: **No.** Una copia solo sirve para el **mismo TPM**: funciona tras reinstalar Windows en ese equipo, pero no en otro equipo ni con otro TPM; además, una **tarjeta eliminada**
-**no se puede restaurar** (al eliminarla se borra su clave persistente en el TPM). Si la tarjeta no aparece tras restaurar, reinicia primero el dispositivo o el sistema.
-
-**P: Tras restaurar la tarjeta no aparece. ¿Qué hago?**
-R: **Reinicia primero**: la tarjeta puede aparecer en la lista de lectores solo tras **reiniciar el dispositivo (controlador) o el sistema**. Si sigue sin aparecer,
-consulta el veredicto de tres capas del registro (nodo de dispositivo / lector / DPAPI): suele deberse a una copia de una versión anterior o a la falta de las propiedades de identidad ([solución de problemas](../docs/troubleshooting.md)).
-
-**P: Tras restaurar no aparece el lector o no se ven los certificados, ¿qué hago?**
-R: Consulta el veredicto de tres capas del registro de restauración (nodo de dispositivo / lector / DPAPI). Las causas más habituales son una copia hecha con una versión anterior o la falta de las propiedades de identidad de la tarjeta;
-sigue la [guía de solución de problemas](../docs/troubleshooting.md) paso a paso o adjunta el registro a una incidencia.
-
-**P: ¿Necesita conexión de red?**
-R: Todo funciona sin conexión excepto la «distribución de certificados desde la nube».
-
-**P: La cadena de certificación indica `CERT_E_CHAINING`.**
-R: La CA intermedia emisora no está instalada en este equipo; impórtala en el almacén de entidades de certificación raíz/intermedias de confianza.
+> **P: ¿Por qué falla la creación de una tarjeta en Escritorio remoto con `0x800704d3`?**
+>
+> R: Windows prohíbe crear / eliminar tarjetas inteligentes virtuales en una sesión de Servicios de Terminal Server. Usa la consola local o conéctate con `mstsc /admin`.
+>
+> **P: ¿Se puede restaurar una copia en otro equipo?**
+>
+> R: **No.** Una copia solo sirve para el **mismo TPM**: funciona tras reinstalar Windows en ese equipo, pero no en otro equipo ni con otro TPM; además, una **tarjeta eliminada**
+>
+> **no se puede restaurar** (al eliminarla se borra su clave persistente en el TPM). Si la tarjeta no aparece tras restaurar, reinicia primero el dispositivo o el sistema.
+>
+> **P: Tras restaurar la tarjeta no aparece. ¿Qué hago?**
+>
+> R: **Reinicia primero**: la tarjeta puede aparecer en la lista de lectores solo tras **reiniciar el dispositivo (controlador) o el sistema**. Si sigue sin aparecer,
+>
+> consulta el veredicto de tres capas del registro (nodo de dispositivo / lector / DPAPI): suele deberse a una copia de una versión anterior o a la falta de las propiedades de identidad.
+>
+> **P: Tras restaurar no aparece el lector o no se ven los certificados, ¿qué hago?**
+>
+> R: Consulta el veredicto de tres capas del registro de restauración (nodo de dispositivo / lector / DPAPI). Las causas más habituales son una copia hecha con una versión anterior o la falta de las propiedades de identidad de la tarjeta;
+>
+> sigue la [guía de solución de problemas](../docs/troubleshooting.md) paso a paso o adjunta el registro a una incidencia.
+>
+> **P: ¿Necesita conexión de red?**
+>
+> R: Todo funciona sin conexión excepto la «distribución de certificados desde la nube».
+>
+> **P: La cadena de certificación indica `CERT_E_CHAINING`.**
+>
+> R: La CA intermedia emisora no está instalada en este equipo; impórtala en el almacén de entidades de certificación raíz/intermedias de confianza.
 
 ---
 

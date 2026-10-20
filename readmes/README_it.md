@@ -31,12 +31,13 @@ Consente di generare chiavi e CSR in locale o di distribuire i certificati in mo
 
 * **Smart card virtuali**: creazione ed eliminazione delle card; modifica o reimpostazione di PIN, PUK e chiave di amministrazione
 * **Certificati e chiavi**: importazione, eliminazione e visualizzazione di certificati X.509 e oggetti chiave sulla card; catena di certificazione e utilizzi della chiave
-* **Generazione e distribuzione**: generazione locale di chiave + CSR e firma, oppure distribuzione sicura dal cloud (accordo di chiavi X25519 + AES, codice di ritiro fuori banda)
+* **Generazione e distribuzione**: generazione locale di chiave + CSR e firma, oppure distribuzione sicura dal cloud (accordo di chiavi X25519 + cifratura AES)
 
 ### Backup e ripristino
 
 * **Backup completo della card**: pacchettizza una card in un `.tsb` (dati della card + registro di sistema del dispositivo + indice chiavi TPM + proprietà del dispositivo + testo in chiaro DPAPI)
-* **Ripristino sullo stesso TPM**: un backup può essere ripristinato solo sullo **stesso TPM** (reinstallazione di Windows su questa macchina: sì; **altra macchina / altro TPM: no**, e **una scheda eliminata non può essere ripristinata**); i dati DPAPI vengono decifrati al momento del backup e ri-cifrati con la chiave principale locale al ripristino (vedi [progettazione backup/ripristino](../docs/design-backup-restore.md))
+* **Ripristino sullo stesso TPM**: un backup può essere ripristinato solo sullo **stesso TPM** (reinstallazione di Windows su questa macchina: sì; **altra macchina / altro TPM: no**, e **una scheda eliminata non può essere ripristinata**)
+* I dati DPAPI vengono decifrati al momento del backup e ri-cifrati con la chiave principale locale al ripristino (vedi [progettazione backup/ripristino](../docs/design-backup-restore.md))
 * **Diagnostica del ripristino**: dopo il ripristino lo strumento verifica i tre livelli nodo dispositivo / lettore PC-SC / DPAPI e fornisce una conclusione operativa con i log
 
 ### Scenari e strumenti
@@ -56,6 +57,7 @@ Consente di generare chiavi e CSR in locale o di distribuire i certificati in mo
 
 > [!IMPORTANT]
 > **La creazione / eliminazione di smart card virtuali non è possibile in una sessione Desktop remoto (Servizi terminal)**; Windows la rifiuta con `0x800704d3`.
+>
 > Usa la console locale oppure collegati con `mstsc /admin`.
 
 > [!TIP]
@@ -81,7 +83,7 @@ Consente di generare chiavi e CSR in locale o di distribuire i certificati in mo
 |---|---|
 | Linguaggio / runtime | Python **3.11** |
 | Interfaccia | Tkinter + ttkbootstrap (interfaccia costruita interamente via codice; layout guidati da `Config/*.json`) |
-| Operazioni sulla card | `tpmvscmgr` (creazione / eliminazione / cambio PIN) + OpenSC (lettura card e certificati) + livello PnP / SetupAPI proprietario (nodi e proprietà del dispositivo) |
+| Operazioni sulla card | `tpmvscmgr` (creazione / eliminazione / cambio PIN) + OpenSC (lettura card e certificati) + livello PnP / SetupAPI proprietario |
 | Backup e ripristino | pacchettizzazione `.tsb` (zip) proprietaria; `Module/DPAPI.py` gestisce cifratura/decifratura DPAPI e l'impersonificazione del token |
 | Packaging | due pipeline: **cx_Freeze** (build di rilascio, installer tramite Inno Setup) e **Nuitka** (cartella standalone) |
 | Localizzazione | `Config/locales/*.json`, 11 lingue |
@@ -125,6 +127,7 @@ Una smart card virtuale TPM utilizzabile è composta da **cinque parti** e il `.
 
 > [!WARNING]
 > Poiché è inclusa l'ultima voce, un `.tsb` **equivale al materiale di chiave della card**: conservalo offline e non inserirlo in sistemi di controllo versione, cloud drive o strumenti di chat.
+>
 > Al ripristino lo strumento lo ri-cifra con il DPAPI della macchina di destinazione prima di riscriverlo; conserva anche nome della card, PIN, PUK e chiave di amministrazione.
 
 Altre note:
@@ -137,26 +140,35 @@ Altre note:
 
 ## ❓ Domande frequenti
 
-**D: Perché la creazione di una card in Desktop remoto fallisce con `0x800704d3`?**
-R: Windows vieta la creazione / eliminazione di smart card virtuali in una sessione Servizi terminal. Usa la console locale o `mstsc /admin`.
-
-**D: Un backup può essere ripristinato su un'altra macchina?**
-R: **No.** Un backup vale solo per lo **stesso TPM**: funziona dopo una reinstallazione su questa macchina, ma non su un'altra macchina o con un altro TPM; inoltre una **scheda eliminata**
-**non può essere ripristinata** (l'eliminazione rimuove la sua chiave persistente nel TPM). Se la scheda non compare dopo il ripristino, riavvia prima il dispositivo o il sistema.
-
-**D: Dopo il ripristino la scheda non compare. Cosa fare?**
-R: **Riavvia prima**: la scheda può comparire nell'elenco dei lettori solo dopo un **riavvio del dispositivo (driver) o del sistema**. Se ancora non compare,
-leggi la valutazione sui tre livelli nel log (nodo dispositivo / lettore / DPAPI): di solito è una copia creata da una versione precedente o la mancanza delle proprietà di identità ([guida](../docs/troubleshooting.md)).
-
-**D: Dopo il ripristino il lettore non compare o i certificati non si vedono. Cosa fare?**
-R: Leggi la valutazione sui tre livelli nel log di ripristino (nodo dispositivo / lettore / DPAPI). Le cause più comuni sono un backup creato da una versione precedente o proprietà di identità della card mancanti;
-segui la [guida alla risoluzione dei problemi](../docs/troubleshooting.md) oppure allega il log a una issue.
-
-**D: Serve una connessione di rete?**
-R: Tutto funziona offline tranne la «distribuzione dei certificati dal cloud».
-
-**D: La catena di certificazione riporta `CERT_E_CHAINING`?**
-R: La CA intermedia emittente non è installata su questa macchina: importala nell'archivio delle autorità di certificazione attendibili / intermedie.
+> **D: Perché la creazione di una card in Desktop remoto fallisce con `0x800704d3`?**
+>
+> R: Windows vieta la creazione / eliminazione di smart card virtuali in una sessione Servizi terminal. Usa la console locale o `mstsc /admin`.
+>
+> **D: Un backup può essere ripristinato su un'altra macchina?**
+>
+> R: **No.** Un backup vale solo per lo **stesso TPM**: funziona dopo una reinstallazione su questa macchina, ma non su un'altra macchina o con un altro TPM; inoltre una **scheda eliminata**
+>
+> **non può essere ripristinata** (l'eliminazione rimuove la sua chiave persistente nel TPM). Se la scheda non compare dopo il ripristino, riavvia prima il dispositivo o il sistema.
+>
+> **D: Dopo il ripristino la scheda non compare. Cosa fare?**
+>
+> R: **Riavvia prima**: la scheda può comparire nell'elenco dei lettori solo dopo un **riavvio del dispositivo (driver) o del sistema**. Se ancora non compare,
+>
+> leggi la valutazione sui tre livelli nel log (nodo dispositivo / lettore / DPAPI): di solito è una copia creata da una versione precedente o la mancanza delle proprietà di identità.
+>
+> **D: Dopo il ripristino il lettore non compare o i certificati non si vedono. Cosa fare?**
+>
+> R: Leggi la valutazione sui tre livelli nel log di ripristino (nodo dispositivo / lettore / DPAPI). Le cause più comuni sono un backup creato da una versione precedente o proprietà di identità della card mancanti;
+>
+> segui la [guida alla risoluzione dei problemi](../docs/troubleshooting.md) oppure allega il log a una issue.
+>
+> **D: Serve una connessione di rete?**
+>
+> R: Tutto funziona offline tranne la «distribuzione dei certificati dal cloud».
+>
+> **D: La catena di certificazione riporta `CERT_E_CHAINING`?**
+>
+> R: La CA intermedia emittente non è installata su questa macchina: importala nell'archivio delle autorità di certificazione attendibili / intermedie.
 
 ---
 

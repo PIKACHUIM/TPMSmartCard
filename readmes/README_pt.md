@@ -31,12 +31,13 @@ Permite gerar chaves e CSR localmente ou distribuir certificados com segurança 
 
 * **Cartões inteligentes virtuais**: criar e excluir cartões; alterar ou redefinir PIN, PUK e chave de administração
 * **Certificados e chaves**: importar, excluir e consultar certificados X.509 e objetos de chave no cartão; ver a cadeia de certificação e os usos da chave
-* **Geração e distribuição**: gerar chave + CSR localmente e assinar, ou receber certificados com segurança pela nuvem (acordo de chaves X25519 + AES, código de retirada fora de banda)
+* **Geração e distribuição**: gerar chave + CSR localmente e assinar, ou receber certificados com segurança pela nuvem (acordo de chaves X25519 + criptografia AES)
 
 ### Backup e restauração
 
 * **Backup completo do cartão**: empacota um cartão em um `.tsb` (dados do cartão + registro do dispositivo + índice de chaves TPM + propriedades do dispositivo + texto claro DPAPI)
-* **Restauração no mesmo TPM**: um backup só pode ser restaurado no **mesmo TPM** (reinstalar o Windows nessa máquina: sim; **outra máquina / outro TPM: não**, e **um cartão excluído não pode ser restaurado**); os dados DPAPI são descriptografados no backup e recriptografados com a chave mestra local na restauração (veja o [design de backup e restauração](../docs/design-backup-restore.md))
+* **Restauração no mesmo TPM**: um backup só pode ser restaurado no **mesmo TPM** (reinstalar o Windows nessa máquina: sim; **outra máquina / outro TPM: não**, e **um cartão excluído não pode ser restaurado**)
+* Os dados DPAPI são descriptografados no backup e recriptografados com a chave mestra local na restauração (veja o [design de backup e restauração](../docs/design-backup-restore.md))
 * **Diagnóstico da restauração**: após restaurar, a ferramenta avalia as três camadas (nó do dispositivo / leitor PC-SC / DPAPI) e apresenta uma conclusão acionável com logs
 
 ### Cenários e ferramentas
@@ -56,6 +57,7 @@ Permite gerar chaves e CSR localmente ou distribuir certificados com segurança 
 
 > [!IMPORTANT]
 > **Criar / excluir cartões inteligentes virtuais não pode ser feito em uma sessão de Área de Trabalho Remota (Serviços de Terminal)**; o Windows recusa com `0x800704d3`.
+>
 > Use o console local ou conecte-se com `mstsc /admin`.
 
 > [!TIP]
@@ -81,7 +83,7 @@ Permite gerar chaves e CSR localmente ou distribuir certificados com segurança 
 |---|---|
 | Linguagem / runtime | Python **3.11** |
 | Interface | Tkinter + ttkbootstrap (interface construída inteiramente em código; layouts definidos em `Config/*.json`) |
-| Operações no cartão | `tpmvscmgr` (criar / excluir / alterar PIN) + OpenSC (leitura de cartão e certificados) + camada própria PnP / SetupAPI (nós e propriedades do dispositivo) |
+| Operações no cartão | `tpmvscmgr` (criar / excluir / alterar PIN) + OpenSC (leitura de cartão e certificados) + camada própria PnP / SetupAPI |
 | Backup e restauração | empacotamento próprio `.tsb` (zip); `Module/DPAPI.py` cuida da criptografia/descriptografia DPAPI e da representação de token |
 | Empacotamento | dois pipelines: **cx_Freeze** (builds de release, instalador via Inno Setup) e **Nuitka** (pasta standalone) |
 | Idiomas | `Config/locales/*.json`, 11 idiomas |
@@ -125,6 +127,7 @@ Um cartão inteligente virtual TPM utilizável é composto por **cinco partes**,
 
 > [!WARNING]
 > Como o último item está incluído, um `.tsb` **equivale ao material de chaves do cartão**: guarde-o offline e não o coloque em controle de versão, nuvem ou ferramentas de chat.
+>
 > Na restauração, a ferramenta recriptografa com o DPAPI da máquina de destino antes de gravar; guarde também o nome do cartão, o PIN, o PUK e a chave de administração.
 
 Outras observações:
@@ -137,26 +140,35 @@ Outras observações:
 
 ## ❓ Perguntas frequentes
 
-**P: Por que a criação de um cartão falha na Área de Trabalho Remota com `0x800704d3`?**
-R: O Windows proíbe criar / excluir cartões inteligentes virtuais em uma sessão de Serviços de Terminal. Use o console local ou `mstsc /admin`.
-
-**P: Um backup pode ser restaurado em outra máquina?**
-R: **Não.** Um backup vale apenas para o **mesmo TPM**: funciona após reinstalar o Windows nessa máquina, mas não em outra máquina ou com outro TPM; além disso, um **cartão excluído**
-**não pode ser restaurado** (a exclusão remove sua chave persistente no TPM). Se o cartão não aparecer após a restauração, reinicie primeiro o dispositivo ou o sistema.
-
-**P: Após a restauração o cartão não aparece. O que fazer?**
-R: **Reinicie primeiro**: o cartão pode aparecer na lista de leitores somente após **reiniciar o dispositivo (driver) ou o sistema**. Se ainda não aparecer,
-veja o veredito de três camadas no log (nó do dispositivo / leitor / DPAPI): geralmente é um backup de versão antiga ou a ausência das propriedades de identidade ([solução de problemas](../docs/troubleshooting.md)).
-
-**P: Após restaurar, o leitor não aparece ou os certificados não são exibidos. E agora?**
-R: Veja o veredito de três camadas no log de restauração (nó do dispositivo / leitor / DPAPI). As causas mais comuns são um backup feito por versão antiga ou a ausência das propriedades de identidade do cartão;
-siga o [guia de solução de problemas](../docs/troubleshooting.md) ou anexe o log a uma issue.
-
-**P: Precisa de conexão de rede?**
-R: Tudo funciona offline, exceto a «distribuição de certificados pela nuvem».
-
-**P: A cadeia de certificação reporta `CERT_E_CHAINING`.**
-R: A CA intermediária emissora não está instalada nesta máquina; importe-a para o repositório de autoridades raiz/intermediárias confiáveis.
+> **P: Por que a criação de um cartão falha na Área de Trabalho Remota com `0x800704d3`?**
+>
+> R: O Windows proíbe criar / excluir cartões inteligentes virtuais em uma sessão de Serviços de Terminal. Use o console local ou `mstsc /admin`.
+>
+> **P: Um backup pode ser restaurado em outra máquina?**
+>
+> R: **Não.** Um backup vale apenas para o **mesmo TPM**: funciona após reinstalar o Windows nessa máquina, mas não em outra máquina ou com outro TPM; além disso, um **cartão excluído**
+>
+> **não pode ser restaurado** (a exclusão remove sua chave persistente no TPM). Se o cartão não aparecer após a restauração, reinicie primeiro o dispositivo ou o sistema.
+>
+> **P: Após a restauração o cartão não aparece. O que fazer?**
+>
+> R: **Reinicie primeiro**: o cartão pode aparecer na lista de leitores somente após **reiniciar o dispositivo (driver) ou o sistema**. Se ainda não aparecer,
+>
+> veja o veredito de três camadas no log (nó do dispositivo / leitor / DPAPI): geralmente é um backup de versão antiga ou a ausência das propriedades de identidade.
+>
+> **P: Após restaurar, o leitor não aparece ou os certificados não são exibidos. E agora?**
+>
+> R: Veja o veredito de três camadas no log de restauração (nó do dispositivo / leitor / DPAPI). As causas mais comuns são um backup feito por versão antiga ou a ausência das propriedades de identidade do cartão;
+>
+> siga o [guia de solução de problemas](../docs/troubleshooting.md) ou anexe o log a uma issue.
+>
+> **P: Precisa de conexão de rede?**
+>
+> R: Tudo funciona offline, exceto a «distribuição de certificados pela nuvem».
+>
+> **P: A cadeia de certificação reporta `CERT_E_CHAINING`.**
+>
+> R: A CA intermediária emissora não está instalada nesta máquina; importe-a para o repositório de autoridades raiz/intermediárias confiáveis.
 
 ---
 

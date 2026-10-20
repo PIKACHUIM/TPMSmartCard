@@ -31,12 +31,13 @@ Générez les clés et les CSR en local, ou recevez les certificats en toute sé
 
 * **Cartes à puce virtuelles** : créer et supprimer des cartes ; modifier ou réinitialiser le PIN, le PUK et la clé d'administration
 * **Certificats et clés** : importer, supprimer et consulter les certificats X.509 et les objets de clé présents sur la carte ; chaîne de certification et usages de la clé
-* **Génération et distribution** : générer la clé + le CSR en local puis les faire signer, ou recevoir les certificats en toute sécurité depuis le cloud (accord de clés X25519 + AES, code de retrait transmis hors bande)
+* **Génération et distribution** : générer la clé + le CSR en local puis les faire signer, ou recevoir les certificats en toute sécurité depuis le cloud (accord de clés X25519 + chiffrement AES)
 
 ### Sauvegarde et restauration
 
 * **Sauvegarde complète de la carte** : empaquette une carte dans un `.tsb` (données de la carte + registre de l'appareil + index des clés TPM + propriétés de l'appareil + texte en clair DPAPI)
-* **Restauration sur le même TPM** : une sauvegarde ne peut être restaurée que sur le **même TPM** (réinstallation de Windows sur cette machine : oui ; **autre machine / autre TPM : non**, et **une carte supprimée ne peut pas être restaurée**) ; les données DPAPI sont déchiffrées lors de la sauvegarde puis rechiffrées avec la clé principale locale lors de la restauration (voir [conception sauvegarde/restauration](../docs/design-backup-restore.md))
+* **Restauration sur le même TPM** : une sauvegarde ne peut être restaurée que sur le **même TPM** (réinstallation de Windows sur cette machine : oui ; **autre machine / autre TPM : non**, et **une carte supprimée ne peut pas être restaurée**)
+* Les données DPAPI sont déchiffrées lors de la sauvegarde puis rechiffrées avec la clé principale locale lors de la restauration (voir [conception sauvegarde/restauration](../docs/design-backup-restore.md))
 * **Diagnostic de restauration** : après restauration, l'outil évalue les trois couches nœud d'appareil / lecteur PC-SC / DPAPI et fournit une conclusion exploitable avec les journaux
 
 ### Scénarios et outils
@@ -56,6 +57,7 @@ Générez les clés et les CSR en local, ou recevez les certificats en toute sé
 
 > [!IMPORTANT]
 > **La création / suppression de cartes à puce virtuelles est impossible dans une session Bureau à distance (Services Terminal Server)** ; Windows la refuse avec `0x800704d3`.
+>
 > Utilisez la console locale ou connectez-vous avec `mstsc /admin`.
 
 > [!TIP]
@@ -81,7 +83,7 @@ Générez les clés et les CSR en local, ou recevez les certificats en toute sé
 |---|---|
 | Langage / exécution | Python **3.11** |
 | Interface | Tkinter + ttkbootstrap (interface entièrement construite en code ; dispositions pilotées par `Config/*.json`) |
-| Opérations sur la carte | `tpmvscmgr` (création / suppression / changement de PIN) + OpenSC (lecture de la carte et des certificats) + couche PnP / SetupAPI maison (nœuds et propriétés d'appareil) |
+| Opérations sur la carte | `tpmvscmgr` (création / suppression / changement de PIN) + OpenSC (lecture de la carte et des certificats) + couche PnP / SetupAPI maison |
 | Sauvegarde et restauration | format `.tsb` (zip) maison ; `Module/DPAPI.py` gère le chiffrement/déchiffrement DPAPI et l'emprunt de jeton |
 | Empaquetage | deux chaînes : **cx_Freeze** (versions de production, installateur via Inno Setup) et **Nuitka** (dossier autonome) |
 | Localisation | `Config/locales/*.json`, 11 langues |
@@ -125,6 +127,7 @@ Une carte à puce virtuelle TPM utilisable se compose de **cinq parties**, et le
 
 > [!WARNING]
 > Comme le dernier élément est inclus, un `.tsb` **équivaut au matériel de clé de la carte** : conservez-le hors ligne et ne le placez jamais dans un système de gestion de versions, un espace cloud ou un outil de messagerie.
+>
 > Lors de la restauration, l'outil le rechiffre avec le DPAPI de la machine cible avant de l'écrire ; conservez également le nom de la carte, le PIN, le PUK et la clé d'administration.
 
 Autres remarques :
@@ -137,26 +140,35 @@ Autres remarques :
 
 ## ❓ Questions fréquentes
 
-**Q : Pourquoi la création d'une carte échoue-t-elle en Bureau à distance avec `0x800704d3` ?**
-R : Windows interdit la création / suppression de cartes à puce virtuelles dans une session Services Terminal Server. Utilisez la console locale ou `mstsc /admin`.
-
-**Q : Une sauvegarde peut-elle être restaurée sur une autre machine ?**
-R : **Non.** Une sauvegarde ne s'applique qu'au **même TPM** : elle fonctionne après une réinstallation sur cette machine, mais pas sur une autre machine ni avec un autre TPM ; et une **carte supprimée**
-**ne peut pas être restaurée** (sa suppression efface sa clé persistante dans le TPM). Si la carte n'apparaît pas après restauration, redémarrez d'abord l'appareil ou le système.
-
-**Q : La carte n'apparaît pas après la restauration, que faire ?**
-R : **Redémarrez d'abord** : la carte peut nécessiter un **redémarrage de l'appareil (pilote) ou du système** avant d'apparaître dans la liste des lecteurs. Si elle n'apparaît toujours pas,
-consultez le verdict en trois couches du journal (nœud d'appareil / lecteur / DPAPI) : la cause est souvent une sauvegarde d'une version antérieure ou l'absence des propriétés d'identité ([guide de dépannage](../docs/troubleshooting.md)).
-
-**Q : Après restauration, le lecteur n'apparaît pas ou les certificats ne s'affichent pas. Que faire ?**
-R : Consultez le verdict en trois couches du journal de restauration (nœud d'appareil / lecteur / DPAPI). Les causes les plus fréquentes sont une sauvegarde créée par une version antérieure ou l'absence des propriétés d'identité de la carte ;
-suivez le [guide de dépannage](../docs/troubleshooting.md) étape par étape, ou joignez le journal à un ticket.
-
-**Q : Une connexion réseau est-elle nécessaire ?**
-R : Tout fonctionne hors ligne, sauf la « distribution des certificats depuis le cloud ».
-
-**Q : La chaîne de certification signale `CERT_E_CHAINING`.**
-R : L'autorité intermédiaire émettrice n'est pas installée sur cette machine ; importez-la dans le magasin des autorités racine/intermédiaires approuvées.
+> **Q : Pourquoi la création d'une carte échoue-t-elle en Bureau à distance avec `0x800704d3` ?**
+>
+> R : Windows interdit la création / suppression de cartes à puce virtuelles dans une session Services Terminal Server. Utilisez la console locale ou `mstsc /admin`.
+>
+> **Q : Une sauvegarde peut-elle être restaurée sur une autre machine ?**
+>
+> R : **Non.** Une sauvegarde ne s'applique qu'au **même TPM** : elle fonctionne après une réinstallation sur cette machine, mais pas sur une autre machine ni avec un autre TPM ; et une **carte supprimée**
+>
+> **ne peut pas être restaurée** (sa suppression efface sa clé persistante dans le TPM). Si la carte n'apparaît pas après restauration, redémarrez d'abord l'appareil ou le système.
+>
+> **Q : La carte n'apparaît pas après la restauration, que faire ?**
+>
+> R : **Redémarrez d'abord** : la carte peut nécessiter un **redémarrage de l'appareil (pilote) ou du système** avant d'apparaître dans la liste des lecteurs. Si elle n'apparaît toujours pas,
+>
+> consultez le verdict en trois couches du journal (nœud d'appareil / lecteur / DPAPI) : la cause est souvent une sauvegarde d'une version antérieure ou l'absence des propriétés d'identité.
+>
+> **Q : Après restauration, le lecteur n'apparaît pas ou les certificats ne s'affichent pas. Que faire ?**
+>
+> R : Consultez le verdict en trois couches du journal de restauration (nœud d'appareil / lecteur / DPAPI). Les causes les plus fréquentes sont une sauvegarde créée par une version antérieure ou l'absence des propriétés d'identité de la carte ;
+>
+> suivez le [guide de dépannage](../docs/troubleshooting.md) étape par étape, ou joignez le journal à un ticket.
+>
+> **Q : Une connexion réseau est-elle nécessaire ?**
+>
+> R : Tout fonctionne hors ligne, sauf la « distribution des certificats depuis le cloud ».
+>
+> **Q : La chaîne de certification signale `CERT_E_CHAINING`.**
+>
+> R : L'autorité intermédiaire émettrice n'est pas installée sur cette machine ; importez-la dans le magasin des autorités racine/intermédiaires approuvées.
 
 ---
 
