@@ -276,7 +276,7 @@ class TPMSmartCard:
         return result
 
     @staticmethod
-    def changePIN(old, new, uid, type="--change-pin"):
+    def changePIN(old, new, uid, type="--change-pin", with_state=False):
         # pkcs15-tool 支持用命令行传 PIN（--pin / --puk / --new-pin），
         # 不必再用伪控制台回答提示（32 位构建没有 pywinpty，这条路也更稳）
         command = [Paths.resource("OpenSC", "pkcs15-tool.exe"),
@@ -286,9 +286,12 @@ class TPMSmartCard:
         else:
             command += ["--pin", str(old)]
         command += ["--new-pin", str(new)]
-        result, _ok = TPMSmartCard.runCommand(command)
+        result, ok = TPMSmartCard.runCommand(command)
         print(result)
-        return result.strip() or "OK"
+        text = result.strip() or "OK"
+        # 调用方需要知道是否成功（改完要把 FIDO2 凭据重新封装到新 PIN 下），
+        # 保持默认返回值不变，避免影响既有调用。
+        return (text, ok) if with_state else text
 
     @staticmethod
     def createCSR(in_file, in_path):

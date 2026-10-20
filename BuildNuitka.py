@@ -72,7 +72,7 @@ DIST_DIR = os.path.join(OUT_ROOT, "TPMSmartCard")
 # 随程序分发、与工作目录无关的资源：Nuitka 只管 exe，这些直接拷到产物根目录。
 # 参考 BuildPackage.py 的 include_files（Config/OpenSC/templates/
 # SSHCardAgent.exe），外加 SmartCardWEB 用到的 static/。
-RESOURCE_DIRS = ("Config", "OpenSC", "templates", "static")
+RESOURCE_DIRS = ("Config", "OpenSC", "templates", "static", "Fido")
 RESOURCE_FILES = ("SSHCardAgent.exe",)
 
 # Import 只取顶层运行时文件（与 install.iss 的 [Files] 一致，避免把 Import\TPMImport

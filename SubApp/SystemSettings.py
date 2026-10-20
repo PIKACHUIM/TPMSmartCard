@@ -146,6 +146,7 @@ class SystemSettings:
         self.view_startup(ttk.Frame(self.notebook, padding=16), self.t("msg_set_startup"))
         self.view_osc(ttk.Frame(self.notebook, padding=16), self.t("msg_set_osc"))
         self.view_ssh(ttk.Frame(self.notebook, padding=16), self.t("msg_set_ssh"))
+        self.view_fido(ttk.Frame(self.notebook, padding=16), self.t("msg_set_fido"))
         self.view_tpm(ttk.Frame(self.notebook, padding=16), self.t("msg_set_tpm"))
         self.view_about(ttk.Frame(self.notebook, padding=16), self.t("msg_set_about_update"))
         # 关闭按钮 ==============================================================
@@ -459,6 +460,208 @@ class SystemSettings:
         if not MoreConfig.startSSH():
             messagebox.showwarning(self.t("msg_set_title"), self.t("msg_set_ssh_missing"))
         return None
+
+    # 页签：FIDO2 / 通行密钥 ==================================================
+    def view_fido(self, page, title):
+        """FIDO2 服务开关 + 凭据列表。
+
+        驱动是内核驱动，安装耗时且有失败可能，所以安装/启动都走
+        :meth:`run_task`；凭据列表只显示公开元数据（站点/用户名），私钥永不展示。
+        """
+        self.notebook.add(page, text=title)
+        self.fido_result = None
+        self.fido_rows = dict()
+        self.fido_status_var = tk.StringVar()
+        ttk.Label(page, justify=tk.LEFT, wraplength=self.wrap,
+                  textvariable=self.fido_status_var).pack(anchor=tk.W)
+
+        line = ttk.Frame(page)
+        line.pack(anchor=tk.W, pady=(10, 0))
+        ttk.Button(line, bootstyle="primary", text=self.t("msg_fido_install"),
+                   command=self.install_fido).pack(side=tk.LEFT)
+        ttk.Button(line, bootstyle="success", text=self.t("msg_fido_start"),
+                   command=self.start_fido).pack(side=tk.LEFT, padx=8)
+        ttk.Button(line, bootstyle="secondary-outline", text=self.t("msg_fido_stop"),
+                   command=self.stop_fido).pack(side=tk.LEFT)
+        ttk.Button(line, bootstyle="info-outline", text=self.t("msg_fido_check"),
+                   command=self.check_fido).pack(side=tk.LEFT, padx=8)
+        ttk.Button(line, bootstyle="info-outline", text=self.t("msg_fido_refresh"),
+                   command=self.refresh_fido).pack(side=tk.LEFT)
+
+        self.fido_auto = tk.BooleanVar()
+        ttk.Checkbutton(page, bootstyle="info-round-toggle", text=self.t("msg_fido_auto"),
+                        variable=self.fido_auto,
+                        command=self.toggle_fido_auto).pack(anchor=tk.W, pady=(10, 0))
+
+        table = ttk.Frame(page)
+        table.pack(fill=tk.X, pady=(10, 0))
+        columns = ("card", "rp", "user", "created")
+        self.fido_tree = ttk.Treeview(table, columns=columns, show="headings", height=5)
+        for column, key, width in (("card", "msg_fido_cred_card", 160),
+                                   ("rp", "msg_fido_cred_rp", 180),
+                                   ("user", "msg_fido_cred_user", 150),
+                                   ("created", "msg_fido_cred_created", 130)):
+            self.fido_tree.heading(column, text=self.t(key))
+            self.fido_tree.column(column, width=width, anchor=tk.W, stretch=True)
+        bar = ttk.Scrollbar(table, orient=tk.VERTICAL, command=self.fido_tree.yview)
+        self.fido_tree.configure(yscrollcommand=bar.set)
+        self.fido_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        bar.pack(side=tk.LEFT, fill=tk.Y)
+
+        self.fido_none_var = tk.StringVar()
+        ttk.Label(page, bootstyle="secondary", justify=tk.LEFT, wraplength=self.wrap,
+                  textvariable=self.fido_none_var).pack(anchor=tk.W, pady=(6, 0))
+
+        foot = ttk.Frame(page)
+        foot.pack(anchor=tk.W, pady=(6, 0))
+        ttk.Button(foot, bootstyle="danger-outline", text=self.t("msg_fido_delete"),
+                   command=self.delete_fido).pack(side=tk.LEFT)
+        ttk.Button(foot, bootstyle="danger-outline", text=self.t("msg_fido_clear"),
+                   command=self.clear_fido).pack(side=tk.LEFT, padx=8)
+
+        ttk.Label(page, bootstyle="secondary", justify=tk.LEFT, wraplength=self.wrap,
+                  text=self.t("msg_fido_tip")).pack(anchor=tk.W, pady=(10, 0))
+        # 状态检查要启进程/查设备，放到窗口显示之后再做，避免设置窗口打开卡顿
+        self.page.after(80, self.refresh_fido)
+
+    @staticmethod
+    def fido():
+        """FIDO2 服务单例（延迟导入，避免未使用该功能时也加载加密模块）。"""
+        from Module.FidoService import FidoService
+        return FidoService.get()
+
+    def refresh_fido(self):
+        if not self.alive:
+            return None
+        try:
+            info = self.fido().status()
+        except Exception as err:
+            self.fido_status_var.set("%s" % err)
+            return None
+        lines = [
+            "• %s" % info["driver_text"],
+            "• %s: %s" % (self.t("msg_fido_start"),
+                          ("PID %d" % info["pid"]) if info["process"]
+                          else self.t("msg_set_startup_off")),
+            "• %s: %s" % (self.t("msg_fido_check"),
+                          "OK" if info["device"] and info["service"]
+                          else self.t("msg_set_startup_off")),
+        ]
+        if info.get("session"):
+            lines.append("• PIN: %s" % (info.get("session_card") or ""))
+        self.fido_status_var.set("\n".join(lines))
+        self.fido_auto.set(bool((info.get("settings") or {}).get("enabled")))
+        self.fido_tree.delete(*self.fido_tree.get_children())
+        self.fido_rows = dict()
+        for row in self.fido().list_credentials():
+            item = self.fido_tree.insert("", tk.END, values=(
+                row["card"], row["rp_id"], row["user_name"], row["created_at"]))
+            self.fido_rows[item] = row
+        self.fido_none_var.set("" if self.fido_rows else self.t("msg_fido_none"))
+        return True
+
+    def toggle_fido_auto(self):
+        enabled = bool(self.fido_auto.get())
+        self.fido().update_settings(enabled=enabled)
+        if enabled and not self.fido().running:
+            self.start_fido()
+        elif not enabled and self.fido().running:
+            self.stop_fido()
+        return None
+
+    def install_fido(self):
+        self.fido_result = None
+        self.fido_status_var.set(self.t("msg_fido_installing"))
+        self.run_task(self.worker_fido_install, self.finish_fido)
+        return None
+
+    def worker_fido_install(self):
+        self.fido_result = self.fido().install_driver()
+        return self.fido_result
+
+    def finish_fido(self):
+        ok, lines = self.fido_result if isinstance(self.fido_result, tuple) \
+            else (False, ["安装未完成"])
+        self.refresh_fido()
+        text = "\n".join(lines)
+        if ok:
+            messagebox.showinfo(self.t("msg_set_fido"), text)
+        else:
+            messagebox.showerror(self.t("msg_set_fido"),
+                                 "%s\n\n%s" % (text, self.t("msg_fido_driver_missing")))
+        return None
+
+    def start_fido(self):
+        self.fido_result = None
+        self.fido_status_var.set(self.t("msg_fido_starting"))
+        self.run_task(self.worker_fido_start, self.finish_start)
+        return None
+
+    def worker_fido_start(self):
+        self.fido_result = self.fido().start()
+        return self.fido_result
+
+    def finish_start(self):
+        ok, text = self.fido_result or (False, "")
+        self.refresh_fido()
+        if not ok:
+            messagebox.showwarning(self.t("msg_set_fido"),
+                                   "%s\n\n%s" % (text, self.t("msg_fido_driver_missing")))
+        return None
+
+    def stop_fido(self):
+        ok, text = self.fido().stop()
+        self.refresh_fido()
+        if not ok:
+            messagebox.showwarning(self.t("msg_set_fido"), text)
+        return None
+
+    def check_fido(self):
+        self.fido_result = None
+        self.run_task(self.worker_fido_check, self.finish_check)
+        return None
+
+    def worker_fido_check(self):
+        self.fido_result = self.fido().selfcheck()
+        return self.fido_result
+
+    def finish_check(self):
+        ok, lines = self.fido_result or (False, ["自检未执行"])
+        self.refresh_fido()
+        text = "\n".join(lines)
+        if ok:
+            messagebox.showinfo(self.t("msg_fido_selftest"), text)
+        else:
+            messagebox.showwarning(self.t("msg_fido_selftest"),
+                                   "%s\n\n%s" % (text, self.t("msg_fido_driver_missing")))
+        return None
+
+    def selected_fido(self):
+        selection = self.fido_tree.selection()
+        if not selection:
+            messagebox.showwarning(self.t("msg_set_fido"), self.t("msg_fido_need_select"))
+            return None
+        return self.fido_rows.get(selection[0])
+
+    def delete_fido(self):
+        row = self.selected_fido()
+        if row is None:
+            return None
+        if not messagebox.askyesno(self.t("msg_set_fido"), self.t("msg_fido_confirm_delete")):
+            return None
+        if self.fido().delete_credential(row["card_key"], row["uuid"]):
+            self.refresh_fido()
+        return None
+
+    def clear_fido(self):
+        row = self.selected_fido()
+        if row is None:
+            return None
+        if not messagebox.askyesno(self.t("msg_set_fido"), self.t("msg_fido_confirm_clear")):
+            return None
+        count = self.fido().clear_credentials(row["card_key"])
+        self.refresh_fido()
+        return count
 
     # 页签：TPM 状态 ===========================================================
     def view_tpm(self, page, title):

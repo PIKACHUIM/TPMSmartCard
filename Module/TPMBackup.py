@@ -100,6 +100,7 @@ import uuid
 import zipfile
 
 from Module import DPAPI
+from Module import FidoBackup
 from Module import Paths
 from Module import WinPlatform
 from Module.Version import VERSION
@@ -952,6 +953,20 @@ def create_backup(dest_path, name="", uid=""):
     else:
         log.append("卡片数据里没有 DPAPI 保护的内容（无需解密）")
 
+    # ---- 1e. FIDO2 凭据（存在 %APPDATA%，但归属这张卡，必须一起备份）-------- #
+    # FIDO2 私钥不进卡片（TPM 虚拟卡不支持任意对象存储），而是「用卡片 PIN 派生
+    # 的密钥 + 本机 DPAPI」两层加密后放在用户目录里。所以备份卡片时必须把它
+    # 收进同一个包，否则还原后 passkey 全丢；导出时会剥掉只在本机有效的 DPAPI
+    # 外层，留下的内层仍然需要卡片 PIN 才能解开。
+    fido_section, fido_files, fido_log = FidoBackup.collect(guid=guid, name=card_name)
+    log.extend(fido_log)
+    fido_note = ""
+    if fido_section:
+        fido_note = ("备份包含 %d 条 FIDO2/WebAuthn 凭据（fido/ 目录）：私钥用「卡片 PIN "
+                     "派生的密钥」加密，外面那层本机 DPAPI 已剥掉，还原时由目标机重新"
+                     "封装。还原后仍需要用同一张卡片的 PIN 解锁；PIN 已改过的话用新 PIN。"
+                     % int(fido_section.get("count") or 0))
+
     # 数据目录清单（诊断用，便于确认目录内部布局）
     index_lines = store_index()
 
@@ -968,6 +983,9 @@ def create_backup(dest_path, name="", uid=""):
                     raise BackupError("写入备份文件失败: %s (%s)" % (rel, err))
             # DPAPI 明文条目（换系统后由目标机重新加密，见 1d）
             for arcname, payload in plain_blobs:
+                archive.writestr(arcname, payload)
+            # FIDO2 凭据（见 1e；导出时已剥掉本机 DPAPI 外层）
+            for arcname, payload in fido_files:
                 archive.writestr(arcname, payload)
             archive.writestr("store-index.txt", "\n".join(index_lines))
 
@@ -1020,6 +1038,7 @@ def create_backup(dest_path, name="", uid=""):
                 "registry": registry,
                 "pcp": pcp,
                 "dpapi": dpapi_records,
+                "fido": fido_section,
                 "system_root": SYSTEM_ROOT,
                 "device_properties": properties,
                 "files": [{"path": rel, "size": size, "sha256": sha}
@@ -1039,7 +1058,8 @@ def create_backup(dest_path, name="", uid=""):
                     "少了它换系统 / 重装后卡片起不来（读卡器都不会出现）。",
                     "仅在「同一台电脑 + 同一 TPM（未清除）」上可以还原；换机、清除 TPM、"
                     "删除卡片后再还原都可能无法恢复私钥，请同时保留卡片名称、PIN、PUK 与管理密码。",
-                ] + ([warning] if warning else []),
+                ] + ([warning] if warning else [])
+                  + ([fido_note] if fido_note else []),
             }
             archive.writestr(MANIFEST_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
 
@@ -1061,6 +1081,7 @@ def create_backup(dest_path, name="", uid=""):
         "file_count": len(copied),
         "size": total,
         "reg_count": len(registry),
+        "fido": fido_section,
         "log": log,
     }
 
@@ -2220,6 +2241,12 @@ def restore_backup(package, force=False):
             else:
                 log.append("备份中没有卡片数据文件，仅还原注册表")
 
+            # ---- 1b. FIDO2 凭据：与卡片一起还原（数据在用户目录，不依赖 SCardSvr）-- #
+            fido_added, fido_skipped = FidoBackup.restore(
+                reader, manifest.get("fido"),
+                guid=str((manifest.get("store") or {}).get("guid") or ""),
+                log=log)
+
             # ---- 2. 还原注册表（reg import 需要一个真实的 .reg 文件） ------- #
             reg_count = 0
             with tempfile.TemporaryDirectory(prefix="tpmvsc-reg-") as reg_dir:
@@ -2360,6 +2387,8 @@ def restore_backup(package, force=False):
         "reader_state": reader_code,
         "dpapi_state": dpapi_code,
         "bound": bound,
+        "fido_added": fido_added,
+        "fido_skipped": fido_skipped,
         "verdict": verdict,
         "log_file": log_file,
         "log": report_log,

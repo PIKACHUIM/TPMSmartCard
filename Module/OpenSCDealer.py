@@ -2,6 +2,7 @@ import re
 import subprocess
 import traceback
 
+from Module import Paths
 from Module.SmartCardObj import SmartCardDev
 from Module.SmartCardObj import SmartCardCer
 
@@ -19,7 +20,9 @@ class OpenSCDealer:
 
     @staticmethod
     def openText(in_comm, in_tool="pkcs15-tool"):
-        command = ".\\OpenSC\\%s.exe %s" % (in_tool, in_comm)
+        # 用绝对路径：FIDO2 后端在后台线程里也会调用这里，工作目录不一定还是
+        # 程序根目录（例如从计划任务/其它目录启动时）。
+        command = '"%s" %s' % (Paths.resource("OpenSC", "%s.exe" % in_tool), in_comm)
         process = subprocess.run(command, shell=True, text=True, capture_output=True)
         results = (process.stderr + process.stdout).replace("\t", "").split("\n")
         # print(results)

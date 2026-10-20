@@ -44,6 +44,9 @@ FONT_NAME_DEFAULT = "MapleMono SC NF"
 # 登录自启的启动参数（见 Module/AutoStart.py）：带它就只常驻托盘，不显示主窗口
 TRAY_FLAG = "--minimized"
 
+# 只跑 FIDO2 服务的无界面模式（适合把 FIDO 服务独立常驻、平时不开主界面）
+FIDO_FLAG = "--fido-daemon"
+
 # 界面主题与配色来自 Config/themes.json（可在「系统设置 - 外观」里切换），
 # 下面的常量是配置缺省或读取失败时的兜底值
 THEME_NAME = os.environ.get("TPMSMART_THEME") or "yeti"
@@ -130,6 +133,8 @@ class SmartCardAPP:
         self.load_status()
         # 双击 .tsb（文件类型关联）时由启动参数直接进入还原流程
         self.open_backup()
+        # FIDO2：按设置自动开启（后台线程，失败只记日志）
+        self.root.after(1500, self.startup_fido)
         self.root.mainloop()
 
     def open_backup(self):
@@ -243,7 +248,8 @@ class SmartCardAPP:
         return None
 
     def quit_app(self):
-        """退出程序：先摘掉托盘图标，再销毁主窗口（mainloop 随之结束）。"""
+        """退出程序：先停 FIDO2 设备服务、摘掉托盘图标，再销毁主窗口。"""
+        self.stop_fido(force=True)
         if self.tray is not None:
             self.tray.stop()
             self.tray = None
@@ -251,6 +257,87 @@ class SmartCardAPP:
             self.root.destroy()
         except tk.TclError:
             pass
+        return None
+
+    # FIDO2 服务（设备端进程 + 命名管道后端）=====================================
+    @staticmethod
+    def fido_service():
+        """FIDO2 服务单例（延迟导入：不用这个功能就不会加载加密相关依赖）。"""
+        from Module.FidoService import FidoService
+        return FidoService.get()
+
+    def startup_fido(self):
+        """按设置自动开启 FIDO2；失败只写日志，不打断程序启动。"""
+        try:
+            service = self.fido_service()
+            if not service.settings.get("enabled"):
+                return None
+        except Exception as err:
+            print("FIDO2 设置读取失败:", err)
+            return None
+
+        def worker():
+            try:
+                ok, text = service.start()
+                print("FIDO2:", text)
+            except Exception as err:
+                print("FIDO2 启动失败:", err)
+
+        threading.Thread(target=worker, daemon=True).start()
+        return None
+
+    def stop_fido(self, force=False):
+        """退出程序时把 FIDO2 设备服务一起停掉（否则虚拟设备会挂在已死的进程上）。"""
+        if not force:
+            return None
+        try:
+            self.fido_service().stop()
+        except Exception as err:
+            print("FIDO2 停止失败:", err)
+        return None
+
+    def after_pin_change(self, in_type, card_name, old_pin, new_pin):
+        """改 PIN / PUK 解锁之后，把这张卡的 FIDO2 凭据重新封装到新 PIN。
+
+        FIDO2 私钥是用「PIN 派生的密钥」封装的，PIN 变了不重新封装，
+        已有的 passkey 就再也解不开了。
+        """
+        if not card_name:
+            return None
+        try:
+            service = self.fido_service()
+        except Exception as err:
+            print("FIDO2 服务不可用:", err)
+            return None
+
+        def worker():
+            try:
+                if in_type == "pin":
+                    ok, text = service.rewrap_after_pin_change(card_name, old_pin, new_pin)
+                else:
+                    ok, text = service.rewrap_after_unblock(card_name, new_pin)
+            except Exception as err:
+                ok, text = False, str(err)
+            self.root.after(0, lambda: self.notify_fido(ok, text, in_type))
+
+        threading.Thread(target=worker, daemon=True).start()
+        return None
+
+    def notify_fido(self, ok, text, in_type):
+        """汇报 PIN 变更后的 FIDO2 处理结果（没有凭据时不打扰用户）。"""
+        text = str(text or "")
+        if ok and "无需处理" in text:
+            return None
+        if ok:
+            messagebox.showinfo(self.i18n("msg_pass_change_ok"),
+                                self.i18n_data.tp("msg_fido_rewrap_ok", text))
+        elif in_type != "pin" and not ok:
+            # PUK 解锁后旧 PIN 未知，凭据确实可能救不回来，单独提示
+            messagebox.showwarning(self.i18n("msg_pass_change_ok"),
+                                   "%s\n\n%s" % (text, self.i18n("msg_fido_unblock_lost")))
+        else:
+            messagebox.showwarning(self.i18n("msg_pass_change_ok"),
+                                   self.i18n_data.tp("msg_fido_rewrap_fail", text))
         return None
 
     def setup_fonts(self, in_create=True):
@@ -1348,11 +1435,15 @@ class SmartCardAPP:
                 messagebox.showwarning(self.i18n("warn"), self.i18n("msg_pass_not_same_"))
                 make.attributes('-topmost', True)
             else:
-                result = TPMSmartCard.changePIN(pass_key, pass_new, card_uid,
-                                                type="--change-pin" \
-                                                    if in_type == "pin" else "--unblock-pin")
+                result, changed = TPMSmartCard.changePIN(
+                    pass_key, pass_new, card_uid,
+                    type="--change-pin" if in_type == "pin" else "--unblock-pin",
+                    with_state=True)
                 messagebox.showinfo(self.i18n("msg_pass_change_ok"), result)
                 self.close_dialog(make)
+                # FIDO2 私钥用 PIN 派生的密钥封装：PIN 变了要重新封装，否则 passkey 失效
+                if changed:
+                    self.after_pin_change(in_type, self.pick["card"], pass_key, pass_new)
 
         make = ttk.Toplevel(self.root)
         # 点右上角 × 也走 close_dialog：先取消主题订阅再销毁
@@ -2196,4 +2287,18 @@ if __name__ == "__main__":
     # 双击 .tsb 关联文件 / 登录自启时的工作目录不是程序目录，先切回程序根目录，
     # 后面所有相对路径（含第三方库与 subprocess 调用）才和常规启动一致
     ensure_workdir()
+    # 无界面模式：只把 FIDO2 服务常驻（不建窗口、不建托盘）
+    if any(str(arg).strip().lower() == FIDO_FLAG for arg in sys.argv[1:]):
+        from Module.FidoService import FidoService
+        _service = FidoService.get()
+        _ok, _text = _service.start()
+        print("FIDO2 服务: %s" % _text)
+        if not _ok:
+            sys.exit(1)
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            _service.stop()
+        sys.exit(0)
     app = SmartCardAPP()

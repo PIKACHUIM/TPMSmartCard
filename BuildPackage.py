@@ -37,6 +37,15 @@ def resource_files():
         ("Config/", "Config/"),
         ("templates/", "templates/"),
     ]
+    # FIDO2：虚拟 USB 设备端程序 + USB/IP 客户端工具与虚拟总线驱动
+    # 只提供 x64 版本（INF 只有 NTAMD64，ARM64 也加载不了 x64 内核驱动），
+    # 所以 x86 / arm64 产物不带它，程序里对应功能会提示不支持。
+    if IS_X86 or IS_ARM64:
+        print("[打包] %s 产物不含 FIDO2 组件（仅 x64 提供）" % TARGET_ARCH)
+    elif os.path.isdir("Fido"):
+        items.append(("Fido/", "Fido/"))
+    else:
+        print("[打包] 警告：没有 Fido\\ 目录，产物将不含 FIDO2/通行密钥功能")
     if IS_X86:
         _require_dir(OPENSC_X86_DIR,
                      "请先运行：pwsh -File Builds\\Prepare-ArchResources.ps1 -Arch x86")

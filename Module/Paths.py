@@ -32,6 +32,9 @@ import sys
 # 用来判定「这个目录是不是程序根目录」的标志子目录
 CONFIG_DIR = "Config"
 
+# 用户数据目录名（%APPDATA%\<这个名字>）：设置、日志、FIDO 凭据都放这里
+APP_DIR_NAME = "TPMSmartCard"
+
 
 def project_root():
     """程序根目录（存在 ``Config`` 子目录的那个目录）。
@@ -56,6 +59,33 @@ def project_root():
 def resource(*parts):
     """程序根目录下的资源绝对路径，例如 ``resource("Config", "tables.json")``。"""
     return os.path.join(project_root(), *parts)
+
+
+def appdata_dir():
+    """用户数据目录 ``%APPDATA%\\TPMSmartCard``（不存在时按需创建）。"""
+    base = os.environ.get("APPDATA") or os.path.join(
+        os.path.expanduser("~"), "AppData", "Roaming")
+    return os.path.join(base, APP_DIR_NAME)
+
+
+def data_path(*parts):
+    """用户数据目录下的路径；目录不存在时自动创建。"""
+    folder = appdata_dir()
+    try:
+        os.makedirs(folder, exist_ok=True)
+    except OSError:
+        pass
+    return os.path.join(folder, *parts)
+
+
+def fido_dir():
+    """FIDO2 凭据与配置目录 ``%APPDATA%\\TPMSmartCard\\Fido``。"""
+    folder = data_path("Fido")
+    try:
+        os.makedirs(folder, exist_ok=True)
+    except OSError:
+        pass
+    return folder
 
 
 def ensure_workdir():

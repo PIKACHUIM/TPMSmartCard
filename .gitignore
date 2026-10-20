@@ -10,6 +10,9 @@ staging/
 !OpenSC/*.msi
 __pycache__
 .idea
+# FIDO2 设备端/服务端运行时日志（调试时产生）
+Fido/src/*.log
+Fido/*.log
 # 文档站（VitePress）：依赖、构建缓存与产物都不入库；CNAME 由 CI 按需生成
 node_modules/
 docs/.vitepress/cache/

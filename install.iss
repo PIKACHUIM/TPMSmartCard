@@ -341,6 +341,12 @@ Filename: "{#AppUrl}"; Description: "{cm:RunGithub}"; Flags: postinstall nowait 
 [UninstallRun]
 ; 主程序常驻托盘、代理与 Web 服务常驻后台：卸载前先结束，避免文件占用
 Filename: "{sys}\taskkill.exe"; Parameters: "/f /im SmartCardAPP.exe"; Flags: runhidden; RunOnceId: "StopSmartCardApp"
+; FIDO2 设备端进程（虚拟 USB 设备）也要先结束，否则 Fido\ 目录删不掉
+Filename: "{sys}\taskkill.exe"; Parameters: "/f /im fido-go.exe"; Flags: runhidden; RunOnceId: "StopFidoDevice"
+; 移除 FIDO2 的虚拟总线设备节点（驱动包保留：可能被其它 USB/IP 工具共用；
+; 需要彻底清理时可在程序里「系统设置 - FIDO2」卸载驱动）
+Filename: "{cmd}"; Parameters: "/c pnputil /remove-device ""ROOT\VHCI_UDE\0000"" >nul 2>&1"; Flags: runhidden; RunOnceId: "RemoveFidoVhciUde"
+Filename: "{cmd}"; Parameters: "/c pnputil /remove-device ""USBIPWIN\VHCI\0000"" >nul 2>&1"; Flags: runhidden; RunOnceId: "RemoveFidoVhci"
 Filename: "{sys}\taskkill.exe"; Parameters: "/f /im SSHCardAgent.exe"; Flags: runhidden; RunOnceId: "StopSshAgent"
 Filename: "{sys}\taskkill.exe"; Parameters: "/f /im SmartCardWEB.exe"; Flags: runhidden; RunOnceId: "StopWebServer"
 ; 清理「系统设置 - 启动与托盘」写入的自启（计划任务与启动项；不存在时忽略）
@@ -518,9 +524,22 @@ begin
   end;
 end;
 
+procedure StopRunningApps();
+var
+  ResultCode: Integer;
+begin
+  { 覆盖升级前先结束常驻进程：FIDO2 设备端会占用 Fido\fido-go.exe，
+    主程序常驻托盘也会占用自己的 exe，不先结束会导致文件复制失败 }
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/f /im fido-go.exe', '',
+       SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/f /im SmartCardAPP.exe', '',
+       SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := '';
+  StopRunningApps();
   InstallDependencies(NeedsRestart);
   if PrereqFailed then
     MsgBox(CM('PrereqWarnTitle') + #13#10 + #13#10 + PrereqLog + #13#10 +
