@@ -18,7 +18,7 @@ TPM 기반 가상 스마트카드는 물리 카드에 가까운 강도를 제공
 [![Release](https://img.shields.io/github/v/release/PIKACHUIM/TPMSmartCard?include_prereleases&label=release)](https://github.com/PIKACHUIM/TPMSmartCard/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%208%2B-0078D6.svg)](#-시스템-요구-사항)
 
-📘 [문서 색인](../docs/README.md) · 🧭 [아키텍처](../docs/architecture.md) · 💾 [백업/복원 설계](../docs/design-backup-restore.md) · 🛠️ [문제 해결](../docs/troubleshooting.md) · 🔐 [보안 모델](../docs/security.md)
+🌐 [온라인 문서](https://pikachuim.github.io/TPMSmartCard/)  · 🧭 [아키텍처](../docs/architecture.md) · 💾 [백업/복원 설계](../docs/design-backup-restore.md) · 🛠️ [문제 해결](../docs/troubleshooting.md) · 🔐 [보안 모델](../docs/security.md)
 
 [English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | 한국어<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
 </div>
@@ -129,10 +129,9 @@ python BuildNuitka.py             # Nuitka: build/nuitka/TPMSmartCard/
 
 그 밖의 안내:
 
-* **전제 조건**: **같은 TPM**이어야 하며(해당 PC에서 OS 재설치 시 가능, 다른 PC나 다른 TPM은 불가), **카드가 삭제되지 않은 상태**여야 합니다
-  — 카드를 삭제하면 TPM 내 영구 키도 지워지므로 백업이 있어도 복원할 수 없습니다;
+* **전제 조건**: **같은 TPM**이어야 하며(해당 PC에서 OS 재설치 시 가능, 다른 PC나 다른 TPM은 불가)
+* 카드를 삭제하면 TPM 내 영구 키도 지워지므로 **백업이 있어도 복원할 수 없습니다**;
 * 복원 후 카드가 리더 목록에 나타나려면 **장치(드라이버) 재시작 또는 시스템 재부팅이 필요할 수 있습니다**;
-* 구버전으로 만든 `.tsb`에는 장치 속성과 DPAPI 평문이 없어 복원 시 카드 식별 정보가 빠지고 리더가 나타나지 않습니다. 최신 버전으로 다시 백업하세요.
 
 ---
 
@@ -172,7 +171,7 @@ A: 발급한 중간 CA가 이 PC에 설치되어 있지 않습니다. 「신뢰�
 
 이 프로젝트는 **GPL-3.0** 라이선스로 공개되어 있습니다. 자세한 내용은 [LICENSE](../LICENSE)를 참고하세요.
 
-## 🙏 참고
+## 🙏 참고한 프로젝트
 
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — 오픈 소스 스마트카드 도구와 미들웨어
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)

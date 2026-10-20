@@ -18,7 +18,7 @@ Schlüssel und CSR lassen sich lokal erzeugen, Zertifikate sicher aus der Cloud 
 [![Release](https://img.shields.io/github/v/release/PIKACHUIM/TPMSmartCard?include_prereleases&label=release)](https://github.com/PIKACHUIM/TPMSmartCard/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%208%2B-0078D6.svg)](#-anforderungen)
 
-📘 [Dokumentationsübersicht](../docs/README.md) · 🧭 [Architektur](../docs/architecture.md) · 💾 [Entwurf Sicherung/Wiederherstellung](../docs/design-backup-restore.md) · 🛠️ [Fehlerbehebung](../docs/troubleshooting.md) · 🔐 [Sicherheitsmodell](../docs/security.md)
+🌐 [Online-Dokumentation](https://pikachuim.github.io/TPMSmartCard/)  · 🧭 [Architektur](../docs/architecture.md) · 💾 [Entwurf Sicherung/Wiederherstellung](../docs/design-backup-restore.md) · 🛠️ [Fehlerbehebung](../docs/troubleshooting.md) · 🔐 [Sicherheitsmodell](../docs/security.md)
 
 [English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>Deutsch | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
 </div>
@@ -129,10 +129,9 @@ Eine nutzbare virtuelle TPM-Smartcard besteht aus **fünf Teilen**, und die `.ts
 
 Weitere Hinweise:
 
-* **Voraussetzungen**: es muss dasselbe **TPM** sein (Neuinstallation auf diesem Rechner: ja; anderer Rechner oder anderes TPM: nein) und die **Karte darf nicht gelöscht worden sein**
-  — beim Löschen einer Karte wird auch ihr persistenter TPM-Schlüssel entfernt; danach hilft auch eine Sicherung nicht mehr;
+* **Voraussetzungen**: es muss dasselbe **TPM** sein (Neuinstallation auf diesem Rechner: ja; anderer Rechner oder anderes TPM: nein)
+* Beim Löschen einer Karte wird auch ihr persistenter TPM-Schlüssel entfernt; **danach hilft auch eine Sicherung nicht mehr**;
 * Nach der Wiederherstellung **kann ein Neustart des Geräts (Treibers) oder von Windows nötig sein**, bis die Karte in der Leserliste erscheint;
-* `.tsb`-Dateien älterer Versionen enthalten weder Geräteeigenschaften noch DPAPI-Klartext: eine Wiederherstellung lässt die Kartenidentität fehlen und der Leser erscheint nicht — erstellen Sie eine neue Sicherung mit der aktuellen Version.
 
 ---
 
@@ -172,7 +171,7 @@ A: Die ausstellende Zwischen-CA ist auf diesem Rechner nicht installiert; import
 
 Dieses Projekt steht unter der **GPL-3.0**-Lizenz. Siehe [LICENSE](../LICENSE).
 
-## 🙏 Referenzen
+## 🙏 Referenzierte Projekte
 
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — Open-Source-Werkzeuge und Middleware für Smartcards
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)

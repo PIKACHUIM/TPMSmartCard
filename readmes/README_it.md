@@ -18,7 +18,7 @@ Consente di generare chiavi e CSR in locale o di distribuire i certificati in mo
 [![Release](https://img.shields.io/github/v/release/PIKACHUIM/TPMSmartCard?include_prereleases&label=release)](https://github.com/PIKACHUIM/TPMSmartCard/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%208%2B-0078D6.svg)](#-requisiti)
 
-📘 [Indice della documentazione](../docs/README.md) · 🧭 [Architettura](../docs/architecture.md) · 💾 [Progettazione backup/ripristino](../docs/design-backup-restore.md) · 🛠️ [Risoluzione dei problemi](../docs/troubleshooting.md) · 🔐 [Modello di sicurezza](../docs/security.md)
+🌐 [Documentazione online](https://pikachuim.github.io/TPMSmartCard/)  · 🧭 [Architettura](../docs/architecture.md) · 💾 [Progettazione backup/ripristino](../docs/design-backup-restore.md) · 🛠️ [Risoluzione dei problemi](../docs/troubleshooting.md) · 🔐 [Modello di sicurezza](../docs/security.md)
 
 [English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | Italiano | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
 </div>
@@ -129,10 +129,9 @@ Una smart card virtuale TPM utilizzabile è composta da **cinque parti** e il `.
 
 Altre note:
 
-* **Prerequisiti**: serve lo **stesso TPM** (reinstallazione su questa macchina: sì; altra macchina o altro TPM: no) e la **scheda non deve essere stata eliminata**
-  — eliminando una scheda si rimuove anche la sua chiave persistente nel TPM: dopo, nemmeno un backup può ripristinarla;
+* **Prerequisiti**: serve lo **stesso TPM** (reinstallazione su questa macchina: sì; altra macchina o altro TPM: no)
+* Eliminando una scheda si rimuove anche la sua chiave persistente nel TPM: **dopo, nemmeno un backup può ripristinarla**;
 * Dopo il ripristino **può essere necessario riavviare il dispositivo (driver) o il sistema** perché la scheda compaia nell'elenco dei lettori;
-* I `.tsb` creati da versioni precedenti non contengono proprietà del dispositivo né testo in chiaro DPAPI: il ripristino lascia l'identità della scheda mancante e il lettore non compare — crea un nuovo backup con la versione corrente.
 
 ---
 
@@ -172,7 +171,7 @@ R: La CA intermedia emittente non è installata su questa macchina: importala ne
 
 Questo progetto è distribuito con licenza **GPL-3.0**. Vedi [LICENSE](../LICENSE).
 
-## 🙏 Riferimenti
+## 🙏 Progetti citati
 
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — strumenti e middleware open source per smart card
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)

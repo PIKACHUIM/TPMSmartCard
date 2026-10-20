@@ -18,7 +18,7 @@ _一款在 Windows 上建立與管理 TPM 虛擬智慧卡的圖形化工具_
 [![Release](https://img.shields.io/github/v/release/PIKACHUIM/TPMSmartCard?include_prereleases&label=release)](https://github.com/PIKACHUIM/TPMSmartCard/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%208%2B-0078D6.svg)](#-系統需求)
 
-📘 [文件索引](../docs/README.md) · 🧭 [架構說明](../docs/architecture.md) · 💾 [備份還原設計](../docs/design-backup-restore.md) · 🛠️ [疑難排解](../docs/troubleshooting.md) · 🔐 [安全模型](../docs/security.md)
+🌐 [線上文件](https://pikachuim.github.io/TPMSmartCard/)  · 🧭 [架構說明](../docs/architecture.md) · 💾 [備份還原設計](../docs/design-backup-restore.md) · 🛠️ [疑難排解](../docs/troubleshooting.md) · 🔐 [安全模型](../docs/security.md)
 
 [English](README_en.md) | [简体中文](../README.md) | 繁體中文 | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
 </div>
@@ -129,10 +129,9 @@ python BuildNuitka.py             # Nuitka：build/nuitka/TPMSmartCard/
 
 其它說明：
 
-* **還原前提**：必須**同一顆 TPM**（在本機重裝系統後可以還原；換機器、換 TPM 都不行），且**卡片沒有被刪除**
-  —— 刪除卡片會清除它在 TPM 內的持久金鑰，刪除之後即使有備份也無法還原；
+* **還原前提**：必須**同一顆 TPM**（在本機重裝系統後可以還原；換機器、換 TPM 則不行）
+* 刪除卡片會清除它在 TPM 內的持久金鑰，刪除之後**即使有備份也無法還原**；
 * 還原後**可能需要重新啟動裝置（驅動程式）或重新啟動系統**，卡片才會出現在讀卡機清單中；
-* 舊版工具製作的 `.tsb` 不含「裝置屬性」與「DPAPI 明文」，用於還原會缺卡片身分、讀卡機不會出現，請用新版本重新備份。
 
 ---
 
@@ -172,7 +171,7 @@ A：簽發該憑證的中繼 CA 沒安裝在目前機器上，把它匯入「受
 
 本專案以 **GPL-3.0** 授權條款開源，詳見 [LICENSE](../LICENSE)。
 
-## 🙏 參考
+## 🙏 引用專案
 
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) —— 開源智慧卡工具與中介軟體
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)

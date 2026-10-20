@@ -18,7 +18,7 @@ Permite generar claves y CSR localmente o distribuir certificados de forma segur
 [![Release](https://img.shields.io/github/v/release/PIKACHUIM/TPMSmartCard?include_prereleases&label=release)](https://github.com/PIKACHUIM/TPMSmartCard/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%208%2B-0078D6.svg)](#-requisitos)
 
-📘 [Índice de documentación](../docs/README.md) · 🧭 [Arquitectura](../docs/architecture.md) · 💾 [Diseño de copia y restauración](../docs/design-backup-restore.md) · 🛠️ [Solución de problemas](../docs/troubleshooting.md) · 🔐 [Modelo de seguridad](../docs/security.md)
+🌐 [Documentación en línea](https://pikachuim.github.io/TPMSmartCard/)  · 🧭 [Arquitectura](../docs/architecture.md) · 💾 [Diseño de copia y restauración](../docs/design-backup-restore.md) · 🛠️ [Solución de problemas](../docs/troubleshooting.md) · 🔐 [Modelo de seguridad](../docs/security.md)
 
 [English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | Español
 </div>
@@ -129,10 +129,9 @@ Una tarjeta inteligente virtual TPM utilizable consta de **cinco partes**, y el 
 
 Otras notas:
 
-* **Requisitos**: se necesita el **mismo TPM** (reinstalar en ese equipo: sí; otro equipo u otro TPM: no) y la **tarjeta no debe haber sido eliminada**
-  — eliminar una tarjeta borra también su clave persistente en el TPM: después, ni una copia permite restaurarla;
+* **Requisitos**: se necesita el **mismo TPM** (reinstalar en ese equipo: sí; otro equipo u otro TPM: no)
+* Eliminar una tarjeta borra también su clave persistente en el TPM: **después, ni una copia permite restaurarla**;
 * Tras restaurar, **puede ser necesario reiniciar el dispositivo (controlador) o el sistema** para que la tarjeta aparezca en la lista de lectores;
-* Los `.tsb` creados por versiones anteriores no incluyen propiedades del dispositivo ni texto en claro DPAPI: al restaurar falta la identidad de la tarjeta y el lector no aparece — crea una copia nueva con la versión actual.
 
 ---
 
@@ -172,7 +171,7 @@ R: La CA intermedia emisora no está instalada en este equipo; impórtala en el 
 
 Este proyecto se publica bajo la licencia **GPL-3.0**. Consulta [LICENSE](../LICENSE).
 
-## 🙏 Referencias
+## 🙏 Proyectos referenciados
 
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — herramientas y middleware de código abierto para tarjetas inteligentes
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)

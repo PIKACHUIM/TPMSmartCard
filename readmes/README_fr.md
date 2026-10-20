@@ -18,7 +18,7 @@ Générez les clés et les CSR en local, ou recevez les certificats en toute sé
 [![Release](https://img.shields.io/github/v/release/PIKACHUIM/TPMSmartCard?include_prereleases&label=release)](https://github.com/PIKACHUIM/TPMSmartCard/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%208%2B-0078D6.svg)](#-configuration-requise)
 
-📘 [Index de la documentation](../docs/README.md) · 🧭 [Architecture](../docs/architecture.md) · 💾 [Conception sauvegarde/restauration](../docs/design-backup-restore.md) · 🛠️ [Dépannage](../docs/troubleshooting.md) · 🔐 [Modèle de sécurité](../docs/security.md)
+🌐 [Documentation en ligne](https://pikachuim.github.io/TPMSmartCard/)  · 🧭 [Architecture](../docs/architecture.md) · 💾 [Conception sauvegarde/restauration](../docs/design-backup-restore.md) · 🛠️ [Dépannage](../docs/troubleshooting.md) · 🔐 [Modèle de sécurité](../docs/security.md)
 
 [English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | Français | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
 </div>
@@ -129,10 +129,9 @@ Une carte à puce virtuelle TPM utilisable se compose de **cinq parties**, et le
 
 Autres remarques :
 
-* **Prérequis** : le **même TPM** est nécessaire (réinstallation sur cette machine : oui ; autre machine ou autre TPM : non) et la **carte ne doit pas avoir été supprimée**
-  — supprimer une carte efface aussi sa clé persistante dans le TPM : même avec une sauvegarde, la restauration est alors impossible ;
+* **Prérequis** : le **même TPM** est nécessaire (réinstallation sur cette machine : oui ; autre machine ou autre TPM : non)
+* Supprimer une carte efface aussi sa clé persistante dans le TPM : **même avec une sauvegarde, la restauration est alors impossible** ;
 * Après une restauration, **un redémarrage de l'appareil (pilote) ou du système peut être nécessaire** pour que la carte apparaisse dans la liste des lecteurs ;
-* Les `.tsb` créés par des versions antérieures n'ont ni propriétés d'appareil ni texte en clair DPAPI : la restauration laisse l'identité de la carte manquante et le lecteur n'apparaît pas — créez une nouvelle sauvegarde avec la version actuelle.
 
 ---
 
@@ -172,7 +171,7 @@ R : L'autorité intermédiaire émettrice n'est pas installée sur cette machine
 
 Ce projet est distribué sous licence **GPL-3.0**. Voir [LICENSE](../LICENSE).
 
-## 🙏 Références
+## 🙏 Projets référencés
 
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — outils et intergiciel open source pour cartes à puce
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)

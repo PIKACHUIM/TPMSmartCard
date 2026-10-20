@@ -18,7 +18,7 @@ _Графический инструмент для создания вирту�
 [![Release](https://img.shields.io/github/v/release/PIKACHUIM/TPMSmartCard?include_prereleases&label=release)](https://github.com/PIKACHUIM/TPMSmartCard/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%208%2B-0078D6.svg)](#-требования)
 
-📘 [Указатель документации](../docs/README.md) · 🧭 [Архитектура](../docs/architecture.md) · 💾 [Проектирование резервного копирования](../docs/design-backup-restore.md) · 🛠️ [Устранение неполадок](../docs/troubleshooting.md) · 🔐 [Модель безопасности](../docs/security.md)
+🌐 [Онлайн-документация](https://pikachuim.github.io/TPMSmartCard/)  · 🧭 [Архитектура](../docs/architecture.md) · 💾 [Проектирование резервного копирования](../docs/design-backup-restore.md) · 🛠️ [Устранение неполадок](../docs/troubleshooting.md) · 🔐 [Модель безопасности](../docs/security.md)
 
 [English](README_en.md) | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | Русский | [Español](README_es.md)
 </div>
@@ -129,10 +129,9 @@ python BuildNuitka.py             # Nuitka: build/nuitka/TPMSmartCard/
 
 Дополнительно:
 
-* **Условия**: требуется **тот же TPM** (переустановка на этой машине — да; другая машина или другой TPM — нет), и **карта не должна быть удалена**
-  — при удалении карты удаляется и её постоянный ключ в TPM, после чего даже копия не поможет;
+* **Условия**: требуется **тот же TPM** (переустановка на этой машине — да; другая машина или другой TPM — нет)
+* При удалении карты удаляется и её постоянный ключ в TPM, **после чего даже копия не поможет**;
 * После восстановления **может потребоваться перезапуск устройства (драйвера) или системы**, чтобы карта появилась в списке считывателей;
-* Файлы `.tsb` старых версий не содержат свойств устройства и открытого текста DPAPI: при восстановлении идентичность карты отсутствует и считыватель не появляется — сделайте новую копию текущей версией.
 
 ---
 
@@ -172,7 +171,7 @@ python BuildNuitka.py             # Nuitka: build/nuitka/TPMSmartCard/
 
 Проект распространяется по лицензии **GPL-3.0**. См. [LICENSE](../LICENSE).
 
-## 🙏 Источники
+## 🙏 Используемые проекты
 
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — открытые инструменты и промежуточное ПО для смарт-карт
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)

@@ -18,7 +18,7 @@ Generate keys and CSRs locally, or deliver certificates securely from the cloud 
 [![Release](https://img.shields.io/github/v/release/PIKACHUIM/TPMSmartCard?include_prereleases&label=release)](https://github.com/PIKACHUIM/TPMSmartCard/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%208%2B-0078D6.svg)](#-requirements)
 
-📘 [Documentation index](../docs/README.md) · 🧭 [Architecture](../docs/architecture.md) · 💾 [Backup & restore design](../docs/design-backup-restore.md) · 🛠️ [Troubleshooting](../docs/troubleshooting.md) · 🔐 [Security model](../docs/security.md)
+🌐 [Online docs](https://pikachuim.github.io/TPMSmartCard/)  · 🧭 [Architecture](../docs/architecture.md) · 💾 [Backup & restore design](../docs/design-backup-restore.md) · 🛠️ [Troubleshooting](../docs/troubleshooting.md) · 🔐 [Security model](../docs/security.md)
 
 English | [简体中文](../README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md)<br>[Deutsch](README_de.md) | [Français](README_fr.md) | [Italiano](README_it.md) | [Português](README_pt.md) | [Русский](README_ru.md) | [Español](README_es.md)
 </div>
@@ -129,10 +129,9 @@ A usable TPM Virtual Smart Card consists of **five parts**, and a `.tsb` capture
 
 Other notes:
 
-* **Preconditions**: the **same TPM** is required (a clean reinstall on that machine works; another machine or another TPM does not), and the **card must not have been deleted**
-  — deleting a card removes its persistent TPM key, so even a backup cannot bring it back;
+* **Preconditions**: the **same TPM** is required (a clean reinstall on that machine works; another machine or another TPM does not)
+* Deleting a card removes its persistent TPM key, and **even a backup cannot bring it back** afterwards;
 * After a restore you **may need to restart the device (driver) or reboot Windows** before the card appears in the reader list;
-* `.tsb` files created by older versions lack the device properties and DPAPI plaintext: restoring them leaves the card identity missing and the reader will not appear — create a fresh backup with the current version.
 
 ---
 
@@ -172,7 +171,7 @@ A: The issuing intermediate CA is not installed on this machine — import it in
 
 This project is released under the **GPL-3.0** license. See [LICENSE](../LICENSE).
 
-## 🙏 References
+## 🙏 Referenced projects
 
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) — open source smart card tools and middleware
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
