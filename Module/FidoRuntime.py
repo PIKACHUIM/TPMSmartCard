@@ -116,6 +116,45 @@ def arch_supported():
     return True, ""
 
 
+_FEATURE_CACHE = {}
+
+
+def runtime_features():
+    """设备端程序的能力：``(支持 clientPIN, 说明)``。
+
+    用 ``fido-go.exe -version`` 探测（输出里含 ``clientpin`` 才算支持）。
+    旧版不认识这个参数、解析失败直接退出，于是判定为「设备端过旧」。
+
+    这个检查很关键：后端按 clientPIN 声明能力、Windows 去调 0x06，而旧设备端
+    只会回 ``invalid command``，平台随后就只显示「触摸安全密钥」干等，永远不弹
+    PIN 框（实测现象就是如此）。宁可在启动时自动退回内置 PIN 弹窗，也不要卡死。
+    """
+    if not os.path.isfile(FIDO_EXE):
+        return False, "缺少 fido-go.exe"
+    try:
+        stamp = (os.path.getmtime(FIDO_EXE), os.path.getsize(FIDO_EXE))
+    except OSError:
+        stamp = (0, 0)
+    cached = _FEATURE_CACHE.get(stamp)
+    if cached is not None:
+        return cached
+    try:
+        proc = subprocess.run([FIDO_EXE, "-version"], capture_output=True,
+                              timeout=10, cwd=RUNTIME_DIR,
+                              creationflags=CREATE_NO_WINDOW)
+    except (OSError, subprocess.SubprocessError) as err:
+        return False, "无法运行 fido-go.exe: %s" % err
+    text = ((proc.stdout or b"") + (proc.stderr or b"")).decode("mbcs", "replace")
+    if proc.returncode == 0 and "clientpin" in text.lower():
+        first = (text.strip().splitlines() or ["clientpin"])[0]
+        result = (True, first.strip())
+    else:
+        result = (False, "设备端程序过旧（不支持 clientPIN）")
+    _FEATURE_CACHE.clear()
+    _FEATURE_CACHE[stamp] = result
+    return result
+
+
 def runtime_ready():
     """随包的设备端程序与 usbip 工具是否齐全。"""
     ok, text = arch_supported()

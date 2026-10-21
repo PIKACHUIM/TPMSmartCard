@@ -573,6 +573,8 @@ class SystemSettings:
             return None
         lines = [
             "• %s" % info["driver_text"],
+            "• %s %s" % (self.t("msg_fido_runtime"),
+                          info.get("clientpin_text") or ""),
             "• %s: %s" % (self.t("msg_fido_start"),
                           ("PID %d" % info["pid"]) if info["process"]
                           else self.t("msg_set_startup_off")),

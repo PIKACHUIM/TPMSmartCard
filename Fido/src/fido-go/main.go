@@ -49,6 +49,9 @@ var (
 	usbipDir = flag.String("usbip-dir", "", "usbip 工具目录（默认：可执行文件同目录下的 usbip/）")
 	pipeName = flag.String("pipe", `\\.\pipe\TPMFIDO`, "与后端通信的命名管道")
 	logPath  = flag.String("log", "", "日志文件路径（为空则输出到标准输出）")
+	// 能力声明：Python 侧靠它判断该不该用 clientPIN 模式。
+	// 旧版不认识这个参数，参数解析会直接失败——后端据此判定「设备端过旧」。
+	showVersion = flag.Bool("version", false, "打印版本与能力后退出")
 
 	// PIN 对话框文案由调用方（Python 侧按当前界面语言）传入
 	pinTitle  = flag.String("pin-title", "TPM 智能卡", "PIN 对话框标题")
@@ -64,6 +67,13 @@ var (
 
 func main() {
 	flag.Parse()
+
+	// 后端启动时会先跑一次 -version：输出里的 "clientpin" 表示本程序会转发
+	// CTAP 0x06 命令（PIN 由平台收集）。缺了它就只能用内置 PIN 弹窗。
+	if *showVersion {
+		fmt.Println("fido-go 1.1 clientpin")
+		return
+	}
 
 	// 日志：写文件时关闭控制台输出依赖，避免父进程管道阻塞
 	if *logPath != "" {

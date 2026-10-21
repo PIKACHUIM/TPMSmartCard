@@ -326,5 +326,6 @@
   "msg_fido_delete_ok": "FIDO2 credential deleted",
   "msg_fido_delete_fail": "Failed to delete the FIDO2 credential",
   "msg_fido_card_label": "Card used for FIDO2:",
-  "msg_fido_card_auto": "Automatic (last used / first available)"
+  "msg_fido_card_auto": "Automatic (last used / first available)",
+  "msg_fido_runtime": "Device program:"
 }

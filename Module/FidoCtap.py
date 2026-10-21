@@ -127,8 +127,11 @@ def get_info(pin_mode=PIN_MODE_CLIENT):
         4: {                                  # 能力
             "rk": True,                       # 支持可发现凭据（passkey）
             "up": True,                       # 支持用户在场
-            # clientPin 模式下 UV 由 PIN 满足，仍声明 uv 免得 RP 认为不支持
-            "uv": True,
+            # clientPin 模式下必须声明 uv=false：UV 由 PIN 提供，这跟 YubiKey 5
+            # 等没有生物识别的认证器一致。若声明 uv=true，Windows 会以为设备
+            # 会自己完成用户验证，于是只显示「触摸安全密钥」干等设备，
+            # 不弹它的 PIN 框（实测就是这个现象）。
+            "uv": not client_pin,
             "plat": False,                    # 不是平台认证器
             "clientPin": client_pin,
         },
@@ -568,6 +571,8 @@ def _selftest():
         # ---- clientPIN：模拟平台侧完整走一遍 ------------------------------ #
         info_client = FidoCbor.decode(get_info(PIN_MODE_CLIENT))
         assert info_client[4]["clientPin"] is True
+        # uv 必须为 False：否则 Windows 会等设备自己完成用户验证（只显示触摸）
+        assert info_client[4]["uv"] is False
         assert info_client[6] == list(FidoClientPin.SUPPORTED_PROTOCOLS)
         info_builtin = FidoCbor.decode(get_info(PIN_MODE_BUILTIN))
         assert info_builtin[4]["clientPin"] is False

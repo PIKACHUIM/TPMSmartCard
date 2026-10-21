@@ -327,5 +327,6 @@
   "msg_fido_delete_ok": "FIDO2 자격 증명을 삭제했습니다",
   "msg_fido_delete_fail": "FIDO2 자격 증명 삭제 실패",
   "msg_fido_card_label": "FIDO2에 사용할 카드:",
-  "msg_fido_card_auto": "자동(마지막 사용 / 첫 번째 카드)"
+  "msg_fido_card_auto": "자동(마지막 사용 / 첫 번째 카드)",
+  "msg_fido_runtime": "장치 프로그램:"
 }

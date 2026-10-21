@@ -326,5 +326,6 @@
   "msg_fido_delete_ok": "FIDO2 資格情報を削除しました",
   "msg_fido_delete_fail": "FIDO2 資格情報の削除に失敗しました",
   "msg_fido_card_label": "FIDO2 で使用するカード:",
-  "msg_fido_card_auto": "自動（最後に使用 / 最初のカード）"
+  "msg_fido_card_auto": "自動（最後に使用 / 最初のカード）",
+  "msg_fido_runtime": "デバイス側プログラム:"
 }

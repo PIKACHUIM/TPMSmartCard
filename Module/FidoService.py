@@ -458,6 +458,18 @@ class FidoService:
                 else:
                     return False, "USB/IP 虚拟总线驱动未就绪：%s" % state_text
 
+            # 设备端程序（fido-go.exe）是否支持转发 CTAP 0x06：不支持就别声明
+            # clientPIN，否则 Windows 调 0x06 得到 invalid command 后会一直停在
+            # 「触摸安全密钥」，既认证不了也不报错。
+            if self.pin_mode == FidoCtap.PIN_MODE_CLIENT:
+                supported, note = FidoRuntime.runtime_features()
+                if not supported:
+                    self.log("设备端程序不支持 clientPIN（%s），本次自动退回内置 PIN 弹窗"
+                             % note)
+                    self.update_settings(pin_mode=FidoCtap.PIN_MODE_BUILTIN)
+                else:
+                    self.log("设备端程序支持 clientPIN：%s" % note)
+
             FidoRuntime.clear_old_log()
             ok, text = FidoRuntime.start_service(pin_strings=self.pin_strings())
             if not ok:
@@ -534,7 +546,10 @@ class FidoService:
         info = FidoRuntime.status()
         settings = self.settings
         stores = FidoStore.FidoStore.list_all()
+        clientpin_ready, clientpin_text = FidoRuntime.runtime_features()
         info.update({
+            "clientpin_ready": clientpin_ready,
+            "clientpin_text": clientpin_text,
             "service": bool(self._server is not None and self._server.running),
             "session": bool(self.session),
             "session_card": (self.session["card"]["name"] if self.session else ""),

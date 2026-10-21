@@ -326,5 +326,6 @@
   "msg_fido_delete_ok": "FIDO2-Anmeldedatensatz gelöscht",
   "msg_fido_delete_fail": "Löschen des FIDO2-Anmeldedatensatzes fehlgeschlagen",
   "msg_fido_card_label": "Für FIDO2 verwendete Karte:",
-  "msg_fido_card_auto": "Automatisch (zuletzt verwendet / erste verfügbare)"
+  "msg_fido_card_auto": "Automatisch (zuletzt verwendet / erste verfügbare)",
+  "msg_fido_runtime": "Geräteprogramm:"
 }

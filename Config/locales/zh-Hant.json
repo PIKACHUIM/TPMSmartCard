@@ -326,5 +326,6 @@
   "msg_fido_delete_ok": "已刪除該 FIDO2 憑證",
   "msg_fido_delete_fail": "刪除 FIDO2 憑證失敗",
   "msg_fido_card_label": "FIDO2 使用的卡片：",
-  "msg_fido_card_auto": "自動（上次使用 / 第一張）"
+  "msg_fido_card_auto": "自動（上次使用 / 第一張）",
+  "msg_fido_runtime": "裝置端程式："
 }
