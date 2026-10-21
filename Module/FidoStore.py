@@ -163,10 +163,15 @@ def card_path(key):
 # 全局设置（服务开关、会话超时等）
 # --------------------------------------------------------------------------- #
 DEFAULT_SETTINGS = {
-    "enabled": False,           # FIDO2 服务总开关
+    # 驱动装好就默认开启：装上驱动、开机启动之后不必再手动去设置里点一次
+    "enabled": True,            # FIDO2 服务总开关
     "autostart": False,         # 随程序自启（登录后常驻）
     "session_timeout": 900,     # PIN 认证有效时间（秒）
     "driver_hint_shown": False,  # 是否已提示过安装驱动
+    # PIN 由谁收集：clientpin = 平台的 PIN 对话框（推荐，只有一个框）；
+    # builtin = 本程序自己弹框（老行为，平台只显示「触摸安全密钥」）
+    "pin_mode": "clientpin",
+    "active_card": "",          # clientPIN 当前绑定的卡片（按读卡器名）
 }
 
 
@@ -216,6 +221,7 @@ class FidoStore:
             "kdf": {"algo": "pbkdf2-sha256", "iterations": KDF_ITERATIONS,
                     "salt": b64e(salt)},
             "guard": None,
+            "pin_verifier": None,
             "credentials": [],
             "created_at": _now(),
             "updated_at": _now(),
@@ -381,6 +387,36 @@ class FidoStore:
         except StoreError:
             return None
 
+    # ---- clientPIN（PIN 由 Windows 收集）--------------------------------- #
+    # 平台在 clientPIN 流程里只送 SHA-256(PIN)[0:16]，设备永远看不到 PIN 原文，
+    # 所以比对材料必须留一份。外层再套本机 DPAPI：文件被拷到别的机器也读不出。
+    @property
+    def has_pin_verifier(self):
+        return bool(self.data.get("pin_verifier"))
+
+    def set_pin_verifier(self, pin):
+        """记录 PIN 的哈希（应在**卡片已校验过该 PIN**之后调用）。"""
+        digest = hashlib.sha256(str(pin).encode("utf-8")).digest()[:16]
+        blob, outer = _wrap_outer(digest)
+        self.data["pin_verifier"] = {"algo": "sha256-16", "outer": outer,
+                                    "data": b64e(blob)}
+        self.save()
+
+    def check_pin_verifier(self, digest):
+        record = self.data.get("pin_verifier")
+        if not record:
+            return False
+        try:
+            plain = _unwrap_outer(b64d(record.get("data")), record.get("outer"))
+        except StoreError:
+            return False
+        return hmac.compare_digest(bytes(plain)[:16], bytes(digest)[:16])
+
+    def clear_pin_verifier(self):
+        if self.data.get("pin_verifier") is not None:
+            self.data["pin_verifier"] = None
+            self.save()
+
     # ---- 凭据 ------------------------------------------------------------ #
     def _unwrap_secret(self, master, record):
         temp_salt = b64d(record.get("temp_key_salt"))
@@ -408,6 +444,7 @@ class FidoStore:
 
     def add_credential(self, master, meta, secret_payload):
         """新增一条凭据；``secret_payload`` 是私钥的原始字节。"""
+        self._refresh_from_disk()      # 别把内存里已删除的旧条目带回来
         entry = {
             "uuid": str(uuid_module.uuid4()),
             "meta": dict(meta or {}),
@@ -460,10 +497,24 @@ class FidoStore:
             matches.append(entry)
         return matches
 
+    def _refresh_from_disk(self):
+        """写之前把磁盘内容读回内存（磁盘才是权威）。
+
+        会话里的 store 是一份可能在内存里放了很久的副本；如果直接整份写回，
+        会把「别处刚删掉的凭据」复活（实测现象：界面删了凭据，重启程序又出现，
+        而且还能拿它认证）。所以所有写操作先对齐磁盘。
+        """
+        latest = FidoStore.load(self.key)
+        if latest is not None and latest.data is not self.data:
+            self.data = latest.data
+        return self.data
+
     def bump_counter(self, entry_uuid, value=None):
         """递增签名计数器（防重放）；返回新值。"""
+        self._refresh_from_disk()
         entry = self.find_by_uuid(entry_uuid)
         if entry is None:
+            # 磁盘上已经没有这条凭据（被删了）：不写盘，免得又把它写回去
             return 0
         meta = entry.setdefault("meta", {})
         counter = int(meta.get("counter") or 0)
@@ -474,6 +525,7 @@ class FidoStore:
         return meta["counter"]
 
     def delete_credential(self, entry_uuid):
+        self._refresh_from_disk()
         before = len(self.credentials)
         self.data["credentials"] = [item for item in self.credentials
                                     if item.get("uuid") != entry_uuid]
@@ -483,6 +535,7 @@ class FidoStore:
         return True
 
     def clear_credentials(self):
+        self._refresh_from_disk()
         self.data["credentials"] = []
         self.save()
 

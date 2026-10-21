@@ -315,5 +315,17 @@
   "msg_fido_pin_ok": "확인",
   "msg_fido_pin_cancel": "취소",
   "msg_fido_pin_wrong": "PIN이 올바르지 않습니다. 다시 시도하세요",
-  "msg_fido_backup": "FIDO2 자격 증명 %d개"
+  "msg_fido_backup": "FIDO2 자격 증명 %d개",
+  "msg_fido_pin_mode": "PIN 입력 방식:",
+  "msg_fido_pin_mode_platform": "Windows 보안 대화 상자(권장)",
+  "msg_fido_pin_mode_app": "이 앱의 대화 상자",
+  "msg_fido_clientpin_tip": "안내: 'Windows 보안 대화 상자'로 처음 인증할 때 Windows가 PIN 설정을 요청하면 카드 PIN(Windows 로그인 PIN 아님)을 입력하세요. 카드에서 검증합니다. 이후에는 Windows PIN 창만 표시됩니다.",
+  "msg_fido_type": "FIDO2 패스키",
+  "msg_fido_usages": "WebAuthn / 패스키",
+  "msg_fido_no_cert_item": "내보낼 수 없음",
+  "msg_fido_no_cert_text": "FIDO2 자격 증명은 인증서가 아니므로 내보낼 X.509 파일이 없습니다. 해당 사이트의 패스키 로그인에만 사용됩니다.",
+  "msg_fido_delete_ok": "FIDO2 자격 증명을 삭제했습니다",
+  "msg_fido_delete_fail": "FIDO2 자격 증명 삭제 실패",
+  "msg_fido_card_label": "FIDO2에 사용할 카드:",
+  "msg_fido_card_auto": "자동(마지막 사용 / 첫 번째 카드)"
 }

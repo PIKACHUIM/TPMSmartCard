@@ -493,6 +493,34 @@ class SystemSettings:
                         variable=self.fido_auto,
                         command=self.toggle_fido_auto).pack(anchor=tk.W, pady=(10, 0))
 
+        # PIN 由谁收集：Windows 的对话框（推荐，只有一个框且不会撞上「触摸安全
+        # 密钥」的超时）或本程序自己弹框（老行为，留给需要的人回退）
+        mode_row = ttk.Frame(page)
+        mode_row.pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(mode_row, text=self.t("msg_fido_pin_mode")).pack(side=tk.LEFT)
+        self.fido_pin_mode = tk.StringVar()
+        self.fido_pin_combo = ttk.Combobox(
+            mode_row, textvariable=self.fido_pin_mode, state="readonly", width=30,
+            values=[text for _value, text in self._pin_mode_labels()])
+        self.fido_pin_combo.pack(side=tk.LEFT, padx=(8, 0))
+        self.fido_pin_combo.bind("<<ComboboxSelected>>",
+                                 lambda _event: self.change_fido_pin_mode())
+        # 首次切到 clientPIN 时 Windows 会问「设置 PIN」，说明请输入卡片 PIN
+        ttk.Label(page, bootstyle="secondary", justify=tk.LEFT, wraplength=self.wrap,
+                  text=self.t("msg_fido_clientpin_tip")).pack(anchor=tk.W,
+                                                              pady=(4, 0))
+
+        # Windows 的 PIN 对话框只能输 PIN，没法在其中选卡：多卡时在这里指定
+        card_row = ttk.Frame(page)
+        card_row.pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(card_row, text=self.t("msg_fido_card_label")).pack(side=tk.LEFT)
+        self.fido_card = tk.StringVar()
+        self.fido_card_combo = ttk.Combobox(card_row, textvariable=self.fido_card,
+                                            state="readonly", width=30)
+        self.fido_card_combo.pack(side=tk.LEFT, padx=(8, 0))
+        self.fido_card_combo.bind("<<ComboboxSelected>>",
+                                  lambda _event: self.change_fido_card())
+
         table = ttk.Frame(page)
         table.pack(fill=tk.X, pady=(10, 0))
         columns = ("card", "rp", "user", "created")
@@ -530,6 +558,11 @@ class SystemSettings:
         from Module.FidoService import FidoService
         return FidoService.get()
 
+    def _pin_mode_labels(self):
+        """下拉框的「值 → 显示文案」映射（值写进 settings，文案随界面语言）。"""
+        return [("clientpin", self.t("msg_fido_pin_mode_platform")),
+                ("builtin", self.t("msg_fido_pin_mode_app"))]
+
     def refresh_fido(self):
         if not self.alive:
             return None
@@ -550,7 +583,14 @@ class SystemSettings:
         if info.get("session"):
             lines.append("• PIN: %s" % (info.get("session_card") or ""))
         self.fido_status_var.set("\n".join(lines))
-        self.fido_auto.set(bool((info.get("settings") or {}).get("enabled")))
+        settings = info.get("settings") or {}
+        self.fido_auto.set(bool(settings.get("enabled")))
+        current = str(settings.get("pin_mode") or "clientpin")
+        for value, text in self._pin_mode_labels():
+            if value == current:
+                self.fido_pin_mode.set(text)
+                break
+        self._refresh_fido_cards(settings)
         self.fido_tree.delete(*self.fido_tree.get_children())
         self.fido_rows = dict()
         for row in self.fido().list_credentials():
@@ -567,6 +607,54 @@ class SystemSettings:
             self.start_fido()
         elif not enabled and self.fido().running:
             self.stop_fido()
+        return None
+
+    def change_fido_pin_mode(self):
+        """切换 PIN 收集方式；服务在跑就重启，让新的 GetInfo 立刻生效。"""
+        label = self.fido_pin_mode.get()
+        value = "clientpin"
+        for candidate, text in self._pin_mode_labels():
+            if text == label:
+                value = candidate
+                break
+        service = self.fido()
+        service.update_settings(pin_mode=value)
+        if service.status().get("service"):
+            service.restart()
+        self.refresh_fido()
+        return None
+
+    def _fido_card_names(self):
+        """可用卡片名（缓存：枚举一次要调 OpenSC，别每次刷新都跑）。"""
+        cached = getattr(self, "_fido_card_cache", None)
+        if cached:
+            return cached
+        try:
+            names = [item["name"] for item in self.fido().cards(include_disabled=True)]
+        except Exception:
+            names = []
+        if names:
+            self._fido_card_cache = names
+        return names
+
+    def _refresh_fido_cards(self, settings):
+        auto = self.t("msg_fido_card_auto")
+        values = [auto] + self._fido_card_names()
+        self.fido_card_combo.configure(values=values)
+        current = str(settings.get("active_card") or "")
+        self.fido_card.set(current if current in values else auto)
+        return None
+
+    def change_fido_card(self):
+        """指定 clientPIN 用哪张卡（空 = 自动：上次使用 / 第一张）。"""
+        label = self.fido_card.get()
+        auto = self.t("msg_fido_card_auto")
+        value = "" if label == auto else label
+        service = self.fido()
+        service.update_settings(active_card=value)
+        if service.status().get("service"):
+            service.restart()
+        self.refresh_fido()
         return None
 
     def install_fido(self):

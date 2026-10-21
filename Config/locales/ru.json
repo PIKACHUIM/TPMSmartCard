@@ -314,5 +314,17 @@
   "msg_fido_pin_ok": "ОК",
   "msg_fido_pin_cancel": "Отмена",
   "msg_fido_pin_wrong": "Неверный PIN, попробуйте ещё раз",
-  "msg_fido_backup": "Учётных данных FIDO2: %d"
+  "msg_fido_backup": "Учётных данных FIDO2: %d",
+  "msg_fido_pin_mode": "Ввод PIN:",
+  "msg_fido_pin_mode_platform": "Диалог безопасности Windows (рекомендуется)",
+  "msg_fido_pin_mode_app": "Окно этой программы",
+  "msg_fido_clientpin_tip": "Подсказка: когда Windows впервые предложит создать PIN, введите PIN смарт-карты (не PIN входа в Windows) — он проверяется на карте. Далее будет показываться только окно PIN Windows.",
+  "msg_fido_type": "Ключ доступа FIDO2",
+  "msg_fido_usages": "WebAuthn / ключ доступа",
+  "msg_fido_no_cert_item": "Экспорт невозможен",
+  "msg_fido_no_cert_text": "Учётные данные FIDO2 — не сертификат: экспортировать файл X.509 нечего. Они используются только для входа по ключу доступа на своём сайте.",
+  "msg_fido_delete_ok": "Учётные данные FIDO2 удалены",
+  "msg_fido_delete_fail": "Не удалось удалить учётные данные FIDO2",
+  "msg_fido_card_label": "Карта для FIDO2:",
+  "msg_fido_card_auto": "Автоматически (последняя использованная / первая доступная)"
 }

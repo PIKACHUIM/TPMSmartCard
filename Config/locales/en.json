@@ -314,5 +314,17 @@
   "msg_fido_pin_ok": "OK",
   "msg_fido_pin_cancel": "Cancel",
   "msg_fido_pin_wrong": "Wrong PIN, please try again",
-  "msg_fido_backup": "%d FIDO2 credential(s)"
+  "msg_fido_backup": "%d FIDO2 credential(s)",
+  "msg_fido_pin_mode": "PIN input:",
+  "msg_fido_pin_mode_platform": "Windows security dialog (recommended)",
+  "msg_fido_pin_mode_app": "Dialog in this app",
+  "msg_fido_clientpin_tip": "Tip: the first time Windows asks to create a PIN, enter the smart card PIN (not your Windows sign-in PIN) — it is verified on the card. Later sign-ins show only the Windows PIN dialog.",
+  "msg_fido_type": "FIDO2 passkey",
+  "msg_fido_usages": "WebAuthn / passkey",
+  "msg_fido_no_cert_item": "Cannot export",
+  "msg_fido_no_cert_text": "A FIDO2 credential is not a certificate and has no X.509 file to export; it is only used for passkey sign-in on its site.",
+  "msg_fido_delete_ok": "FIDO2 credential deleted",
+  "msg_fido_delete_fail": "Failed to delete the FIDO2 credential",
+  "msg_fido_card_label": "Card used for FIDO2:",
+  "msg_fido_card_auto": "Automatic (last used / first available)"
 }

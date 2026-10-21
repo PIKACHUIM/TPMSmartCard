@@ -314,5 +314,17 @@
   "msg_fido_pin_ok": "OK",
   "msg_fido_pin_cancel": "Abbrechen",
   "msg_fido_pin_wrong": "PIN falsch, bitte erneut versuchen",
-  "msg_fido_backup": "%d FIDO2-Anmeldedaten"
+  "msg_fido_backup": "%d FIDO2-Anmeldedaten",
+  "msg_fido_pin_mode": "PIN-Eingabe:",
+  "msg_fido_pin_mode_platform": "Windows-Sicherheitsdialog (empfohlen)",
+  "msg_fido_pin_mode_app": "Dialog dieses Programms",
+  "msg_fido_clientpin_tip": "Hinweis: Wenn Windows Sie beim ersten Mal auffordert, eine PIN zu erstellen, geben Sie die PIN der Karte ein (nicht Ihre Windows-Anmelde-PIN) – sie wird auf der Karte geprüft. Danach erscheint nur noch der Windows-PIN-Dialog.",
+  "msg_fido_type": "FIDO2-Passkey",
+  "msg_fido_usages": "WebAuthn / Passkey",
+  "msg_fido_no_cert_item": "Export nicht möglich",
+  "msg_fido_no_cert_text": "Ein FIDO2-Anmeldedatensatz ist kein Zertifikat; es gibt keine X.509-Datei zum Exportieren. Er dient nur der Passkey-Anmeldung auf seiner Website.",
+  "msg_fido_delete_ok": "FIDO2-Anmeldedatensatz gelöscht",
+  "msg_fido_delete_fail": "Löschen des FIDO2-Anmeldedatensatzes fehlgeschlagen",
+  "msg_fido_card_label": "Für FIDO2 verwendete Karte:",
+  "msg_fido_card_auto": "Automatisch (zuletzt verwendet / erste verfügbare)"
 }

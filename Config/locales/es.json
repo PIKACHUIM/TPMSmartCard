@@ -314,5 +314,17 @@
   "msg_fido_pin_ok": "Aceptar",
   "msg_fido_pin_cancel": "Cancelar",
   "msg_fido_pin_wrong": "PIN incorrecto, inténtelo de nuevo",
-  "msg_fido_backup": "%d credencial(es) FIDO2"
+  "msg_fido_backup": "%d credencial(es) FIDO2",
+  "msg_fido_pin_mode": "Introducción del PIN:",
+  "msg_fido_pin_mode_platform": "Cuadro de diálogo de Windows (recomendado)",
+  "msg_fido_pin_mode_app": "Ventana de esta aplicación",
+  "msg_fido_clientpin_tip": "Consejo: la primera vez que Windows pida crear un PIN, introduzca el PIN de la tarjeta (no el de inicio de sesión de Windows); se verifica en la tarjeta. Después solo aparecerá el cuadro de PIN de Windows.",
+  "msg_fido_type": "Clave de acceso FIDO2",
+  "msg_fido_usages": "WebAuthn / clave de acceso",
+  "msg_fido_no_cert_item": "No se puede exportar",
+  "msg_fido_no_cert_text": "Una credencial FIDO2 no es un certificado: no hay archivo X.509 que exportar. Solo se usa para iniciar sesión con clave de acceso en su sitio.",
+  "msg_fido_delete_ok": "Credencial FIDO2 eliminada",
+  "msg_fido_delete_fail": "No se pudo eliminar la credencial FIDO2",
+  "msg_fido_card_label": "Tarjeta usada para FIDO2:",
+  "msg_fido_card_auto": "Automática (última usada / primera disponible)"
 }

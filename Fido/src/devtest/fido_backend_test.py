@@ -42,10 +42,16 @@ FAKE_CARD = {"name": "Microsoft Virtual Smart Card 0", "uuid": "aabbccdd",
 def main():
     folder = tempfile.mkdtemp(prefix="tpmsc-fido-ipc-")
     original_cards_dir = FidoStore.cards_dir
+    original_settings = FidoStore.settings_path
     FidoStore.cards_dir = lambda: folder
+    # 设置也要指到临时目录，否则登录成功会把 active_card 写进真实设置文件
+    FidoStore.settings_path = lambda: os.path.join(folder, "settings.json")
     service = FidoService()
     service.cards = lambda include_disabled=False: [dict(FAKE_CARD)]
     service.verify_pin = lambda reader, pin: ("ok", "selftest")
+    # 本测试走的是「内置 UV」那条路（fido-go 弹框 → CMD_LOGIN），
+    # clientPIN 的全链路在 fido_clientpin_test.py 里单独测
+    service.update_settings(pin_mode="builtin")
     server = FidoIpc.PipeServer(service.dispatch, name=PIPE_NAME,
                                logger=lambda text: print("  [pipe]", text))
     failures = []
@@ -149,6 +155,7 @@ def main():
     finally:
         server.stop()
         FidoStore.cards_dir = original_cards_dir
+        FidoStore.settings_path = original_settings
         shutil.rmtree(folder, ignore_errors=True)
 
     print()

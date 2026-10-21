@@ -13,6 +13,7 @@ const (
 	ctapMakeCredential byte = 0x01
 	ctapGetAssertion   byte = 0x02
 	ctapGetInfo        byte = 0x04
+	ctapClientPin      byte = 0x06
 	ctapCancel         byte = 0x11
 )
 
@@ -80,6 +81,10 @@ func (proxy *CTAPProxy) HandleMessage(data []byte) []byte {
 		ipcCmd = cmdMakeCredential
 	case ctapGetAssertion:
 		ipcCmd = cmdGetAssertion
+	case ctapClientPin:
+		// clientPIN：PIN 由平台（Windows 安全对话框）收集，这里只做透传，
+		// 弹窗逻辑绝不能介入，否则又会出现「两个框并存 + 触摸超时」
+		ipcCmd = cmdClientPin
 	default:
 		appLog.Printf("不支持的 CTAP2 命令: 0x%02X", cmd)
 		return []byte{ctapInvalidCommand}
@@ -102,7 +107,14 @@ func (proxy *CTAPProxy) HandleMessage(data []byte) []byte {
 			return []byte{ctapOther}
 		}
 
-		// 需要 PIN 认证：弹窗 → 登录 → 让 Windows 重新枚举设备 → 浏览器重试
+		// clientPIN 模式：后端明确要求「交给平台处理 PIN」，直接把 0x36 返回，
+		// 让 Windows 弹它自己的 PIN 对话框（只有这一个框，也不会撞上触摸超时）
+		if wrapper.RV == uint32(ctapPINRequired) && platformPin(wrapper.Data) {
+			appLog.Printf("CTAP 命令 0x%02X 需要平台输入 PIN（clientPIN 模式）", cmd)
+			return []byte{ctapPINRequired}
+		}
+
+		// 内置 UV 模式：弹窗 → 登录 → 让 Windows 重新枚举设备 → 浏览器重试
 		if wrapper.RV == uint32(ctapPINRequired) && (cmd == ctapMakeCredential || cmd == ctapGetAssertion) {
 			cards, err := parseCards(wrapper.Data)
 			if err != nil || len(cards) == 0 {
@@ -215,6 +227,21 @@ func (proxy *CTAPProxy) login(result *PINResult) (uint32, error) {
 type ipcResponse struct {
 	RV   uint32          `json:"rv"`
 	Data json.RawMessage `json:"data"`
+}
+
+// platformPin 判断后端是否要求「PIN 由平台收集」（clientPIN 模式）。
+// 为真时本程序不弹自带对话框，直接把 0x36 交回平台。
+func platformPin(data json.RawMessage) bool {
+	if len(data) == 0 {
+		return false
+	}
+	var payload struct {
+		PlatformPIN bool `json:"platform_pin"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return false
+	}
+	return payload.PlatformPIN
 }
 
 // parseCards 解析 PIN 对话框需要的卡片列表：{"cards":[{"card_uuid","card_name"}]}

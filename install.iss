@@ -232,6 +232,10 @@ english.TypeFull=Full installation
 english.TypeCustom=Custom installation
 english.CompOpenSc=OpenSC smart card middleware (recommended)
 english.CompAgent=SSH key agent (WinCryptSSHAgent)
+english.CompFido=FIDO2 / passkey support (virtual USB security key)
+english.TaskFidoDriver=Install the virtual USB bus driver now (required by FIDO2)
+english.TaskAutoStart=Start automatically at sign-in (loads the FIDO2 service in background)
+english.StatusFidoDriver=Installing the virtual USB bus driver...
 english.StatusVcRedist=Installing Microsoft Visual C++ 2015-2022 runtime...
 english.StatusOpenSc=Installing OpenSC (smart card middleware)...
 english.ItemLine=%1: %2
@@ -255,6 +259,10 @@ chinesesimplified.TypeFull=完整安装
 chinesesimplified.TypeCustom=自定义安装
 chinesesimplified.CompOpenSc=OpenSC 智能卡中间件（推荐）
 chinesesimplified.CompAgent=SSH 密钥代理（WinCryptSSHAgent）
+chinesesimplified.CompFido=FIDO2 / 通行密钥支持（虚拟 USB 安全密钥）
+chinesesimplified.TaskFidoDriver=现在安装虚拟 USB 总线驱动（FIDO2 必需）
+chinesesimplified.TaskAutoStart=登录时自动启动（后台加载 FIDO2 服务）
+chinesesimplified.StatusFidoDriver=正在安装虚拟 USB 总线驱动...
 chinesesimplified.StatusVcRedist=正在安装 Visual C++ 2015-2022 运行库...
 chinesesimplified.StatusOpenSc=正在安装 OpenSC（智能卡中间件）...
 chinesesimplified.ItemLine=%1：%2
@@ -281,12 +289,20 @@ Name: "custom"; Description: "{cm:TypeCustom}"; Flags: iscustom
 ; SSH 代理不属于任何类型 → 默认不勾选
 Name: "opensc"; Description: "{cm:CompOpenSc}"; Types: full custom
 Name: "agent"; Description: "{cm:CompAgent}"
+; FIDO2：虚拟 USB 安全密钥。程序文件总是随包复制（几百 KB 驱动 + 设备端），
+; 这个组件只决定「要不要现在就装驱动」——驱动是内核驱动，需管理员且可能
+; 因签名策略失败，所以单独作为可勾选项，失败也能在程序里重试。
+Name: "fido"; Description: "{cm:CompFido}"; Types: full custom
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 ; 代理的快捷方式默认不创建（选了「SSH 密钥代理」组件才可选）；
 ; 开机自启不再由安装包创建启动文件夹快捷方式，改由程序「系统设置 - 启动与托盘」管理
 Name: "agenticon"; Description: "{cm:TaskAgentIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Components: agent; Flags: unchecked
+; 选装「FIDO2」组件时，默认顺便把虚拟总线驱动装上（不装设备就不会出现）
+Name: "fidodriver"; Description: "{cm:TaskFidoDriver}"; GroupDescription: "{cm:GroupTasks}"; Components: fido
+; 登录自启：拉起主程序（托盘常驻），驱动已装时它会把 FIDO2 设备端一起启动
+Name: "autostart"; Description: "{cm:TaskAutoStart}"; GroupDescription: "{cm:GroupTasks}"
 
 [Files]
 ; 程序主体（cx_Freeze 输出）；SSH 代理是可选项，单独作为一条目的（见下）
@@ -544,4 +560,76 @@ begin
   if PrereqFailed then
     MsgBox(CM('PrereqWarnTitle') + #13#10 + #13#10 + PrereqLog + #13#10 +
            CM('PrereqWarnBody'), mbInformation, MB_OK);
+end;
+
+{ FIDO2：安装虚拟 USB 总线驱动。
+
+  用驱动包自带的 usbip.exe install（它会找同目录的 inf/sys/cat、自己创建
+  ROOT 枚举设备节点并处理签名），比在安装器里重写一遍 SetupAPI 调用可靠。
+  失败不中断安装——程序「系统设置 → FIDO2」里可以重试，并给出签名诊断。 }
+procedure InstallFidoDriver();
+var
+  ResultCode: Integer;
+  DriverDir: String;
+begin
+  if not WizardIsTaskSelected('fidodriver') then
+    exit;
+  DriverDir := ExpandConstant('{app}\Fido\usbip');
+  if not FileExists(DriverDir + '\usbip.exe') then
+  begin
+    Log('FIDO2 驱动包缺失，跳过驱动安装：' + DriverDir);
+    exit;
+  end;
+  WizardForm.StatusLabel.Caption := ExpandConstant('{cm:StatusFidoDriver}');
+  if (not Exec(DriverDir + '\usbip.exe', 'install -u -f', DriverDir, SW_HIDE,
+               ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
+    Log('FIDO2 驱动安装未成功，退出码 ' + IntToStr(ResultCode) +
+        '（可在程序「系统设置 → FIDO2」里重试）')
+  else
+    Log('FIDO2 虚拟总线驱动安装完成');
+end;
+
+{ 登录自启：与程序 Module\AutoStart.py 完全一致的写法（计划任务 + 最高权限，
+  登录时不弹 UAC）；计划任务失败才退回 HKCU 的 Run 键。 }
+procedure EnableAutoStart();
+var
+  ResultCode: Integer;
+  ExePath: String;
+  Script: String;
+begin
+  if not WizardIsTaskSelected('autostart') then
+    exit;
+  ExePath := ExpandConstant('{app}\SmartCardAPP.exe');
+  Script :=
+    '$ErrorActionPreference=''Stop'';' +
+    '$a=New-ScheduledTaskAction -Execute ''' + ExePath +
+    ''' -Argument ''--minimized'';' +
+    '$t=New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME;' +
+    '$s=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries' +
+    ' -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Seconds 0)' +
+    ' -MultipleInstances IgnoreNew;' +
+    '$p=New-ScheduledTaskPrincipal -UserId $env:USERNAME' +
+    ' -LogonType Interactive -RunLevel Highest;' +
+    'Register-ScheduledTask -TaskName ''TPMSmartCard'' -Action $a -Trigger $t' +
+    ' -Settings $s -Principal $p -Force | Out-Null';
+  if (not Exec('powershell.exe',
+               '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' +
+               Script + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode))
+     or (ResultCode <> 0) then
+  begin
+    Log('计划任务创建失败（退出码 ' + IntToStr(ResultCode) + '），改用注册表 Run 键');
+    RegWriteStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run',
+                        'TPMSmartCard', '"' + ExePath + '" --minimized');
+  end
+  else
+    Log('已创建登录自启计划任务 TPMSmartCard');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    InstallFidoDriver();
+    EnableAutoStart();
+  end;
 end;

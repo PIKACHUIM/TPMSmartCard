@@ -314,5 +314,17 @@
   "msg_fido_pin_ok": "確定",
   "msg_fido_pin_cancel": "取消",
   "msg_fido_pin_wrong": "PIN 不正確，請重試",
-  "msg_fido_backup": "FIDO2 憑據 %d 筆"
+  "msg_fido_backup": "FIDO2 憑據 %d 筆",
+  "msg_fido_pin_mode": "PIN 輸入方式：",
+  "msg_fido_pin_mode_platform": "Windows 安全性對話方塊（建議）",
+  "msg_fido_pin_mode_app": "本程式彈窗",
+  "msg_fido_clientpin_tip": "提示：首次用「Windows 安全性對話方塊」驗證時，Windows 會提示設定 PIN——請輸入卡片 PIN（不是 Windows 登入 PIN），它會在卡片上驗證。之後每次驗證只會彈一次 Windows 的 PIN 方塊。",
+  "msg_fido_type": "FIDO2 通行金鑰",
+  "msg_fido_usages": "WebAuthn / 通行金鑰（Passkey）",
+  "msg_fido_no_cert_item": "無法匯出",
+  "msg_fido_no_cert_text": "FIDO2 憑證不是憑證書，沒有可匯出的 X.509 檔案；它只用於對應網站的通行金鑰登入。",
+  "msg_fido_delete_ok": "已刪除該 FIDO2 憑證",
+  "msg_fido_delete_fail": "刪除 FIDO2 憑證失敗",
+  "msg_fido_card_label": "FIDO2 使用的卡片：",
+  "msg_fido_card_auto": "自動（上次使用 / 第一張）"
 }

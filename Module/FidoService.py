@@ -27,6 +27,7 @@ import subprocess
 import threading
 import time
 
+from Module import FidoClientPin
 from Module import FidoCtap
 from Module import FidoIpc
 from Module import FidoRuntime
@@ -59,6 +60,9 @@ class FidoService:
         self._started_at = ""
         self._last_error = ""
         self._log_lock = threading.Lock()
+        # clientPIN 模式的密钥协商状态（平台每次认证前会重新 getKeyAgreement）
+        self._pin = FidoClientPin.PinProtocol()
+        self._pin_retries = 8         # 平台侧展示的剩余次数（真实计数在卡片里）
 
     # ---- 日志 ------------------------------------------------------------ #
     def log(self, text):
@@ -80,6 +84,15 @@ class FidoService:
         settings = self.settings
         settings.update(kwargs)
         return FidoStore.write_settings(settings)
+
+    @property
+    def pin_mode(self):
+        """PIN 由谁收集：``clientpin``（平台，默认）/ ``builtin``（本程序弹窗）。"""
+        value = str(self.settings.get("pin_mode")
+                    or FidoCtap.PIN_MODE_CLIENT).strip().lower()
+        if value not in (FidoCtap.PIN_MODE_CLIENT, FidoCtap.PIN_MODE_BUILTIN):
+            return FidoCtap.PIN_MODE_CLIENT
+        return value
 
     # ---- 卡片枚举 -------------------------------------------------------- #
     def cards(self, include_disabled=False):
@@ -141,6 +154,107 @@ class FidoService:
         if info is None:
             return None
         return FidoStore.FidoStore.open(info["guid"], info["serial"], info["name"])
+
+    def active_card(self, prefer=None):
+        """clientPIN 流程用哪张卡：优先上次用过的，否则取第一张可用卡。"""
+        items = self.cards()
+        if not items:
+            return None
+        name = str(prefer or self.settings.get("active_card") or "")
+        for item in items:
+            if item["name"] == name:
+                return item
+        return items[0]
+
+    def _bind_session(self, card, store, master):
+        self._session = {"store": store, "master": master, "card": card,
+                         "expires": time.time() + self._session_timeout()}
+        try:
+            self.update_settings(active_card=card["name"])
+        except Exception:
+            pass
+
+    # ---- clientPIN：平台弹 PIN，设备只负责校验 ---------------------------- #
+    def _pin_verifier(self, action, payload=None):
+        """:func:`Module.FidoCtap.client_pin` 的回调。
+
+        返回 ``{"status": ok/wrong/locked/not_set, "retries": n, "message": str}``。
+        """
+        if self.pin_mode != FidoCtap.PIN_MODE_CLIENT:
+            return {"status": "not_set", "message": "当前不是 clientPIN 模式"}
+        card = self.active_card()
+        if card is None:
+            return {"status": "not_set", "message": "没有可用的 TPM 虚拟卡"}
+        try:
+            store = FidoStore.FidoStore.open(card["guid"], card["serial"],
+                                            card["name"])
+        except FidoStore.StoreError as err:
+            return {"status": "not_set", "message": str(err)}
+        if action == "retries":
+            if not store.has_pin_verifier:
+                return {"status": "not_set"}
+            return {"status": "ok", "retries": max(1, int(self._pin_retries))}
+        if action == "set_pin":
+            return self._clientpin_set_pin(card, store, str(payload or ""))
+        if action == "token":
+            return self._clientpin_token(card, store, bytes(payload or b""))
+        return {"status": "not_set"}
+
+    def _clientpin_set_pin(self, card, store, pin):
+        """平台第一次收 PIN：这是唯一能拿到明文的时刻，交给卡片自己校验。"""
+        if not pin:
+            return {"status": "wrong", "message": "PIN 不能为空"}
+        state, text = self.verify_pin(card["reader"], pin)
+        if state == "locked":
+            self._pin_retries = 0
+            self.log("clientPIN：卡片 PIN 已锁定")
+            return {"status": "locked", "message": "PIN 已锁定，请先用 PUK 解锁"}
+        if state != "ok":
+            self._pin_retries = max(0, self._pin_retries - 1)
+            self.log("clientPIN：卡片 PIN 校验未通过（%s）：%s"
+                     % (state, (text or "")[:200]))
+            if self._pin_retries <= 0:
+                return {"status": "locked", "message": (text or "")[:120]}
+            return {"status": "wrong", "message": (text or "")[:120]}
+        master = store.unlock(pin)
+        if master is None:
+            self.log("clientPIN：PIN 正确但凭据库解不开（PIN 与库不匹配）")
+            return {"status": "wrong", "message": "PIN 与凭据库不匹配"}
+        store.set_pin_verifier(pin)      # 之后只能拿到哈希，用它比对
+        store.remember_master(master)    # DPAPI 副本：重启后不用 PIN 原文也能解库
+        self._bind_session(card, store, master)
+        self._pin_retries = 8
+        self.log("clientPIN：卡片校验通过，已记录 PIN 校验材料（%s）" % card["name"])
+        return {"status": "ok", "retries": 8}
+
+    def _clientpin_token(self, card, store, digest):
+        """之后的每次认证：平台只送 ``SHA-256(PIN)[0:16]``，比对记录值。"""
+        if not store.has_pin_verifier:
+            self.log("clientPIN：本机还没有 PIN 校验材料，需要平台重新设置 PIN")
+            return {"status": "not_set"}
+        if not store.check_pin_verifier(digest):
+            self._pin_retries = max(0, self._pin_retries - 1)
+            self.log("clientPIN：PIN 哈希不匹配（本机记录剩余 %d 次）"
+                     % self._pin_retries)
+            if self._pin_retries <= 0:
+                return {"status": "locked", "message": "PIN 连续错误"}
+            return {"status": "wrong", "message": "PIN 不正确",
+                    "retries": self._pin_retries}
+        master = store.recover_master()
+        if master is None:
+            # 换机/重装丢了 DPAPI 副本：清掉哈希，让平台重新走 setPIN
+            store.clear_pin_verifier()
+            self.log("clientPIN：缺少本机解锁副本，已要求重新设置 PIN")
+            return {"status": "not_set", "message": "凭据库缺少本机解锁副本"}
+        session = self.session
+        if session is None or session["card"].get("name") != card["name"]:
+            self._bind_session(card, store, master)
+        else:
+            session["store"] = store
+            session["master"] = master
+            self._touch_session()
+        self._pin_retries = 8
+        return {"status": "ok", "retries": 8}
 
     # ---- 卡片 PIN 校验 --------------------------------------------------- #
     @staticmethod
@@ -242,12 +356,7 @@ class FidoService:
                 self.log("PIN 正确但凭据库解不开：凭据是用另一个 PIN 封装的")
                 return 0xA0
             store.remember_master(master)
-            self._session = {
-                "store": store,
-                "master": master,
-                "card": card,
-                "expires": time.time() + self._session_timeout(),
-            }
+            self._bind_session(card, store, master)
             self.log("PIN 认证成功: %s（凭据 %d 条）" % (card["name"],
                                                         len(store.credentials)))
             return 0
@@ -265,15 +374,17 @@ class FidoService:
             body = {}
         try:
             if cmd == FidoIpc.CMD_GET_INFO:
+                info = FidoCtap.get_info(self.pin_mode)
                 return {"rv": 0, "data": {
-                    "cbor_info": base64.b64encode(FidoCtap.get_info()).decode("ascii")}}
+                    "cbor_info": base64.b64encode(info).decode("ascii")}}
             if cmd == FidoIpc.CMD_CANCEL:
                 return {"rv": 0}
             if cmd == FidoIpc.CMD_LOGIN:
                 rv = self.login(str(body.get("card_uuid") or ""),
                                 str(body.get("pin") or ""))
                 return {"rv": rv}
-            if cmd in (FidoIpc.CMD_MAKE_CREDENTIAL, FidoIpc.CMD_GET_ASSERTION):
+            if cmd in (FidoIpc.CMD_MAKE_CREDENTIAL, FidoIpc.CMD_GET_ASSERTION,
+                       FidoIpc.CMD_CLIENT_PIN):
                 return self._handle_ctap(cmd, body)
             self.log("未知 IPC 命令 0x%04X" % cmd)
             return {"rv": FidoCtap.CTAP1_ERR_INVALID_COMMAND}
@@ -285,24 +396,38 @@ class FidoService:
 
     def _handle_ctap(self, cmd, body):
         cbor = base64.b64decode(body.get("cbor_req") or "")
-        command = (FidoCtap.CMD_MAKE_CREDENTIAL
-                   if cmd == FidoIpc.CMD_MAKE_CREDENTIAL
-                   else FidoCtap.CMD_GET_ASSERTION)
+        command = {
+            FidoIpc.CMD_MAKE_CREDENTIAL: FidoCtap.CMD_MAKE_CREDENTIAL,
+            FidoIpc.CMD_GET_ASSERTION: FidoCtap.CMD_GET_ASSERTION,
+            FidoIpc.CMD_CLIENT_PIN: FidoCtap.CMD_CLIENT_PIN,
+        }.get(cmd, FidoCtap.CMD_GET_ASSERTION)
+        mode = self.pin_mode
+        client_pin = mode == FidoCtap.PIN_MODE_CLIENT
         session = self.session
         try:
-            result = FidoCtap.handle(command, cbor,
-                                     session["store"] if session else None,
-                                     session["master"] if session else None,
-                                     self.log)
+            result = FidoCtap.handle(
+                command, cbor,
+                session["store"] if session else None,
+                session["master"] if session else None,
+                self.log,
+                pin=self._pin if client_pin else None,
+                pin_mode=mode,
+                pin_verifier=self._pin_verifier if client_pin else None)
             self._touch_session()
         except FidoCtap.PinRequired:
+            # platform_pin=True 告诉 fido-go：不要弹自带对话框，直接把 0x36
+            # 交给平台（Windows 会用自己的 PIN 对话框继续 clientPIN 流程）
             return {"rv": FidoCtap.CTAP2_ERR_PIN_REQUIRED,
-                    "data": {"cards": [{"card_uuid": item["uuid"],
+                    "data": {"platform_pin": client_pin,
+                             "cards": [{"card_uuid": item["uuid"],
                                         "card_name": item["name"]}
                                        for item in self.cards()]}}
         except FidoCtap.CtapError as err:
             self.log("CTAP 命令 0x%02X 失败（0x%02X）: %s"
                      % (command, err.code, err))
+            if err.code == FidoCtap.CTAP2_ERR_PIN_REQUIRED and client_pin:
+                # 同样是「要 PIN」：告诉 fido-go 别弹自带对话框（它只认这个标记）
+                return {"rv": err.code, "data": {"platform_pin": True}}
             return {"rv": err.code}
         return {"rv": 0, "data": {"cbor_resp": base64.b64encode(result).decode("ascii")}}
 
@@ -497,23 +622,46 @@ class FidoService:
         rows.sort(key=lambda row: (row["card"], row["rp_id"]))
         return rows
 
+    def _store_for_write(self, card_key):
+        """取一个和当前会话一致的 store 实例（避免内存副本覆盖磁盘）。
+
+        关键：登录后 ``self._session["store"]`` 是一份**内存副本**，认证成功后
+        ``bump_counter`` 会把它写回磁盘。如果删除凭据时另开一个实例只改磁盘，
+        下一次认证就会用内存副本把刚删掉的凭据写回去——现象就是「删了以后
+        重启程序又出现，而且还能用它认证」。
+        """
+        session = self.session
+        if session is not None and session["store"].key == card_key:
+            return session["store"], True
+        return FidoStore.FidoStore.load(card_key), False
+
     def delete_credential(self, card_key, entry_uuid):
-        store = FidoStore.FidoStore.load(card_key)
-        if store is None:
-            return False
-        ok = store.delete_credential(entry_uuid)
-        if ok:
-            self.log("已删除凭据: %s（%s）" % (entry_uuid, store.display_name))
-        return ok
+        with self._lock:
+            store, shared = self._store_for_write(card_key)
+            if store is None:
+                return False
+            ok = store.delete_credential(entry_uuid)
+            if ok:
+                # 凭据集合变了，当前会话语义上已经不可信：直接失效，下次认证
+                # 重新验 PIN（否则同一个 PIN 会话里还能继续用旧状态）
+                if shared:
+                    self.logout()
+                self.log("已删除凭据: %s（%s）" % (entry_uuid, store.display_name))
+            return ok
 
     def clear_credentials(self, card_key):
-        store = FidoStore.FidoStore.load(card_key)
-        if store is None:
-            return 0
-        count = len(store.credentials)
-        store.clear_credentials()
-        self.log("已清空卡片凭据: %s（%d 条）" % (store.display_name, count))
-        return count
+        with self._lock:
+            store, shared = self._store_for_write(card_key)
+            if store is None:
+                return 0
+            count = len(store.credentials)
+            if not count:
+                return 0
+            store.clear_credentials()
+            if shared:
+                self.logout()
+            self.log("已清空卡片凭据: %s（%d 条）" % (store.display_name, count))
+            return count
 
     # ---- PIN 变更后的重新封装 -------------------------------------------- #
     def rewrap_after_pin_change(self, card_name, old_pin, new_pin):

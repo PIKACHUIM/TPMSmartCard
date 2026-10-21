@@ -54,7 +54,8 @@ CMD_GET_INFO = 0x0300
 CMD_MAKE_CREDENTIAL = 0x0301
 CMD_GET_ASSERTION = 0x0302
 CMD_CANCEL = 0x0303
-CMD_LOGIN = 0x0304
+CMD_LOGIN = 0x0304          # 内置 UV 模式：fido-go 弹框后调它登录
+CMD_CLIENT_PIN = 0x0305     # clientPIN 模式：平台把 0x06 命令原样转发过来
 
 DEFAULT_PIPE_NAME = r"\\.\pipe\TPMFIDO"
 
@@ -179,6 +180,8 @@ class PipeServer:
                 return True
             if self._external:
                 return self._probe()
+            if self.error:                  # 建不了管道（权限/参数），别干等
+                return False
             time.sleep(0.02)
         if not self.error:
             self.error = "管道未能启动"
@@ -280,11 +283,17 @@ class PipeServer:
                 IPC_MAX_PAYLOAD, IPC_MAX_PAYLOAD, 0, None)
             if handle == INVALID_HANDLE_VALUE or handle is None:
                 code = ctypes.get_last_error()
-                if first and code == ERROR_ACCESS_DENIED:
+                # ERROR_ACCESS_DENIED 有两种可能：①已有别的进程在服务（我们可
+                # 以当客户端）；②管道存在但安全描述符不允许本进程访问（典型是
+                # 管理员进程建的服务 + 普通用户进程来连）。只有能连上才算 ①。
+                if first and code == ERROR_ACCESS_DENIED and self._probe():
                     self._external = True
                     self.logger("命名管道已由另一个进程提供，本实例只做客户端")
                     return
-                self.error = "创建命名管道失败（错误码 %d）" % code
+                hint = ""
+                if code == ERROR_ACCESS_DENIED:
+                    hint = ("（权限不足：该管道由管理员进程创建，本进程没有访问权限）")
+                self.error = "创建命名管道失败（错误码 %d）%s" % (code, hint)
                 self.logger(self.error)
                 return
             first = False

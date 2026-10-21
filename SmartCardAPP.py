@@ -124,6 +124,9 @@ class SmartCardAPP:
             "card": "",
             "cert": ""
         }
+        # 证书表格里混排的 FIDO2 凭据（uuid -> 凭据信息），
+        # 它们不是证书：没有 X.509、不能导出，详情也只显示站点/用户名
+        self.fido_rows = dict()
         self.setup_fonts()
         self.build_ui()
         # 托盘先建好：后面的启动检查、状态刷新如果弹框，用户也能从托盘找回窗口
@@ -267,7 +270,11 @@ class SmartCardAPP:
         return FidoService.get()
 
     def startup_fido(self):
-        """按设置自动开启 FIDO2；失败只写日志，不打断程序启动。"""
+        """按设置自动开启 FIDO2；失败只写日志，不打断程序启动。
+
+        驱动已经装好就直接把设备端进程拉起来（默认设置里服务是开启的），
+        用户不必每次开机后再去设置里点一次「启动」；驱动没装则只记一行日志。
+        """
         try:
             service = self.fido_service()
             if not service.settings.get("enabled"):
@@ -278,8 +285,13 @@ class SmartCardAPP:
 
         def worker():
             try:
-                ok, text = service.start()
-                print("FIDO2:", text)
+                from Module import FidoRuntime
+                state, text, _driver = FidoRuntime.driver_state()
+                if state != "ok":
+                    print("FIDO2：驱动未就绪，跳过自动启动（%s）" % text)
+                    return
+                ok, started = service.start()
+                print("FIDO2:", started)
             except Exception as err:
                 print("FIDO2 启动失败:", err)
 
@@ -581,6 +593,7 @@ class SmartCardAPP:
             "card": "",
             "cert": ""
         }
+        self.fido_rows = dict()
         self.setup_fonts(in_create=False)
         self.build_ui()
         if self.tray is not None:
@@ -699,7 +712,12 @@ class SmartCardAPP:
                 if getattr(cert, "sc_card", None) not in self.data.cards}
 
     def fill_cert_table(self):
-        """按当前选中的卡片重建证书表格（证书列表随选卡变化）。"""
+        """按当前选中的卡片重建证书表格（证书列表随选卡变化）。
+
+        FIDO2 凭据也在这张表里显示（用户要求「凭据要出现在证书与密钥里」），
+        但它们不是 X.509 证书：第 1 列放凭据 UUID、第 3 列标 FIDO2，
+        详情与导出在 :meth:`cert_select` / :meth:`cert_out_to` 里分别处理。
+        """
         table = (self.tables.get("cert_main") or (None, None))[0]
         if table is None:
             return None
@@ -721,7 +739,35 @@ class SmartCardAPP:
                 cert_data.sc_exec,
                 cert_data.sc_keys
             ))
+        self.fido_rows = dict()
+        for row in self.fido_credential_rows():
+            uuid_now = str(row.get("uuid") or "")
+            if not uuid_now or uuid_now in self.fido_rows:
+                continue
+            self.fido_rows[uuid_now] = row
+            table.insert("", tk.END, values=(
+                uuid_now,
+                row.get("rp_id") or row.get("rp_name") or "",
+                "FIDO2",
+                "ES256",
+            ))
         return None
+
+    def fido_credential_rows(self):
+        """当前卡片上的 FIDO2 凭据（没有选中卡片时返回空）。
+
+        会连带触发一次卡片枚举，所以只在重建表格时调用一次。
+        """
+        picked = self.pick.get("card") or ""
+        if not picked:
+            return []
+        try:
+            from Module.FidoService import FidoService
+            rows = FidoService.get().list_credentials()
+        except Exception as err:                     # 没装/没启用 FIDO2 时安静跳过
+            print("读取 FIDO2 凭据失败:", err)
+            return []
+        return [row for row in rows if str(row.get("card") or "") == picked]
 
     def clear_cert_pick(self):
         """清空证书选中状态：详情区回到居中提示，相关按钮禁用。"""
@@ -1209,7 +1255,76 @@ class SmartCardAPP:
         self.load_status()
         return None
 
+    def show_fido_credential(self, uuid_now):
+        """在证书详情区显示一条 FIDO2 凭据。
+
+        用户明确要求：这里要看的是「凭据的网站、用户名、时间」，而不是证书
+        字段；没有 X.509 证书，所以导出/装到系统的按钮直接禁用。
+        """
+        row = self.fido_rows.get(uuid_now) or {}
+        self.pick["cert"] = "fido:" + uuid_now
+        empty_tag = self.i18n("msg_empty")
+        none_tag = self.i18n("msg_na")
+        site = str(row.get("rp_id") or row.get("rp_name") or "")
+        created = str(row.get("created_at") or "") or none_tag
+        used = str(row.get("last_used_at") or "") or none_tag
+        values = {
+            "cert_uuid": uuid_now,
+            "cert_name": site,
+            "cert_sign": "ES256 / P-256",
+            "cert_type": self.i18n("msg_fido_type"),
+            "cert_open": created,
+            "cert_stop": used,
+            "is_ca_cert": none_tag,
+            "is_expired": none_tag,
+            "cert_sha1": none_tag,
+            "key_usages": self.i18n("msg_fido_usages"),
+            "sub_usages": str(row.get("card") or ""),
+            "key_identy": str(row.get("credential_id") or "")[:32],
+            "uid_serial": none_tag,
+            "sub_identy": none_tag,
+            "cer_policy": none_tag,
+            "user_name": str(row.get("user_name") or "") or empty_tag,
+            "user_code": none_tag,
+            "user_area": none_tag,
+            "user_city": none_tag,
+            "user_on_t": str(row.get("user_display_name") or "") or empty_tag,
+            "user_ou_t": empty_tag,
+            "last_name": str(row.get("rp_name") or site),
+            "last_code": none_tag,
+            "last_area": none_tag,
+            "last_city": none_tag,
+            "last_on_t": str(row.get("card") or ""),
+            "last_ou_t": empty_tag,
+        }
+        for fill_name, text in values.items():
+            for label in ["cert_info", "cert_user", "cert_last"]:
+                label_now = self.labels[label]
+                if fill_name in label_now:
+                    label_now[fill_name][1].config(text=text)
+        # 删除可用（删除凭据），导出/写系统证书库不可用
+        self.button["cert_main"]["non"].config(state=tk.NORMAL)
+        self.button["cert_main"]["sys"].config(state=tk.DISABLED)
+        self.button["cert_main"]["out"].config(state=tk.DISABLED)
+        return None
+
+    def delete_fido_credential(self):
+        """删除当前选中的 FIDO2 凭据，返回给用户看的结果文本。"""
+        uuid_now = str(self.pick.get("cert") or "")[5:]
+        row = self.fido_rows.get(uuid_now) or {}
+        try:
+            from Module.FidoService import FidoService
+            ok = FidoService.get().delete_credential(
+                str(row.get("card_key") or ""), uuid_now)
+        except Exception as err:
+            return self.i18n("msg_fido_delete_fail") + ": %s" % err
+        return self.i18n("msg_fido_delete_ok") if ok else self.i18n("msg_fido_delete_fail")
+
     def cert_out_to(self, in_path=None):
+        if str(self.pick.get("cert") or "").startswith("fido:"):
+            messagebox.showinfo(self.i18n("msg_fido_no_cert_item"),
+                                self.i18n("msg_fido_no_cert_text"))
+            return None
         la_path = in_path
         if self.pick["cert"] in self.data.certs:
             now_cert = self.data.certs[self.pick["cert"]]
@@ -1278,6 +1393,10 @@ class SmartCardAPP:
         if len(selected_item) > 0:
             selected_name = treeview.set(selected_item[0], '#2')
             selected_uuid = treeview.set(selected_item[0], '#1')
+            # FIDO2 凭据：不是证书，走单独的详情填充（站点/用户名/时间）
+            if selected_uuid in self.fido_rows:
+                self.show_fido_credential(selected_uuid)
+                return None
             selected_name = selected_name.replace(self.i18n("msg_no_cert"), "")
             if selected_name != "":
                 self.pick["cert"] = selected_name + " " + selected_uuid
@@ -1716,15 +1835,20 @@ class SmartCardAPP:
                     messagebox.showwarning(self.i18n("fail"), self.i18n("msg_remote_session"))
                     make.attributes('-topmost', True)
                     return None
+                # FIDO2 凭据不是证书：删除走凭据库（且不能带「重启生效」那句）
+                fido_target = (in_name == "cert"
+                               and str(self.pick.get("cert") or "").startswith("fido:"))
                 if in_name == "card":
                     result = TPMSmartCard.dropCards(self.data.cards[self.pick[in_name]].sc_path)
+                elif fido_target:
+                    result = self.delete_fido_credential()
                 elif in_name == "cert":
                     result = TPMSmartCard.dropCerts(self.pick["cert"])
                 self.deselectAll()
                 self.load_status()
                 self.close_dialog(make)
                 if len(result) > 0:
-                    if in_name == "cert":
+                    if in_name == "cert" and not fido_target:
                         result += self.i18n("delete_cert_reboot")
                     messagebox.showinfo(self.i18n("msg_remove") + self.i18n("msg_result"), result)
 

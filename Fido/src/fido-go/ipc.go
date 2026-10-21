@@ -28,6 +28,8 @@ const (
 	cmdGetAssertion   uint32 = 0x0302
 	cmdCancel         uint32 = 0x0303
 	cmdLogin          uint32 = 0x0304
+	// 平台自己收集 PIN 时（clientPIN 模式），CTAP 的 0x06 命令原样转发给后端
+	cmdClientPin uint32 = 0x0305
 )
 
 // ipcCall 发送一次请求并返回响应 JSON（不含帧头）。

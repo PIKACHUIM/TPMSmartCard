@@ -314,5 +314,17 @@
   "msg_fido_pin_ok": "OK",
   "msg_fido_pin_cancel": "キャンセル",
   "msg_fido_pin_wrong": "PIN が正しくありません。もう一度入力してください",
-  "msg_fido_backup": "FIDO2 資格情報 %d 件"
+  "msg_fido_backup": "FIDO2 資格情報 %d 件",
+  "msg_fido_pin_mode": "PIN の入力方法:",
+  "msg_fido_pin_mode_platform": "Windows のセキュリティダイアログ（推奨）",
+  "msg_fido_pin_mode_app": "このアプリのダイアログ",
+  "msg_fido_clientpin_tip": "ヒント: 「Windows のセキュリティダイアログ」で最初に PIN の設定を求められたら、カードの PIN（Windows のサインイン PIN ではありません）を入力してください。カード側で検証します。以降は Windows の PIN ダイアログだけが表示されます。",
+  "msg_fido_type": "FIDO2 パスキー",
+  "msg_fido_usages": "WebAuthn / パスキー",
+  "msg_fido_no_cert_item": "エクスポートできません",
+  "msg_fido_no_cert_text": "FIDO2 資格情報は証明書ではないため、エクスポートできる X.509 ファイルはありません。該当サイトのパスキーログインにのみ使用します。",
+  "msg_fido_delete_ok": "FIDO2 資格情報を削除しました",
+  "msg_fido_delete_fail": "FIDO2 資格情報の削除に失敗しました",
+  "msg_fido_card_label": "FIDO2 で使用するカード:",
+  "msg_fido_card_auto": "自動（最後に使用 / 最初のカード）"
 }
