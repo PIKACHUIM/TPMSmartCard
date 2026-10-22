@@ -36,7 +36,7 @@ from Module.FidoService import FidoService                            # noqa: E4
 PIPE_NAME = r"\\.\pipe\TPMFIDO-SELFTEST"
 FAKE_CARD = {"name": "Microsoft Virtual Smart Card 0", "uuid": "aabbccdd",
              "reader": 0, "key": "guid-selftest", "guid": "selftest",
-             "serial": "aabbccdd", "enabled": True, "count": 0}
+             "serial": "aabbccdd", "enabled": True, "bound": True, "count": 0}
 
 
 def main():
@@ -47,7 +47,7 @@ def main():
     # 设置也要指到临时目录，否则登录成功会把 active_card 写进真实设置文件
     FidoStore.settings_path = lambda: os.path.join(folder, "settings.json")
     service = FidoService()
-    service.cards = lambda include_disabled=False: [dict(FAKE_CARD)]
+    service.cards = lambda include_disabled=False, use_cache=True: [dict(FAKE_CARD)]
     service.verify_pin = lambda reader, pin: ("ok", "selftest")
     # 本测试走的是「内置 UV」那条路（fido-go 弹框 → CMD_LOGIN），
     # clientPIN 的全链路在 fido_clientpin_test.py 里单独测

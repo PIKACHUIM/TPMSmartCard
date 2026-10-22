@@ -144,13 +144,20 @@ def get_info(pin_mode=PIN_MODE_CLIENT):
     return FidoCbor.encode(info)
 
 
-def _require_uv(params, pin, pin_mode, client_data_hash, param_key, protocol_key):
+def _require_uv(params, pin, pin_mode, client_data_hash, param_key, protocol_key,
+                uv_ok=False):
     """clientPIN 模式下校验 MC/GA 的 ``pinUvAuthParam``。
 
     校验不过就报 PIN_REQUIRED，平台会去走 0x06 流程（自己弹 PIN 框），
     而不是像内置 UV 那样把请求挂在设备这里等用户输入。
+
+    ``uv_ok=True`` 表示「用户刚刚在本程序的弹窗里选卡并输过 PIN，卡片已校验通过」
+    （见 :meth:`Module.FidoService.FidoService.login`）：这一次请求不再要求
+    pinUvAuthParam，否则用户会被要求连输两次 PIN。
     """
     if str(pin_mode or PIN_MODE_CLIENT).lower() == PIN_MODE_BUILTIN:
+        return
+    if uv_ok:
         return
     if pin is None or not pin.pin_token:
         raise CtapError(CTAP2_ERR_PIN_REQUIRED, "需要 PIN（还没有有效的 pinToken）")
@@ -224,12 +231,12 @@ def _user_entity(user):
 # MakeCredential
 # --------------------------------------------------------------------------- #
 def make_credential(raw_params, store, master_key, pin=None,
-                    pin_mode=PIN_MODE_CLIENT):
+                    pin_mode=PIN_MODE_CLIENT, uv_ok=False):
     """注册新凭据，返回 attestationObject。"""
     params = _decode_params(raw_params)
     client_data_hash = bytes(_require(params, 1, "clientDataHash"))
     _require_uv(params, pin, pin_mode, client_data_hash,
-                MC_PIN_AUTH_PARAM, MC_PIN_AUTH_PROTOCOL)
+                MC_PIN_AUTH_PARAM, MC_PIN_AUTH_PROTOCOL, uv_ok)
     rp = _require(params, 2, "rp")
     user = _require(params, 3, "user")
     algorithms = _require(params, 4, "pubKeyCredParams")
@@ -299,13 +306,13 @@ def make_credential(raw_params, store, master_key, pin=None,
 # GetAssertion
 # --------------------------------------------------------------------------- #
 def get_assertion(raw_params, store, master_key, pin=None,
-                  pin_mode=PIN_MODE_CLIENT):
+                  pin_mode=PIN_MODE_CLIENT, uv_ok=False):
     """用已有凭据签名，返回 assertionObject。"""
     params = _decode_params(raw_params)
     rp_id = str(_require(params, 1, "rpId"))
     client_data_hash = bytes(_require(params, 2, "clientDataHash"))
     _require_uv(params, pin, pin_mode, client_data_hash,
-                GA_PIN_AUTH_PARAM, GA_PIN_AUTH_PROTOCOL)
+                GA_PIN_AUTH_PARAM, GA_PIN_AUTH_PROTOCOL, uv_ok)
 
     allow_list = params.get(3) or []
     allow_ids = []
@@ -467,9 +474,10 @@ def _client_pin_token(params, pin, verifier):
 # 命令分发
 # --------------------------------------------------------------------------- #
 def handle(command, raw_params, store, master_key, logger=None, pin=None,
-           pin_mode=PIN_MODE_CLIENT, pin_verifier=None):
+           pin_mode=PIN_MODE_CLIENT, pin_verifier=None, uv_ok=False):
     """处理一条 CTAP2 命令，返回 CBOR 响应字节串。
 
+    :param uv_ok: 本程序弹窗刚刚校验过卡片 PIN（见 :func:`_require_uv`）
     :raises PinRequired: 需要先做卡片 PIN 认证（内置 UV 模式）
     :raises CtapError: CTAP2 层面的错误
     """
@@ -492,9 +500,11 @@ def handle(command, raw_params, store, master_key, logger=None, pin=None,
         raise PinRequired()
     try:
         if command == CMD_MAKE_CREDENTIAL:
-            result = make_credential(raw_params, store, master_key, pin, pin_mode)
+            result = make_credential(raw_params, store, master_key, pin, pin_mode,
+                                     uv_ok=uv_ok)
         else:
-            result = get_assertion(raw_params, store, master_key, pin, pin_mode)
+            result = get_assertion(raw_params, store, master_key, pin, pin_mode,
+                                   uv_ok=uv_ok)
     except StoreError as err:
         raise CtapError(CTAP1_ERR_OTHER, str(err))
     # pinToken 只用一次：平台缓存了 token 也不能跳过 PIN。下一次注册/认证会

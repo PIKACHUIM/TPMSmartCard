@@ -126,11 +126,11 @@ class Platform:
             json.dumps({"cbor_req": b64(FidoCbor.encode(params))}).encode())
 
 
-def fake_cards(_include_disabled=False):
+def fake_cards(_include_disabled=False, use_cache=True):
     return [{"name": CARD_NAME, "uuid": "serial-0001", "reader": 0,
              "key": FidoStore.card_key("guid-0001", "serial-0001", CARD_NAME),
              "guid": "guid-0001", "serial": "serial-0001", "enabled": True,
-             "count": 0}]
+             "bound": True, "count": 0}]
 
 
 def fake_verify_pin(reader, pin):

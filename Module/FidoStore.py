@@ -265,6 +265,53 @@ class FidoStore:
         return store
 
     @classmethod
+    def resolve(cls, guid="", serial="", name="", create=True):
+        """按卡片身份找到「这张卡真正的凭据库」。
+
+        先按标准 key（guid > serial > name 哈希）找；找不到时再按 serial / 读卡器名
+        在已有凭据库里兜底匹配 —— 还原卡片、重建卡片之后设备节点上的 store GUID
+        可能变化，key 跟着变，但凭据本身还在，不能因为 key 变了就当「没有凭据」
+        （否则现象就是「还原后找不到凭据、要重新注册」）。
+        """
+        key = card_key(guid, serial, name)
+        store = cls.load(key)
+        if store is None:
+            store = cls._find_by_identity(serial, name)
+        if store is not None:
+            changed = False
+            for field, value in (("guid", guid), ("serial", serial), ("name", name)):
+                if value and store.data["card"].get(field) != value:
+                    store.data["card"][field] = value
+                    changed = True
+            if changed:
+                store.save()
+            return store
+        if not create:
+            return None
+        return cls.open(guid, serial, name)
+
+    @classmethod
+    def _find_by_identity(cls, serial="", name=""):
+        """按序列号 / 读卡器名在已有凭据库里找同一张卡（key 变化时的兜底）。"""
+        wanted_serial = str(serial or "").strip().lower()
+        wanted_name = str(name or "").strip()
+        if not wanted_serial and not wanted_name:
+            return None
+        matches = []
+        for store in cls.list_all():
+            card = store.card
+            if wanted_serial and str(card.get("serial") or "").strip().lower() == wanted_serial:
+                matches.append(store)
+                continue
+            if wanted_name and str(card.get("name") or "").strip() == wanted_name:
+                matches.append(store)
+        if not matches:
+            return None
+        # 多条命中（换过 GUID 的残留）时取凭据最多的那条
+        matches.sort(key=lambda item: len(item.credentials), reverse=True)
+        return matches[0]
+
+    @classmethod
     def list_all(cls):
         """列出所有卡片的凭据库（界面/统计用）。"""
         stores = []
@@ -331,6 +378,17 @@ class FidoStore:
     def display_name(self):
         card = self.card
         return card.get("name") or card.get("serial") or self.key
+
+    @property
+    def bound(self):
+        """本机是否已经绑定过这张卡。
+
+        绑定 = 存了本机 DPAPI 封装的 masterKey（``guard``）与 PIN 校验材料
+        （``pin_verifier``）。还原 / 换机之后这两样都是缺的：clientPIN 的
+        getPINToken 流程拿不到 PIN 原文，无法临时重建，只能让用户输一次 PIN
+        （见 :meth:`Module.FidoService.FidoService._need_pin_dialog`）。
+        """
+        return bool(self.data.get("guard"))
 
     # ---- 密钥派生 / 解锁 ------------------------------------------------- #
     @property
@@ -606,6 +664,15 @@ class FidoStore:
         source = payload.get("kdf") or {}
         if source.get("salt"):
             # 保留原盐与迭代次数：凭据是用这个盐派生的 masterKey 封装的
+            same_salt = str(source.get("salt")) == str((self.data.get("kdf") or {}).get("salt"))
+            if not same_salt and self.data.get("guard"):
+                # guard 里存的是「旧盐派生出的 masterKey」。换了盐之后它必然对不上，
+                # 而 unlock() 会先看 guard：只要 guard 还在，即便 PIN 正确也会被判成
+                # 「PIN 与凭据库不匹配」。所以换盐时必须丢掉它，让 unlock() 退回
+                # 「用第一条凭据试解密」的判定路径。
+                self.data["guard"] = None
+                warnings.append("备份里的密钥派生盐与本机不同，已丢弃旧的解锁副本"
+                                "（下一次输入卡片 PIN 会自动重建）")
             self.data["kdf"] = {"algo": "pbkdf2-sha256",
                                 "iterations": int(source.get("iterations") or KDF_ITERATIONS),
                                 "salt": source.get("salt")}

@@ -86,8 +86,10 @@ def restore(reader, section, guid="", log=None):
 
     card = payload.get("card") or {}
     target_guid = str(guid or card.get("guid") or "")
-    store = FidoStore.FidoStore.open(target_guid, card.get("serial", ""),
-                                     card.get("name", ""))
+    # 用 resolve 而不是 open：还原后设备节点的 store GUID 可能已经变了，
+    # 但凭据还在按旧 key 存的库里，按 serial / 读卡器名兜底找回同一份库
+    store = FidoStore.FidoStore.resolve(target_guid, card.get("serial", ""),
+                                        card.get("name", ""), create=True)
     try:
         added, skipped, warnings = store.import_from_backup(payload)
     except FidoStore.StoreError as err:
@@ -98,7 +100,22 @@ def restore(reader, section, guid="", log=None):
     if added:
         log.append("提示：FIDO2 凭据仍由卡片 PIN 保护，第一次使用时需要用卡片 PIN 解锁；"
                    "若 PIN 已修改，改用新 PIN 即可")
+        log.append("首次认证时会弹窗要求选择卡片并输入 PIN（还原后本机解锁材料需要重建一次）")
+    # 正在跑的服务里可能还留着还原前的会话/卡片缓存：不刷新的话会出现
+    # 「刚还原的凭据在认证时找不到」（内存副本覆盖磁盘视图）
+    invalidate_service(log)
     return added, skipped
+
+
+def invalidate_service(log=None):
+    """让 FIDO2 服务丢掉会话与卡片缓存（还原 / 删卡之后调用）。"""
+    log = log if log is not None else []
+    try:
+        from Module.FidoService import FidoService
+        FidoService.get().invalidate()
+    except Exception as err:                  # 服务还没起来 / 未启用 FIDO2：不影响还原
+        log.append("FIDO2 服务未运行，跳过缓存刷新: %s" % err)
+    return None
 
 
 def summary_text(section):

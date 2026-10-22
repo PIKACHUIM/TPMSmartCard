@@ -63,6 +63,16 @@ class FidoService:
         # clientPIN 模式的密钥协商状态（平台每次认证前会重新 getKeyAgreement）
         self._pin = FidoClientPin.PinProtocol()
         self._pin_retries = 8         # 平台侧展示的剩余次数（真实计数在卡片里）
+        # 卡片枚举缓存：(时间戳, 卡片身份列表)。每次认证都重新调用 OpenSC 会让
+        # 平台侧的 PIN 对话框迟迟不出现，所以这里缓存，由 :meth:`invalidate` 清理。
+        self._cards = (0.0, [])
+        # 当前 clientPIN 流程该用哪张卡：由最近的 MC/GA 请求决定（0x06 自己不携带
+        # 站点信息，若不记住就会「PIN 验到了另一张卡上」）。
+        self._pin_card = ""
+        # 通过本程序「选卡 + PIN」弹窗验证过的时间窗：这条会话内不再要求平台
+        # 再输一次 PIN（否则会出现「弹两次框」）。
+        self._uv_card = ""
+        self._uv_until = 0.0
 
     # ---- 日志 ------------------------------------------------------------ #
     def log(self, text):
@@ -95,76 +105,211 @@ class FidoService:
         return value
 
     # ---- 卡片枚举 -------------------------------------------------------- #
-    def cards(self, include_disabled=False):
-        """当前系统里的 TPM 虚拟卡 + 它们在 FIDO 存储中的身份。
+    # 枚举结果缓存时间（秒）。认证在浏览器的同步路径上，每次 clientPIN 子命令都
+    # 重新枚举读卡器（每个都是一次 OpenSC 进程）会让平台侧的 PIN 对话框迟迟不出
+    # 现，用户看到的就是「不弹窗 / 认证超时 / 智能卡错误」。
+    CARD_CACHE_TTL = 4.0
 
-        返回 ``[{"name","uuid","reader","key","guid","enabled","count"}]``，
-        ``uuid`` 是读卡器序列号（fido-go 只把它当不透明标识回传）。
+    def invalidate(self, logout=True):
+        """丢掉卡片枚举缓存与会话（还原 / 删卡 / 启停服务之后调用）。"""
+        with self._lock:
+            self._cards = (0.0, [])
+            self._pin_card = ""
+            self._uv_card = ""
+            self._uv_until = 0.0
+            if logout:
+                self._session = None
+        return None
+
+    def card_identities(self, use_cache=True):
+        """当前系统里的 TPM 虚拟卡（轻量枚举，带缓存）。
+
+        只看读卡器列表与卡片身份（store GUID / 序列号），**不解析证书**：
+        FIDO 认证要的是「哪张卡、有没有绑定」，证书解析（每个密钥一次
+        ``--read-certificate``）在这里纯属浪费，慢到会把认证流程拖超时。
         """
-        result = []
+        now = time.time()
+        with self._lock:
+            stamp, cached = self._cards
+            if use_cache and cached and now - stamp < self.CARD_CACHE_TTL:
+                return [dict(item) for item in cached]
+        items = self._scan_cards()
+        with self._lock:
+            self._cards = (time.time(), items)
+        return [dict(item) for item in items]
+
+    def _scan_cards(self):
+        """真正扫一遍读卡器（一次 ``--list-readers`` + 必要时读序列号）。"""
+        from Module.OpenSCDealer import OpenSCDealer
+        items = []
         try:
-            from Module.SmartCardAPI import SmartCardAPI
-            api = SmartCardAPI()
-            api.readInfo()
+            lines = OpenSCDealer.openText("--list-readers", "OpenSC-tool")
         except Exception as err:                       # 卡片服务没起来等
-            self.log("枚举卡片失败: %s" % err)
-            return result
-        for name, card in (api.cards or {}).items():
-            serial = getattr(card, "sc_uuid", "") or ""
-            instance = getattr(card, "sc_path", "") or ""
-            reader = api.readerIndexFor(name)
+            self.log("枚举读卡器失败: %s" % err)
+            return items
+        for line in lines:
+            # 形如：0    Yes    Microsoft Virtual Smart Card 2
+            parts = str(line).split()
+            if len(parts) < 3 or not parts[0].isdigit():
+                continue
+            name = " ".join(parts[2:])
+            if "Microsoft Virtual Smart Card" not in name:
+                continue
+            reader = int(parts[0])
+            card_id = name.split(" ")[-1]
             guid = ""
-            try:
-                from Module import TPMBackup
-                guid = TPMBackup.card_store_guid(
-                    str(instance).split("\\")[-1]) or ""
-            except Exception:
-                guid = ""
-            key = FidoStore.card_key(guid, serial, name)
+            if card_id.isdigit():
+                try:
+                    from Module import TPMBackup
+                    guid = TPMBackup.card_store_guid(card_id) or ""
+                except Exception:
+                    guid = ""
+            # 序列号还要多起一次 opensc-tool；有 store GUID 时它是首选标识，不必读
+            serial = "" if guid else OpenSCDealer.readSerial(reader)
             store = None
             try:
-                store = FidoStore.FidoStore.load(key)
+                store = FidoStore.FidoStore.resolve(guid, serial, name, create=False)
             except FidoStore.StoreError as err:
                 self.log("读取凭据库失败(%s): %s" % (name, err))
-            enabled = True if store is None else store.enabled
-            if not enabled and not include_disabled:
-                continue
-            result.append({
+            items.append({
                 "name": name,
                 "uuid": serial or name,
                 "reader": reader,
-                "key": key,
+                "key": store.key if store is not None else FidoStore.card_key(guid, serial, name),
                 "guid": guid,
                 "serial": serial,
-                "enabled": enabled,
-                "count": len(store.credentials) if store else 0,
+                "enabled": True if store is None else store.enabled,
+                "bound": bool(store is not None and store.bound),
+                "count": len(store.credentials) if store is not None else 0,
             })
+        return items
+
+    def cards(self, include_disabled=False, use_cache=True):
+        """当前系统里的 TPM 虚拟卡 + 它们在 FIDO 存储中的身份。
+
+        返回 ``[{"name","uuid","reader","key","guid","enabled","bound","count"}]``，
+        ``uuid`` 是读卡器序列号（fido-go 只把它当不透明标识回传）。
+        """
+        result = []
+        for item in self.card_identities(use_cache=use_cache):
+            if not item["enabled"] and not include_disabled:
+                continue
+            result.append(item)
         return result
 
-    def card_identity(self, card_name):
+    def card_identity(self, card_name, use_cache=True):
         """按读卡器名取卡片身份（含 reader / guid / key）。"""
-        for item in self.cards(include_disabled=True):
+        for item in self.cards(include_disabled=True, use_cache=use_cache):
             if item["name"] == card_name:
                 return item
         return None
+
+    @staticmethod
+    def store_of(card, create=False):
+        """取某张卡对应的凭据库（key 变了也能按身份找回，见 FidoStore.resolve）。"""
+        if not card:
+            return None
+        try:
+            return FidoStore.FidoStore.resolve(card.get("guid", ""),
+                                               card.get("serial", ""),
+                                               card.get("name", ""), create=create)
+        except FidoStore.StoreError as err:
+            print("FIDO: 读取凭据库失败(%s): %s" % (card.get("name", ""), err))
+            return None
 
     def store_for_card(self, card_name):
         """取（或创建）某张卡的凭据库。"""
         info = self.card_identity(card_name)
         if info is None:
             return None
-        return FidoStore.FidoStore.open(info["guid"], info["serial"], info["name"])
+        return self.store_of(info, create=True)
 
     def active_card(self, prefer=None):
-        """clientPIN 流程用哪张卡：优先上次用过的，否则取第一张可用卡。"""
+        """clientPIN 流程默认用哪张卡：优先本次请求 / 上次用过的，否则第一张。"""
         items = self.cards()
         if not items:
             return None
-        name = str(prefer or self.settings.get("active_card") or "")
+        name = str(prefer or self._pin_card or self.settings.get("active_card") or "")
         for item in items:
             if item["name"] == name:
                 return item
         return items[0]
+
+    # ---- 请求 → 卡片 ----------------------------------------------------- #
+    @staticmethod
+    def _request_hints(command, cbor):
+        """从 MC/GA 的 CBOR 里取出 ``(rp_id, [credentialId])``。
+
+        只用来判断「哪张卡上有这条凭据」，不做任何校验，解析失败按空处理。
+        """
+        rp_id, cred_ids = "", []
+        try:
+            from Module import FidoCbor
+            params = FidoCbor.decode(bytes(cbor or b""))
+        except Exception:
+            return rp_id, cred_ids
+        if not isinstance(params, dict):
+            return rp_id, cred_ids
+        if command == FidoCtap.CMD_MAKE_CREDENTIAL:
+            rp = params.get(2) or {}
+            rp_id = str(rp.get("id") or "") if isinstance(rp, dict) else ""
+            listed = params.get(5) or []               # excludeList
+        else:
+            rp_id = str(params.get(1) or "")
+            listed = params.get(3) or []               # allowList
+        for item in listed:
+            if isinstance(item, dict) and item.get("id"):
+                cred_ids.append(bytes(item["id"]))
+        return rp_id, cred_ids
+
+    def card_for_request(self, command, cbor):
+        """决定这条 MC/GA 用哪张卡，以及要不要让用户「选卡 + 输 PIN」。
+
+        :return: ``(card, need_pin)``。``need_pin=True`` 表示必须由本程序弹窗
+            （平台自己的 PIN 对话框不能选卡，也多拿不到 PIN 原文来重建本机解锁材料）。
+        """
+        items = self.cards()
+        if not items:
+            return None, False
+        session = self.session
+        rp_id, cred_ids = self._request_hints(command, cbor)
+        matches = []
+        for card in items:
+            store = self.store_of(card)
+            if store is None:
+                continue
+            hit = None
+            for cred_id in cred_ids:
+                if store.find_by_credential_id(cred_id) is not None:
+                    hit = cred_id
+                    break
+            if hit is None and rp_id:
+                hit = store.find_for_rp(rp_id)
+            if hit:
+                matches.append(card)
+        if session is not None:
+            # 会话里的那张卡必须还在（可能已经被删掉），否则只能重新挑
+            name = session["card"].get("name")
+            alive = name in [card["name"] for card in items]
+            if alive and (not matches or name in [card["name"] for card in matches]):
+                return session["card"], False
+        if len(matches) == 1:
+            card = matches[0]
+        elif len(matches) > 1:
+            # 多张卡都有该站点的凭据（例如同一个账号在两块卡上都注册过）：必须问用户
+            return self.active_card(), True
+        else:
+            card = self.active_card()
+        if card is None:
+            return None, False
+        store = self.store_of(card)
+        # 只有「卡上已经有凭据、但本机没有解锁材料」时才必须问 PIN：
+        # 这条正是还原 / 换机之后的状态（clientPIN 的 token 流程拿不到 PIN 原文，
+        # 没有它就没法重建 guard，于是会一直报「PIN 不可用 / 找不到凭据」）。
+        need_bind = bool(store is not None and store.credentials and not store.bound)
+        # 有多张卡、这条请求又看不出该用哪张（典型是注册新凭据）：让用户选
+        need_choice = len(items) > 1 and not matches
+        return card, bool(need_bind or need_choice)
 
     def _bind_session(self, card, store, master):
         self._session = {"store": store, "master": master, "card": card,
@@ -182,14 +327,14 @@ class FidoService:
         """
         if self.pin_mode != FidoCtap.PIN_MODE_CLIENT:
             return {"status": "not_set", "message": "当前不是 clientPIN 模式"}
-        card = self.active_card()
+        # 0x06 是独立的一条 CTAP 命令，不携带站点信息：必须用最近那条 MC/GA
+        # 挑出来的卡，否则多卡机器上 PIN 会被验到另一张卡上（报「智能卡错误」）
+        card = self.active_card(prefer=self._pin_card)
         if card is None:
             return {"status": "not_set", "message": "没有可用的 TPM 虚拟卡"}
-        try:
-            store = FidoStore.FidoStore.open(card["guid"], card["serial"],
-                                            card["name"])
-        except FidoStore.StoreError as err:
-            return {"status": "not_set", "message": str(err)}
+        store = self.store_of(card, create=True)
+        if store is None:
+            return {"status": "not_set", "message": "找不到卡片对应的凭据库"}
         if action == "retries":
             if not store.has_pin_verifier:
                 return {"status": "not_set"}
@@ -261,6 +406,11 @@ class FidoService:
     def _opensc_tool(name):
         return Paths.resource("OpenSC", name)
 
+    # stdin 传 PIN 是否可行（本机 OpenSC 构建只有在非交互环境下不读 stdin 时才
+    # 需要退回 --pin 参数）。不记住结论的话，每次认证都要先白等十几秒超时，
+    # 平台侧的 WebAuthn 请求早就超时了（现象就是「智能卡错误 / 不弹窗」）。
+    _pin_stdin = {"usable": None}
+
     def verify_pin(self, reader, pin):
         """让**卡片**校验 PIN：``(状态, 说明)``，状态 ∈ ok / wrong / locked / error。"""
         if reader is None:
@@ -270,23 +420,29 @@ class FidoService:
             return "error", "缺少 OpenSC 工具: %s" % tool
         base = [tool, "--verify-pin", "--reader", str(int(reader))]
         # 先用 stdin 传 PIN，避免 PIN 出现在命令行（其它用户可以读进程命令行）。
-        # 超时给 12 秒：万一这个 OpenSC 构建在非控制台下弹窗等输入，别让浏览器
-        # 的 WebAuthn 请求干等太久，超时后走下面的 --pin 参数兜底。
+        # 超时只给 4 秒：万一这个 OpenSC 构建在非控制台下弹窗等输入，立刻退回
+        # --pin 参数，别让浏览器/平台的认证请求干等。
         text = ""
-        try:
-            proc = subprocess.run(base, input="%s\n" % pin, text=True,
-                                  capture_output=True, timeout=12)
-            text = "%s%s" % (proc.stdout or "", proc.stderr or "")
-            state = self._pin_verdict(proc.returncode, text, pin)
-            if state != "retry":
-                self.log("PIN 校验（stdin）: %s" % state)
-                return state, text.strip()[:400]
-        except (OSError, subprocess.SubprocessError) as err:
-            self.log("PIN 校验（stdin）失败: %s" % err)
+        if self._pin_stdin["usable"] is not False:
+            try:
+                proc = subprocess.run(base, input="%s\n" % pin, text=True,
+                                      capture_output=True, timeout=4)
+                text = "%s%s" % (proc.stdout or "", proc.stderr or "")
+                state = self._pin_verdict(proc.returncode, text, pin)
+                if state != "retry":
+                    self._pin_stdin["usable"] = True
+                    self.log("PIN 校验（stdin）: %s" % state)
+                    return state, text.strip()[:400]
+                self._pin_stdin["usable"] = False
+                self.log("PIN 校验：该 OpenSC 构建不读 stdin，改用 --pin 参数")
+            except (OSError, subprocess.SubprocessError) as err:
+                self._pin_stdin["usable"] = False
+                self.log("PIN 校验（stdin）失败: %s" % err)
         # 兜底：OpenSC 在非交互管道下可能不读 stdin，改用 --pin 参数
+        # （超时 20 秒：平台侧等不了太久，超时后按失败上报比一直挂着好）
         try:
             proc = subprocess.run(base + ["--pin", str(pin)], text=True,
-                                  capture_output=True, timeout=45)
+                                  capture_output=True, timeout=20)
             text = "%s%s" % (proc.stdout or "", proc.stderr or "")
             state = self._pin_verdict(proc.returncode, text, pin)
             self.log("PIN 校验（命令行）: %s" % state)
@@ -336,9 +492,18 @@ class FidoService:
             self._session = None
 
     def login(self, card_uuid, pin):
-        """fido-go 的登录回调：校验卡片 PIN + 解锁凭据库。返回 rv 码。"""
+        """fido-go 的登录回调：校验卡片 PIN + 解锁凭据库。返回 rv 码。
+
+        这是唯一能拿到 PIN 明文的入口之一，所以顺便把本机解锁材料
+        （``guard`` / ``pin_verifier``）重建好：还原、换机、删掉凭据文件之后，
+        只要用户输一次正确的 PIN，后面就不再需要它了。
+        """
         with self._lock:
-            items = [item for item in self.cards() if item["uuid"] == card_uuid]
+            # uuid 可能是读卡器序列号，也可能是读卡器名（拿不到 GUID 时的兜底），
+            # 两个都认：用户在弹窗里挑选到输完 PIN 可能已经过了缓存时间，两次
+            # 枚举给出的 uuid 形式未必一致
+            items = [item for item in self.cards(use_cache=False)
+                     if card_uuid in (item["uuid"], item["name"])]
             if not items:
                 self.log("登录失败：找不到卡片 %s" % card_uuid)
                 return 0xA2                     # 没有这张卡
@@ -350,13 +515,21 @@ class FidoService:
             if state != "ok":
                 self.log("PIN 校验未通过（%s）: %s" % (state, text))
                 return 0xA0
-            store = FidoStore.FidoStore.open(card["guid"], card["serial"], card["name"])
+            store = self.store_of(card, create=True)
+            if store is None:
+                self.log("登录失败：找不到凭据库（%s）" % card["name"])
+                return 0xA0
             master = store.unlock(pin)
             if master is None:
                 self.log("PIN 正确但凭据库解不开：凭据是用另一个 PIN 封装的")
                 return 0xA0
+            store.set_pin_verifier(pin)
             store.remember_master(master)
             self._bind_session(card, store, master)
+            self._pin_card = card["name"]
+            # 刚在弹窗里验过卡片 PIN：接下来的 MC/GA 不再要求平台再问一次
+            self._uv_card = card["name"]
+            self._uv_until = time.time() + self._session_timeout()
             self.log("PIN 认证成功: %s（凭据 %d 条）" % (card["name"],
                                                         len(store.credentials)))
             return 0
@@ -394,6 +567,22 @@ class FidoService:
             self.log(traceback.format_exc(limit=4))
             return {"rv": FidoCtap.CTAP1_ERR_OTHER}
 
+    def _dialog_cards(self):
+        """给 fido-go 的「选卡 + PIN」对话框用的卡片列表。"""
+        return [{"card_uuid": item["uuid"], "card_name": item["name"]}
+                for item in self.cards()]
+
+    def _ask_user(self, reason=""):
+        """回一条「让 fido-go 弹窗」的响应（``platform_pin=False``）。
+
+        clientPIN 模式下平台那个 PIN 框不能选卡，也拿不到 PIN 明文；多卡或本机
+        没有解锁材料时必须由本程序问一次（见 :meth:`card_for_request`）。
+        """
+        if reason:
+            self.log("要求用户选卡并输入 PIN：%s" % reason)
+        return {"rv": FidoCtap.CTAP2_ERR_PIN_REQUIRED,
+                "data": {"platform_pin": False, "cards": self._dialog_cards()}}
+
     def _handle_ctap(self, cmd, body):
         cbor = base64.b64decode(body.get("cbor_req") or "")
         command = {
@@ -403,6 +592,21 @@ class FidoService:
         }.get(cmd, FidoCtap.CMD_GET_ASSERTION)
         mode = self.pin_mode
         client_pin = mode == FidoCtap.PIN_MODE_CLIENT
+        if command == FidoCtap.CMD_CLIENT_PIN:
+            # clientPIN 子命令本身不接受 pinUvAuthParam 之外的 UV 判断
+            return self._run_ctap(command, cbor, client_pin, mode, uv_ok=False)
+        card, need_pin = self.card_for_request(command, cbor)
+        if card is not None:
+            # 记住本条请求该用哪张卡：随后的 0x06 要靠它验 PIN
+            self._pin_card = card["name"]
+        if need_pin and self.session is None:
+            return self._ask_user(card["name"] if card else "没有可用卡片")
+        uv_ok = bool(client_pin and card is not None
+                     and self._uv_card == card["name"]
+                     and time.time() < self._uv_until)
+        return self._run_ctap(command, cbor, client_pin, mode, uv_ok=uv_ok)
+
+    def _run_ctap(self, command, cbor, client_pin, mode, uv_ok=False):
         session = self.session
         try:
             result = FidoCtap.handle(
@@ -412,21 +616,22 @@ class FidoService:
                 self.log,
                 pin=self._pin if client_pin else None,
                 pin_mode=mode,
-                pin_verifier=self._pin_verifier if client_pin else None)
+                pin_verifier=self._pin_verifier if client_pin else None,
+                uv_ok=uv_ok)
             self._touch_session()
         except FidoCtap.PinRequired:
             # platform_pin=True 告诉 fido-go：不要弹自带对话框，直接把 0x36
             # 交给平台（Windows 会用自己的 PIN 对话框继续 clientPIN 流程）
             return {"rv": FidoCtap.CTAP2_ERR_PIN_REQUIRED,
                     "data": {"platform_pin": client_pin,
-                             "cards": [{"card_uuid": item["uuid"],
-                                        "card_name": item["name"]}
-                                       for item in self.cards()]}}
+                             "cards": self._dialog_cards()}}
         except FidoCtap.CtapError as err:
             self.log("CTAP 命令 0x%02X 失败（0x%02X）: %s"
                      % (command, err.code, err))
             if err.code == FidoCtap.CTAP2_ERR_PIN_REQUIRED and client_pin:
-                # 同样是「要 PIN」：告诉 fido-go 别弹自带对话框（它只认这个标记）
+                # 同样是「要 PIN」：告诉 fido-go 别弹自带对话框（它只认这个标记），
+                # 由平台走它自己的 PIN 流程（本程序弹窗已经验过时也会走到这里，
+                # 说明 pinToken 已被用掉，再问一次是正常的）
                 return {"rv": err.code, "data": {"platform_pin": True}}
             return {"rv": err.code}
         return {"rv": 0, "data": {"cbor_resp": base64.b64encode(result).decode("ascii")}}
@@ -475,6 +680,9 @@ class FidoService:
             if not ok:
                 self._last_error = text
                 return False, text
+            # 重启设备端进程后平台会重新枚举卡片与 PIN 状态：本机缓存一律作废
+            self.invalidate()
+            self._pin_stdin["usable"] = None
             self.update_settings(enabled=True)
             self._started_at = time.strftime("%Y-%m-%d %H:%M:%S")
             self.log("FIDO2 服务已启动: %s" % text)
@@ -661,6 +869,7 @@ class FidoService:
                 # 重新验 PIN（否则同一个 PIN 会话里还能继续用旧状态）
                 if shared:
                     self.logout()
+                self._cards = (0.0, [])       # 凭据数量变了，重算缓存
                 self.log("已删除凭据: %s（%s）" % (entry_uuid, store.display_name))
             return ok
 
@@ -675,6 +884,7 @@ class FidoService:
             store.clear_credentials()
             if shared:
                 self.logout()
+            self._cards = (0.0, [])           # 凭据数量变了，重算缓存
             self.log("已清空卡片凭据: %s（%d 条）" % (store.display_name, count))
             return count
 
@@ -693,6 +903,9 @@ class FidoService:
         except FidoStore.StoreError as err:
             return False, ("PIN 已修改，但 FIDO2 凭据重新封装失败：%s\n"
                            "（这些凭据仍用旧 PIN 封装，请保留旧 PIN 或重新注册）" % err)
+        # 平台侧比对的是 PIN 哈希：改了 PIN 不更新它，之后每次认证都会报
+        # 「PIN 不正确」（卡上 PIN 明明是对的）
+        store.set_pin_verifier(new_pin)
         self.log("改 PIN 后重新封装 %d 条 FIDO2 凭据（%s）" % (count, card_name))
         return True, "已把 %d 条 FIDO2 凭据重新封装到新 PIN" % count
 
@@ -712,6 +925,7 @@ class FidoService:
             count = store.rotate_master(old_master, new_master)
         except FidoStore.StoreError as err:
             return False, "FIDO2 凭据重新封装失败：%s" % err
+        store.set_pin_verifier(new_pin)       # 平台侧的 PIN 哈希同样要跟着换
         self.log("解锁后重新封装 %d 条 FIDO2 凭据（%s）" % (count, card_name))
         return True, "已把 %d 条 FIDO2 凭据重新封装到新 PIN" % count
 
