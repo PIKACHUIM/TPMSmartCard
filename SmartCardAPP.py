@@ -11,16 +11,11 @@ import unicodedata
 from random import randint
 
 import base64
-import pyglet
 
 from datetime import datetime, timedelta
-import subprocess
 import pyperclip
 import threading
 
-import requests
-from cryptography.hazmat.primitives import serialization
-from flask import request
 from ttkbootstrap import *
 import ttkbootstrap as ttk
 from functools import partial
@@ -32,14 +27,15 @@ from Module.Paths import ensure_workdir, resource
 from Module.TPMSmartCard import TPMSmartCard
 from Module import Theme
 from Module import TPMBackup
+from Module import WinPlatform
 from Module.TrayIcon import TrayIcon
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 
-from SubApp.CertImport import CertImport
 from SubApp.SystemSettings import SystemSettings
 
 # 界面默认字体；语言包里的 _font 可为特定语言覆盖（如韩语需要 Hangul 字体）
-FONT_NAME_DEFAULT = "MapleMono SC NF"
+# 注意：字体文件里的族名是「Maple Mono SC NF」（Maple 与 Mono 之间有空格），
+# 写错一个字符 Tk 就会静默退回系统默认字体（随包字体的意义就没了）。
+FONT_NAME_DEFAULT = "Maple Mono SC NF"
 
 # 登录自启的启动参数（见 Module/AutoStart.py）：带它就只常驻托盘，不显示主窗口
 TRAY_FLAG = "--minimized"
@@ -118,8 +114,7 @@ class SmartCardAPP:
             self.root.withdraw()
         self.data = SmartCardAPI()
         self.tpms = TPMSmartCard()
-        pyglet.font.add_file(resource("Config", "myfont", "MapleMono-SC-NF-Regular.ttf"))
-        pyglet.font.add_file(resource("Config", "myfont", "NotoSerifCJKsc-Regular.otf"))
+        self.load_fonts()
         self.pick = {
             "card": "",
             "cert": ""
@@ -127,18 +122,55 @@ class SmartCardAPP:
         # 证书表格里混排的 FIDO2 凭据（uuid -> 凭据信息），
         # 它们不是证书：没有 X.509、不能导出，详情也只显示站点/用户名
         self.fido_rows = dict()
+        # 后台读卡是否正在进行（见 load_status 的 in_async 分支）
+        self.scanning = False
+        # 扫描序号：用来丢弃「上一轮还没读完、状态已过期」的结果
+        self.scan_gen = 0
+        # 按钮内边距实测值缓存（配色 -> 像素，见 measure_button）
+        self._button_pads = dict()
         self.setup_fonts()
         self.build_ui()
         # 托盘先建好：后面的启动检查、状态刷新如果弹框，用户也能从托盘找回窗口
         self.setup_tray()
         if not self.startup_hidden:
+            # TPM 检测要起 PowerShell，放到后台线程：否则主窗口要等它跑完才能画出来
             self.check_datas()
-        self.load_status()
+        # 读卡（每个读卡器/密钥都是一次 OpenSC 进程）同样不在主线程做：
+        # 先把窗口画出来，读完了再填表格
+        self.load_status(in_async=True)
         # 双击 .tsb（文件类型关联）时由启动参数直接进入还原流程
         self.open_backup()
         # FIDO2：按设置自动开启（后台线程，失败只记日志）
         self.root.after(1500, self.startup_fido)
         self.root.mainloop()
+
+    def load_fonts(self):
+        """把随包字体注册给当前进程（供 Tk 使用）。
+
+        用 GDI 的 ``AddFontResourceEx`` 注册私有字体，比拉起 pyglet 快得多；
+        只有 Tk 里确实查不到该字体族时才退回 pyglet（兜底路径）。
+
+        只注册界面实际用到的那一个字体文件：NotoSerifCJKsc 有 24MB，而界面
+        代码里没有任何地方引用它，每次启动为它多等两三百毫秒不值当。
+        """
+        font_file = "MapleMono-SC-NF-Regular.ttf"
+        font_path = resource("Config", "myfont", font_file)
+        if not WinPlatform.add_private_font(font_path):
+            print("Font: 随包字体注册失败:", font_path)
+            return None
+        # 字体族是否已对 Tk 可见（GDI 私有字体对同进程可见）
+        try:
+            families = set(font.families(self.root))
+        except Exception:
+            families = set()
+        if FONT_NAME_DEFAULT in families:
+            return None
+        try:
+            import pyglet                       # 兜底：只为注册字体，用完即弃
+            pyglet.font.add_file(font_path)
+        except Exception as err:
+            print("Font: 加载随包字体失败:", err)
+        return None
 
     def open_backup(self):
         """把命令行里的 .tsb 备份文件路径送进还原流程（双击关联文件时触发）。"""
@@ -323,16 +355,15 @@ class SmartCardAPP:
             return None
 
         def worker():
-            try:
-                if in_type == "pin":
-                    ok, text = service.rewrap_after_pin_change(card_name, old_pin, new_pin)
-                else:
-                    ok, text = service.rewrap_after_unblock(card_name, new_pin)
-            except Exception as err:
-                ok, text = False, str(err)
-            self.root.after(0, lambda: self.notify_fido(ok, text, in_type))
+            if in_type == "pin":
+                return service.rewrap_after_pin_change(card_name, old_pin, new_pin)
+            return service.rewrap_after_unblock(card_name, new_pin)
 
-        threading.Thread(target=worker, daemon=True).start()
+        def apply(result):
+            ok, text = result if result else (False, "PIN 变更后的 FIDO2 处理未完成")
+            return self.notify_fido(ok, text, in_type)
+
+        self.run_async(worker, apply)
         return None
 
     def notify_fido(self, ok, text, in_type):
@@ -373,6 +404,8 @@ class SmartCardAPP:
         self.theme = Theme.current()
         self.frame_style = self.theme.get("frame") or ""
         self.table_style = self.theme.get("table") or ""
+        # 换了主题，按钮内边距要重新实测（见 measure_button）
+        self._button_pads = dict()
         self.style = ttk.Style()
         if self.native:
             # 原版主题：直接切到系统默认的 ttk 主题（Windows 下即默认蓝灰）
@@ -600,13 +633,60 @@ class SmartCardAPP:
             # 托盘提示与右键菜单文案同样跟随界面语言
             self.tray.set_texts(self.i18n("main_text"), self.i18n("msg_tray_show"),
                                 self.i18n("msg_tray_exit"))
-        self.load_status()
+        self.load_status(in_async=True)
 
     def check_datas(self):
         # 启动检查只做一次：登录自启时跳过，第一次从托盘打开窗口时补做
         self.checked = True
-        # TPM --------------------------------------------------------------------------------
-        tpm_status = self.check_tpm_h(out=False)
+        # TPM 检测要起一次 PowerShell（Get-TPM），一两秒起步：放后台，
+        # 结论出来后再回主线程弹提示，主窗口不必等它
+        self.run_async(TPMSmartCard.tpmStatus, self.apply_tpm_check)
+        # OpenSC -----------------------------------------------------------------------------
+        # 首次启动**不再**提示安装系统级 OpenSC：程序读卡用的是随包的 OpenSC\ 工具目录
+        # （见 Module.OpenSCDealer / Module.TPMSmartCard / Module.TPMBackup），系统安装只
+        # 影响「其它软件」（PKCS#11、物理卡的 minidriver 等）；安装包已默认勾选装它，
+        # 需要补装时走「系统设置 - OpenSC」，安装逻辑见 SubApp.MoreConfig。
+
+    # 后台任务（主线程轮询结果）================================================
+    def run_async(self, in_worker, in_apply, in_interval=80):
+        """后台执行 ``in_worker()``，结果回主线程交给 ``in_apply(result)``。
+
+        通知方式是**主线程轮询**，不是子线程里调用 ``root.after``：Tk 不是线程
+        安全的，跨线程调用在部分环境会直接抛 ``main thread is not in main loop``，
+        那样界面就永远等不到刷新了。
+        """
+        job = {"done": False, "result": None, "error": None}
+
+        def worker():
+            try:
+                job["result"] = in_worker()
+            except Exception as err:
+                job["error"] = err
+            job["done"] = True
+            return None
+
+        threading.Thread(target=worker, daemon=True).start()
+        self.poll_async(job, in_apply, in_interval)
+        return job
+
+    def poll_async(self, in_job, in_apply, in_interval=80):
+        """主线程轮询后台任务是否完成（只在这里操作 Tk 控件）。"""
+        if not in_job["done"]:
+            self.root.after(in_interval, lambda: self.poll_async(in_job, in_apply,
+                                                                 in_interval))
+            return None
+        if in_job.get("error") is not None:
+            print("后台任务失败:", in_job["error"])
+        return in_apply(in_job["result"])
+
+    def apply_tpm_check(self, result):
+        """启动检查的 TPM 结果：只有异常状态才提示用户。"""
+        if not result or result[0] == 0:
+            return None
+        return self.warn_tpm(result[0])
+
+    def warn_tpm(self, tpm_status):
+        """按 TPM 状态弹提示（在主线程里执行）。"""
         if tpm_status == 1:
             messagebox.showerror(
                 self.i18n("msg_cert_out_ft_item"),
@@ -618,11 +698,7 @@ class SmartCardAPP:
                 self.i18n("msg_cert_out_ft_item"),
                 self.i18n("msg_tpm_check_none") % self.i18n("msg_tpm_unknown")
             )
-        # OpenSC -----------------------------------------------------------------------------
-        # 首次启动**不再**提示安装系统级 OpenSC：程序读卡用的是随包的 OpenSC\ 工具目录
-        # （见 Module.OpenSCDealer / Module.TPMSmartCard / Module.TPMBackup），系统安装只
-        # 影响「其它软件」（PKCS#11、物理卡的 minidriver 等）；安装包已默认勾选装它，
-        # 需要补装时走「系统设置 - OpenSC」，安装逻辑见 SubApp.MoreConfig。
+        return None
 
     def get_screens(self):
         # 获取窗口的宽度和高度
@@ -648,8 +724,45 @@ class SmartCardAPP:
                 conf_data = conf_file.read()
                 self.conf[conf_name] = json.loads(conf_data)
 
-    def load_status(self):
+    def load_status(self, in_async=False):
+        """重新枚举卡片与证书，并刷新界面。
+
+        ``in_async=True`` 时把读卡放到后台线程（启动时用）：读卡要起一串 OpenSC
+        进程（每张卡、每个密钥一次），在主线程里做会让窗口「画出来但卡住」。
+        读完再由主线程统一填表（见 :meth:`apply_status`）。
+        """
+        self.scan_gen = getattr(self, "scan_gen", 0) + 1
+        if in_async:
+            return self.load_status_async(self.scan_gen)
         self.data.readInfo()
+        return self.apply_status(self.scan_gen)
+
+    def load_status_async(self, in_gen=None):
+        """后台读卡，完成后回主线程填表（已在读时直接忽略，避免重复扫）。
+
+        完成通知用「主线程轮询」而不是子线程里调用 ``root.after``：Tk 不是线程
+        安全的，跨线程调用在部分环境会直接抛 ``main thread is not in main loop``。
+        """
+        if self.scanning:
+            return None
+        self.scanning = True
+        gen = self.scan_gen if in_gen is None else in_gen
+        return self.run_async(self.data.readInfo,
+                              lambda _result: self.after_scan(gen), in_interval=60)
+
+    def after_scan(self, in_gen=None):
+        """后台读卡结束：回到主线程刷新界面（比它新的扫描已开始时丢弃这次结果）。"""
+        self.scanning = False
+        return self.apply_status(in_gen)
+
+    def apply_status(self, in_gen=None):
+        """按 ``self.data`` 里的最新数据重建卡片/证书表格。
+
+        ``in_gen`` 是发起读卡时的扫描序号：还原卡片、点刷新可能触发新一轮扫描，
+        旧一轮的**读卡结果**（读到的是旧状态）必须丢掉，否则表格会被旧数据盖回去。
+        """
+        if in_gen is not None and in_gen != getattr(self, "scan_gen", in_gen):
+            return None
         # 表格整体重建，之前的选中行会丢失：记下原选中的卡片，重建后尽量恢复
         keep_card = self.pick.get("card") or ""
         if keep_card not in self.data.cards:
@@ -942,7 +1055,8 @@ class SmartCardAPP:
             "out": (self.cert_out_to, None),
             "non": (self.data_delete, "cert"),
 
-            "ing": (self.load_status, None),
+            # 刷新按钮走后台读卡：读卡要起一串 OpenSC 进程，同步跑会卡住界面
+            "ing": (partial(self.load_status, True), None),
             "tpm": (self.check_tpm_h, None),
             "set": (self.card_settings, None),
             "bak": (self.card_backup, None),
@@ -996,15 +1110,50 @@ class SmartCardAPP:
         sizes[-1] = max(MIN_BUTTON_WIDTH, avail - sum(sizes[:-1]))
         return sizes
 
-    def measure_button(self, text, style_name):
-        """量出按钮文案实际需要的宽度（含主题的内边距与边框）。"""
-        probe = self.new_widget("Button", style_name, text=text)
+    def button_font(self, style_name):
+        """按钮实际使用的字体（量文案宽度要用它，不能用标签字体）。
+
+        主题没有显式指定按钮字体时，ttk 用的是 ``TkDefaultFont``（Windows 上是
+        微软雅黑），量的时候必须用同一个，否则长文案（俄语等）会被算窄而截断。
+        """
+        spec = ""
+        try:
+            spec = (self.style.lookup("%s.TButton" % style_name, "font")
+                    or self.style.lookup("TButton", "font") or "")
+        except Exception:
+            spec = ""
+        try:
+            return font.Font(root=self.root, font=spec) if spec \
+                else font.nametofont("TkDefaultFont")
+        except Exception:
+            return self.t_fonts['label_data']
+
+    def button_padding(self, style_name, font_now):
+        """按钮的内边距/边框占用（每种配色只实测一次）。
+
+        以前是每个按钮都创建一个探针控件去量 ``winfo_reqwidth``，ttkbootstrap 建
+        一个控件约 30 毫秒，十几个按钮就是半秒；这里改成「每种样式探一次内边距，
+        其余用字体量」，结果一致但快得多。
+        """
+        cached = self._button_pads.get(style_name)
+        if cached is not None:
+            return cached
+        sample = "确定确定确定确定"
+        probe = self.new_widget("Button", style_name, text=sample)
         width = probe.winfo_reqwidth()
         probe.destroy()
-        if width <= 1:
-            # 控件尺寸尚未计算时用字体测量兜底
-            width = self.t_fonts['label_data'].measure(text) + BUTTON_PADDING_FALLBACK
-        return width
+        pad = int(width - font_now.measure(sample)) if width > 1 else 0
+        if pad < 8 or pad > 240:
+            # 尺寸还没算出来（或主题给的值离谱）：退回经验值
+            pad = BUTTON_PADDING_FALLBACK
+        self._button_pads[style_name] = pad
+        return pad
+
+    def measure_button(self, text, style_name):
+        """量出按钮文案实际需要的宽度（含主题的内边距与边框）。"""
+        font_now = self.button_font(style_name)
+        width = font_now.measure(text) + self.button_padding(style_name, font_now)
+        return max(width, MIN_BUTTON_WIDTH)
 
     def view_labels(self, in_name):
         # 卡片信息 ======
@@ -1308,6 +1457,14 @@ class SmartCardAPP:
         self.button["cert_main"]["out"].config(state=tk.DISABLED)
         return None
 
+    def invalidate_fido(self):
+        """让 FIDO2 服务丢掉卡片缓存与会话（删卡 / 还原之后调用）。"""
+        try:
+            self.fido_service().invalidate()
+        except Exception as err:                 # 没启用 FIDO2 时忽略
+            print("FIDO2 缓存刷新失败:", err)
+        return None
+
     def delete_fido_credential(self):
         """删除当前选中的 FIDO2 凭据，返回给用户看的结果文本。"""
         uuid_now = str(self.pick.get("cert") or "")[5:]
@@ -1486,18 +1643,33 @@ class SmartCardAPP:
         """检测 TPM 状态（解析见 Module.TPMSmartCard.tpmStatus）。
 
         状态码：0 已激活、1 未激活、-1 状态未知（如未以管理员权限运行）。
+        ``out=True``（按钮调用）走后台线程：Get-Tpm 要起一次 PowerShell，
+        在主线程里同步跑就是点一下卡两秒。
         """
-        status, _, results = TPMSmartCard.tpmStatus()
         if out:
-            if status == 0:
-                messagebox.showinfo(self.i18n("msg_tpm_check_text"),
-                                    self.i18n("msg_tpm_check_done") % results)
-            elif status == 1:
-                messagebox.showerror(self.i18n("msg_tpm_check_text"),
-                                     self.i18n("msg_tpm_check_fail") % results)
-            else:
-                messagebox.showwarning(self.i18n("msg_tpm_check_text"),
-                                       self.i18n("msg_tpm_check_none") % results)
+            self.run_async(lambda: TPMSmartCard.tpmStatus(use_cache=False),
+                           self.apply_tpm_manual)
+            return None
+        status, _, _ = TPMSmartCard.tpmStatus()
+        return status
+
+    def apply_tpm_manual(self, result):
+        """手动检测的结果：弹出完整信息。"""
+        if not result:
+            return None
+        return self.show_tpm_result(result[0], result[2])
+
+    def show_tpm_result(self, status, results):
+        """展示 TPM 检测结果（主线程）。"""
+        if status == 0:
+            messagebox.showinfo(self.i18n("msg_tpm_check_text"),
+                                self.i18n("msg_tpm_check_done") % results)
+        elif status == 1:
+            messagebox.showerror(self.i18n("msg_tpm_check_text"),
+                                 self.i18n("msg_tpm_check_fail") % results)
+        else:
+            messagebox.showwarning(self.i18n("msg_tpm_check_text"),
+                                   self.i18n("msg_tpm_check_none") % results)
         return status
 
     def card_change(self, in_type="pin"):
@@ -1840,6 +2012,9 @@ class SmartCardAPP:
                                and str(self.pick.get("cert") or "").startswith("fido:"))
                 if in_name == "card":
                     result = TPMSmartCard.dropCards(self.data.cards[self.pick[in_name]].sc_path)
+                    # 卡片没了：FIDO2 服务里的卡片缓存与会话必须作废，否则还会拿它
+                    # 去验 PIN（读卡器编号也可能已经错位）
+                    self.invalidate_fido()
                 elif fido_target:
                     result = self.delete_fido_credential()
                 elif in_name == "cert":
@@ -1892,6 +2067,9 @@ class SmartCardAPP:
                                            self.size[0], self.size[1]))
 
     def cert_import(self, flag="pfx"):
+        # 延迟导入：证书导入窗口连带 requests / cryptography（几百毫秒），
+        # 只在真正用到时才加载，别拖慢每次启动
+        from SubApp.CertImport import CertImport
         sub = CertImport(flag, self.root, self)
         self.load_status()
         sub.page.mainloop()

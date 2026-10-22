@@ -6,6 +6,9 @@ from Module import Paths
 from Module.SmartCardObj import SmartCardDev
 from Module.SmartCardObj import SmartCardCer
 
+# 不弹出控制台窗口
+NO_WINDOW = 0x08000000
+
 
 class OpenSCDealer:
     # opensc-tool --serial 成功时输出「十六进制字节 + ASCII 预览」，例如
@@ -22,8 +25,13 @@ class OpenSCDealer:
     def openText(in_comm, in_tool="pkcs15-tool"):
         # 用绝对路径：FIDO2 后端在后台线程里也会调用这里，工作目录不一定还是
         # 程序根目录（例如从计划任务/其它目录启动时）。
-        command = '"%s" %s' % (Paths.resource("OpenSC", "%s.exe" % in_tool), in_comm)
-        process = subprocess.run(command, shell=True, text=True, capture_output=True)
+        #
+        # 直接给参数列表、不经 shell：走 shell 时每次都要起一个 cmd.exe，
+        # 而枚举一张卡要跑六七个这样的进程，累积起来就是启动/刷新时的那一两秒。
+        command = [Paths.resource("OpenSC", "%s.exe" % in_tool)]
+        command += str(in_comm).split()
+        process = subprocess.run(command, text=True, capture_output=True,
+                                 creationflags=NO_WINDOW)
         results = (process.stderr + process.stdout).replace("\t", "").split("\n")
         # print(results)
         return results

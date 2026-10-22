@@ -156,8 +156,42 @@ class SystemSettings:
         self.page.update_idletasks()
         self.page.geometry("%dx%d" % (width, min(max(400, self.page.winfo_reqheight()),
                                                  self.page.winfo_screenheight() - 80)))
-        # 首次 TPM 检测放到窗口显示之后，避免打开设置时界面卡顿
-        self.page.after(60, self.refresh_tpm)
+        # 首次 TPM 检测放到窗口显示之后，并且走后台线程（Get-Tpm 要起 PowerShell）
+        self.page.after(60, lambda: self.refresh_tpm(use_cache=True))
+
+    # 后台任务（查询类：schtasks / Get-Tpm / FIDO 状态，慢且不着急）============
+    def run_background(self, in_worker, in_apply, in_interval=80):
+        """在子线程执行 ``in_worker()``，完成后回主线程 ``in_apply(result)``。
+
+        设置窗口里的状态查询会起 Schtasks / PowerShell / OpenSC 进程，同步跑就是
+        用户看到的「点开设置要卡一两秒」。窗口已关闭时丢弃结果。
+
+        完成通知走「主线程轮询」：Tk 不是线程安全的，子线程里调用 ``after`` 在
+        部分环境会抛 ``main thread is not in main loop``。
+        """
+        job = {"done": False, "result": None}
+
+        def worker():
+            try:
+                job["result"] = in_worker()
+            except Exception as err:
+                print("Settings Query Error:", err)
+            job["done"] = True
+            return None
+
+        threading.Thread(target=worker, daemon=True).start()
+        self.poll_background(job, in_apply, in_interval)
+        return None
+
+    def poll_background(self, in_job, in_apply, in_interval=80):
+        """主线程轮询后台查询是否结束（只在这里碰控件）。"""
+        if not self.alive:
+            return None
+        if not in_job["done"]:
+            self.page.after(in_interval,
+                            lambda: self.poll_background(in_job, in_apply, in_interval))
+            return None
+        return in_apply(in_job["result"])
 
     # 通用 =====================================================================
     def t(self, key, *args):
@@ -302,17 +336,34 @@ class SystemSettings:
         return self.t("msg_set_startup_off")
 
     def refresh_startup(self):
-        """刷新两个自启开关；代理未随程序安装时禁用它的开关。"""
-        entry = AutoStart.app_entry()
-        self.appstart_var.set(entry.is_enabled())
-        self.appstart_state.set(self.startup_state(entry))
-        if not self.agent_path:
+        """刷新两个自启开关；代理未随程序安装时禁用它的开关。
+
+        ``schtasks /query`` 每次要几十到几百毫秒，放后台线程查（见 run_background）。
+        """
+        agent_path = self.agent_path
+
+        def collect():
+            entry = AutoStart.app_entry()
+            info = {"enabled": entry.is_enabled(), "state": self.startup_state(entry),
+                    "agent": None}
+            if agent_path:
+                info["agent"] = AutoStart.agent_entry(agent_path).is_enabled()
+            return info
+
+        return self.run_background(collect, self.apply_startup)
+
+    def apply_startup(self, info):
+        """把后台查到的自启状态填进界面。"""
+        if not self.alive or not info:
+            return None
+        self.appstart_var.set(bool(info.get("enabled")))
+        self.appstart_state.set(info.get("state") or self.t("msg_set_startup_off"))
+        if info.get("agent") is None:
             self.agentstart_box.config(state=tk.DISABLED)
             self.agentstart_var.set(False)
             self.agent_state.set(self.t("msg_set_ssh_missing"))
             return None
-        agent = AutoStart.agent_entry(self.agent_path)
-        enabled = agent.is_enabled()
+        enabled = bool(info["agent"])
         self.agentstart_box.config(state=tk.NORMAL)
         self.agentstart_var.set(enabled)
         self.agent_state.set(self.t("msg_set_startup_on") if enabled
@@ -322,12 +373,14 @@ class SystemSettings:
     def toggle_app_startup(self):
         """开关本程序自启；注册计划任务要起 PowerShell，放到子线程里执行。"""
         entry = AutoStart.app_entry()
-        if not self.appstart_var.get():
-            entry.disable()
-            self.refresh_startup()
-            return None
+        want = bool(self.appstart_var.get())
         self.task_result = None
-        if self.run_task(entry.enable, self.after_app_startup):
+
+        def worker():
+            self.task_result = entry.enable() if want else (entry.disable() or True)
+            return self.task_result
+
+        if self.run_task(worker, self.after_app_startup):
             self.appstart_state.set(self.t("msg_set_installing"))
         return None
 
@@ -564,13 +617,25 @@ class SystemSettings:
                 ("builtin", self.t("msg_fido_pin_mode_app"))]
 
     def refresh_fido(self):
+        """刷新 FIDO2 状态与凭据列表（后台线程：要查设备、起 OpenSC）。"""
         if not self.alive:
             return None
-        try:
-            info = self.fido().status()
-        except Exception as err:
-            self.fido_status_var.set("%s" % err)
+        return self.run_background(self.collect_fido, self.apply_fido)
+
+    def collect_fido(self):
+        """后台采集 FIDO2 状态（不要在这里碰任何 Tk 控件）。"""
+        service = self.fido()
+        return {
+            "info": service.status(),
+            "cards": self._fido_card_names(),
+            "rows": service.list_credentials(),
+        }
+
+    def apply_fido(self, payload):
+        """把后台采集到的 FIDO2 状态填进界面。"""
+        if not self.alive or not payload:
             return None
+        info = payload.get("info") or {}
         lines = [
             "• %s" % info["driver_text"],
             "• %s %s" % (self.t("msg_fido_runtime"),
@@ -592,10 +657,10 @@ class SystemSettings:
             if value == current:
                 self.fido_pin_mode.set(text)
                 break
-        self._refresh_fido_cards(settings)
+        self._refresh_fido_cards(settings, payload.get("cards"))
         self.fido_tree.delete(*self.fido_tree.get_children())
         self.fido_rows = dict()
-        for row in self.fido().list_credentials():
+        for row in payload.get("rows") or []:
             item = self.fido_tree.insert("", tk.END, values=(
                 row["card"], row["rp_id"], row["user_name"], row["created_at"]))
             self.fido_rows[item] = row
@@ -621,42 +686,53 @@ class SystemSettings:
                 break
         service = self.fido()
         service.update_settings(pin_mode=value)
-        if service.status().get("service"):
-            service.restart()
-        self.refresh_fido()
+
+        def worker():
+            if service.status().get("service"):
+                service.restart()
+            return True
+
+        self.run_task(worker, self.refresh_fido)
         return None
 
     def _fido_card_names(self):
-        """可用卡片名（缓存：枚举一次要调 OpenSC，别每次刷新都跑）。"""
-        cached = getattr(self, "_fido_card_cache", None)
-        if cached:
-            return cached
-        try:
-            names = [item["name"] for item in self.fido().cards(include_disabled=True)]
-        except Exception:
-            names = []
-        if names:
-            self._fido_card_cache = names
-        return names
+        """可用卡片名。
 
-    def _refresh_fido_cards(self, settings):
+        不在设置窗口里长期缓存：卡片增删/还原之后名单会变，而 FidoService 自己
+        有短时缓存（几秒），足够挡住「一次刷新跑好几遍 OpenSC」。
+        """
+        try:
+            return [item["name"] for item in self.fido().cards(include_disabled=True)]
+        except Exception:
+            return []
+
+    def _refresh_fido_cards(self, settings, in_names=None):
+        """填「指定卡片」下拉框；卡片名单由后台线程采集后传进来。"""
         auto = self.t("msg_fido_card_auto")
-        values = [auto] + self._fido_card_names()
+        values = [auto] + list(in_names if in_names is not None
+                               else self._fido_card_names())
         self.fido_card_combo.configure(values=values)
         current = str(settings.get("active_card") or "")
         self.fido_card.set(current if current in values else auto)
         return None
 
     def change_fido_card(self):
-        """指定 clientPIN 用哪张卡（空 = 自动：上次使用 / 第一张）。"""
+        """指定 clientPIN 用哪张卡（空 = 自动：上次使用 / 第一张）。
+
+        改完要重启设备端进程才生效，这一步耗时，放后台（见 run_task）。
+        """
         label = self.fido_card.get()
         auto = self.t("msg_fido_card_auto")
         value = "" if label == auto else label
         service = self.fido()
         service.update_settings(active_card=value)
-        if service.status().get("service"):
-            service.restart()
-        self.refresh_fido()
+
+        def worker():
+            if service.status().get("service"):
+                service.restart()
+            return True
+
+        self.run_task(worker, self.refresh_fido)
         return None
 
     def install_fido(self):
@@ -700,7 +776,17 @@ class SystemSettings:
         return None
 
     def stop_fido(self):
-        ok, text = self.fido().stop()
+        """停止设备端服务（要结束进程 + 摘设备，放后台执行）。"""
+        self.fido_result = None
+        self.run_task(self.worker_fido_stop, self.finish_stop)
+        return None
+
+    def worker_fido_stop(self):
+        self.fido_result = self.fido().stop()
+        return self.fido_result
+
+    def finish_stop(self):
+        ok, text = self.fido_result or (False, "")
         self.refresh_fido()
         if not ok:
             messagebox.showwarning(self.t("msg_set_fido"), text)
@@ -771,13 +857,22 @@ class SystemSettings:
                   wraplength=self.wrap).grid(column=0, row=row, columnspan=2, sticky=tk.W, pady=(12, 0))
         page.columnconfigure(1, weight=1)
 
-    def refresh_tpm(self):
-        """读取并展示 TPM 详细状态（状态未知时给出权限提示）。"""
+    def refresh_tpm(self, use_cache=False):
+        """读取并展示 TPM 详细状态（状态未知时给出权限提示）。
+
+        ``Get-Tpm`` 要起一次 PowerShell，同步执行就是「点开设置卡一秒」的来源；
+        这里放后台线程，窗口先出来再填值（结果见 :meth:`apply_tpm`）。
+        """
         if not self.alive:
             return -1
-        status, fields, _ = TPMSmartCard.tpmStatus()
-        if not self.alive:
-            return status
+        return self.run_background(
+            lambda: TPMSmartCard.tpmStatus(use_cache=use_cache), self.apply_tpm)
+
+    def apply_tpm(self, result):
+        """把后台查到的 TPM 状态填进界面。"""
+        if not self.alive or not result:
+            return -1
+        status, fields, _ = result
         for field, value in self.tpm_values.items():
             value.config(text=self.format_tpm(field, fields.get(field)))
         if status == -1:

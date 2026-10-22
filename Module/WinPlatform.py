@@ -28,6 +28,39 @@ import sys
 WOW64_ARCH = os.environ.get("PROCESSOR_ARCHITEW6432", "")
 PROCESS_ARCH = os.environ.get("PROCESSOR_ARCHITECTURE", "")
 
+# 私有字体注册（AddFontResourceExW）相关常量
+FR_PRIVATE = 0x10
+WM_FONTCHANGE = 0x001D
+HWND_BROADCAST = 0xFFFF
+SMTO_ABORTIFHUNG = 0x0002
+
+
+def add_private_font(in_path):
+    """把字体文件注册进当前进程（私有字体，不写系统字体表）；成功返回 True。
+
+    用来替代 pyglet：Tk 在 Windows 上是走 GDI 枚举字体的，私有字体对同进程
+    可见，因此 ``tkinter.font.Font(family=...)`` 能直接用上它；而 ``import
+    pyglet`` 本身就要几百毫秒，纯为注册两个字体重得不偿失。
+    """
+    if not in_path or not os.path.isfile(in_path):
+        return False
+    try:
+        import ctypes
+        added = ctypes.windll.gdi32.AddFontResourceExW(str(in_path), FR_PRIVATE, 0)
+    except Exception as err:
+        print("AddFontResourceEx Error:", err)
+        return False
+    if not added:
+        return False
+    try:
+        import ctypes
+        # 广播 WM_FONTCHANGE：已创建的窗口（含 Tk 的）会重新枚举字体表
+        ctypes.windll.user32.SendMessageTimeoutW(
+            HWND_BROADCAST, WM_FONTCHANGE, 0, 0, SMTO_ABORTIFHUNG, 1000, None)
+    except Exception:
+        pass
+    return True
+
 
 def is_wow64():
     """当前是不是「32 位进程跑在 64 位系统上」。"""

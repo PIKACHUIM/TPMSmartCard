@@ -6,6 +6,12 @@ from Module import Paths
 from Module import PtyCompat
 from Module import WinPlatform
 
+# 不弹出控制台窗口（powershell 子进程用）
+NO_WINDOW = 0x08000000
+# TPM 状态缓存：Get-Tpm 一次要一两秒，启动检查与设置页共用，避免重复等待
+TPM_CACHE_TTL = 30.0
+_TPM_CACHE = {"stamp": 0.0, "value": None}
+
 
 class TPMSmartCard:
     def __init__(self):
@@ -119,11 +125,31 @@ class TPMSmartCard:
     # 查询 TPM 状态 ==============================================================
     #   返回 (状态码, 字段字典, 展示文本)
     #   状态码：0 已激活可用、1 未激活、-1 状态未知（如未以管理员权限运行）
-    def tpmStatus():
+    #
+    #   Get-Tpm 要起一次 PowerShell（一两秒起步），主程序启动检查与「系统设置」
+    #   都会问它；带缓存后第二次起就是内存读，设置页不再卡在这儿。
+    def tpmStatus(use_cache=True):
+        if use_cache:
+            cached = _TPM_CACHE["value"]
+            if cached is not None and time.time() - _TPM_CACHE["stamp"] < TPM_CACHE_TTL:
+                return cached
+        value = TPMSmartCard.queryTpmStatus()
+        if value[0] != -1:
+            # 查不出结果（多半是权限不足）时不缓存，下次再试
+            _TPM_CACHE["stamp"] = time.time()
+            _TPM_CACHE["value"] = value
+        return value
+
+    @staticmethod
+    def queryTpmStatus():
+        """真正去问一次系统（不读缓存）。"""
+        # -NoProfile / -NonInteractive：跳过用户配置脚本，启动快很多；
+        # 不用 shell=True：省掉一次 cmd.exe 中转，也避免控制台窗口闪一下。
+        command = ["powershell", "-NoProfile", "-NonInteractive",
+                   "-Command", "Get-Tpm"]
         try:
-            process = subprocess.run("powershell Get-TPM", text=True,
-                                     capture_output=True, shell=True,
-                                     timeout=60)
+            process = subprocess.run(command, text=True, capture_output=True,
+                                     timeout=60, creationflags=NO_WINDOW)
         except Exception as err:
             print("Get-TPM Error:", err)
             return -1, {}, "Get-TPM Error: %s" % err
