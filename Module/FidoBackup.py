@@ -100,7 +100,7 @@ def restore(reader, section, guid="", log=None):
     if added:
         log.append("提示：FIDO2 凭据仍由卡片 PIN 保护，第一次使用时需要用卡片 PIN 解锁；"
                    "若 PIN 已修改，改用新 PIN 即可")
-        log.append("首次认证时会弹窗要求选择卡片并输入 PIN（还原后本机解锁材料需要重建一次）")
+        log.append("首次认证时 Windows 会要求输入卡片 PIN（还原后本机解锁材料需要重建一次）")
     # 正在跑的服务里可能还留着还原前的会话/卡片缓存：不刷新的话会出现
     # 「刚还原的凭据在认证时找不到」（内存副本覆盖磁盘视图）
     invalidate_service(log)

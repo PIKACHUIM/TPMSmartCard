@@ -4,10 +4,11 @@
 覆盖两个曾经的故障点：
 
 1. 还原之后本机没有解锁材料（``guard`` / ``pin_verifier``）：clientPIN 的
-   getPINToken 流程拿不到 PIN 原文，于是平台只会报「PIN 不可用 / 找不到凭据」。
-   期望：后端主动要求用户「选卡 + 输 PIN」，输一次之后材料自动重建；
+   getPINToken 流程拿不到 PIN 明文，于是平台只会报「PIN 不可用 / 找不到凭据」。
+   期望：后端要求 PIN（``platform_pin=True``，交回 Windows 自己的 PIN 框），
+   用户输一次之后材料自动重建；
 2. 多卡机器上不知道该用哪张卡：期望按「哪张卡上有这条凭据」自动挑卡，
-   挑不出来（例如注册新凭据）才让用户选。
+   挑不出来（例如注册新凭据）就用设置里指定的卡，不再额外弹一个选卡框。
 
 用法::
 
@@ -26,13 +27,18 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.dirname(os.path.abspath(__file__)))))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+# 复用 clientPIN 自检里的「平台侧」实现（协商密钥 / 送 PIN / 拿 token）
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from Module import FidoBackup                                          # noqa: E402
 from Module import FidoCbor                                            # noqa: E402
+from Module import FidoClientPin                                       # noqa: E402
 from Module import FidoCtap                                            # noqa: E402
 from Module import FidoIpc                                             # noqa: E402
 from Module import FidoStore                                           # noqa: E402
 from Module.FidoService import FidoService                            # noqa: E402
+from fido_clientpin_test import Platform                              # noqa: E402
 
 PIN = "12345678"
 CARD_NAME = "Microsoft Virtual Smart Card 0"
@@ -91,6 +97,16 @@ def ga_params(credential_id):
     }
 
 
+def ga_with_token(service, platform, credential_id):
+    """带 pinUvAuthParam 的 getAssertion（平台拿到 pinToken 之后就是这样发的）。"""
+    params = ga_params(credential_id)
+    params[FidoCtap.GA_PIN_AUTH_PARAM] = FidoClientPin.auth_code(
+        platform.protocol, platform.token, params[2])
+    params[FidoCtap.GA_PIN_AUTH_PROTOCOL] = platform.protocol
+    return dispatch(service, FidoIpc.CMD_GET_ASSERTION,
+                    {"cbor_req": base64.b64encode(FidoCbor.encode(params)).decode()})
+
+
 def dispatch(service, cmd, payload):
     return service.dispatch(cmd, json.dumps(payload).encode())
 
@@ -136,7 +152,7 @@ def main():
         check("还原：本机解锁材料待重建", restored is not None
               and not restored.bound and not restored.has_pin_verifier)
 
-        # ---- 3. 认证请求：应要求用户选卡+输 PIN，而不是报「PIN 不可用」-------- #
+        # ---- 3. 认证请求：要求 PIN，且交回平台自己的对话框 -------------------- #
         service = FidoService()
         service.cards = fake_cards
         service.verify_pin = lambda reader, pin: ("ok", "selftest")
@@ -148,21 +164,26 @@ def main():
         data = reply.get("data") or {}
         check("首次认证：要求 PIN（0x36）", reply.get("rv") == FidoCtap.CTAP2_ERR_PIN_REQUIRED,
               hex(reply.get("rv") or 0))
-        check("首次认证：由本程序弹窗（platform_pin=False）",
-              data.get("platform_pin") is False, data)
-        check("首次认证：弹窗能选卡", len(data.get("cards") or []) == 1, data.get("cards"))
+        check("首次认证：交回平台的 PIN 对话框（platform_pin=True）",
+              data.get("platform_pin") is True, data)
 
-        # ---- 4. 用户在弹窗里输 PIN：卡片校验通过后重建解锁材料 ----------------- #
-        login = dispatch(service, FidoIpc.CMD_LOGIN, {"card_uuid": SERIAL, "pin": PIN})
-        check("登录：卡片校验通过", login.get("rv") == 0, login)
+        # ---- 4. 用户在 Windows 的 PIN 框里输一次：setPIN 校验并重建解锁材料 --- #
+        platform = Platform(service).agreement()
+        set_reply = platform.set_pin(PIN)
+        check("平台 setPIN：卡片校验通过", set_reply.get("rv") == 0,
+              hex(set_reply.get("rv") or 0))
         restored = FidoStore.FidoStore.load(store.key)
-        check("登录后：解锁材料已重建",
+        check("输入 PIN 后：解锁材料已重建",
               restored is not None and restored.bound and restored.has_pin_verifier)
 
-        # ---- 5. 同一次会话里重试：不再要求平台再输一次 PIN --------------------- #
-        reply = dispatch(service, FidoIpc.CMD_GET_ASSERTION,
-                         {"cbor_req": base64.b64encode(params).decode()})
-        check("重试认证：直接成功（不再弹第二个 PIN 框）", reply.get("rv") == 0,
+        # 平台随后只送 PIN 哈希拿 token（这一步靠本机解锁副本解库，不需要明文）
+        token_reply = platform.get_token(PIN)
+        check("平台 getPINToken：用记录材料换到 token", token_reply.get("rv") == 0,
+              hex(token_reply.get("rv") or 0))
+
+        # ---- 5. 带上 pinUvAuthParam 重试：一次通过 ---------------------------- #
+        reply = ga_with_token(service, platform, credential_id)
+        check("重试认证：直接成功（不再要求第二次 PIN）", reply.get("rv") == 0,
               hex(reply.get("rv") or 0))
         if not reply.get("rv"):
             assertion = FidoCbor.decode(base64.b64decode(reply["data"]["cbor_resp"]))

@@ -197,16 +197,15 @@ def main():
         check("错误 pinUvAuthParam 被拒 (0x33)",
               resp.get("rv") == FidoCtap.CTAP2_ERR_PIN_AUTH_INVALID, resp.get("rv"))
 
-        # 6) 带正确 pinUvAuthParam 的 MC（token 一次性，用完即作废）
+        # 6) 带正确 pinUvAuthParam 的 MC（同一会话内 pinToken 可复用：平台会缓存
+        #    它，用完即作废会导致「删掉凭据后再注册」被拒，Windows 侧报设备错误）
         resp = platform.make_credential()
         check("带 pinUvAuthParam 注册成功", resp.get("rv") == 0, resp.get("rv"))
         fresh = FidoStore.FidoStore.load(store.key)
         check("凭据已入库", len(fresh.credentials) == 2, len(fresh.credentials))
         resp = platform.make_credential()
-        check("pinToken 一次性：同一次会话里第二次必须重新验 PIN",
-              resp.get("rv") == FidoCtap.CTAP2_ERR_PIN_REQUIRED
-              and (resp.get("data") or {}).get("platform_pin") is True,
-              resp.get("rv"))
+        check("同一会话里 pinToken 可复用（不必再输一次 PIN）",
+              resp.get("rv") == 0, resp.get("rv"))
 
         # 7) PIN 错误
         platform = Platform(service).agreement()
@@ -232,7 +231,7 @@ def main():
         fresh = FidoStore.FidoStore.load(store.key)
         check("磁盘上已删除",
               all(item["uuid"] != target["uuid"] for item in fresh.credentials))
-        check("删除后会话失效（必须重新验 PIN）", service.session is None)
+        check("删除后会话保留（删凭据不影响卡片 PIN）", service.session is not None)
         # 模拟「另一份旧副本」在删除后继续用：bump_counter 不能把条目写回
         legacy = FidoStore.FidoStore.load(store.key)
         check("旧副本 bump_counter 返回 0", legacy.bump_counter(target["uuid"]) == 0)
@@ -245,7 +244,9 @@ def main():
         info = service.dispatch(FidoIpc.CMD_GET_INFO, b"{}")
         options = FidoCbor.decode(unb64(info["data"]["cbor_info"]))
         check("builtin 模式不声明 clientPin", options[4]["clientPin"] is False)
-        # 上一步删除凭据已经把会话作废，这里应回到「PinRequired + 不带 platform_pin」
+        # 清掉会话，模拟「内置模式下还没有验过 PIN」：应回到
+        # 「PinRequired + 不带 platform_pin」，由 fido-go 自己弹框
+        service.logout()
         resp = platform.make_credential(with_param=False)
         check("builtin 模式未登录时要求本程序弹框",
               resp.get("rv") == FidoCtap.CTAP2_ERR_PIN_REQUIRED

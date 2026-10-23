@@ -507,11 +507,11 @@ def handle(command, raw_params, store, master_key, logger=None, pin=None,
                                    uv_ok=uv_ok)
     except StoreError as err:
         raise CtapError(CTAP1_ERR_OTHER, str(err))
-    # pinToken 只用一次：平台缓存了 token 也不能跳过 PIN。下一次注册/认证会
-    # 重新走 getKeyAgreement + getPINToken，用户必须再输一次 PIN（实测按预期
-    # 解决了「输一次 PIN 之后一直不再验证」）。
-    if pin is not None:
-        pin.drop_token()
+    # pinToken **不再一次性作废**：Windows 拿到 token 后会缓存并复用于紧接着的
+    # 注册/认证（例如删掉凭据后再注册）。以前每条命令后都 drop_token，平台再用
+    # 缓存里的 token 就会被判成「PIN required」，表现出来就是注册失败并弹
+    # 「未知的设备状态(代码 1、9、0x8007000d)」。
+    # 会话结束时由 FidoService 作废（见 FidoService.session / invalidate）。
     return result
 
 

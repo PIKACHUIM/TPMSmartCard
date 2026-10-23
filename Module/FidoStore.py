@@ -168,6 +168,9 @@ DEFAULT_SETTINGS = {
     "autostart": False,         # 随程序自启（登录后常驻）
     "session_timeout": 900,     # PIN 认证有效时间（秒）
     "driver_hint_shown": False,  # 是否已提示过安装驱动
+    # 设置结构版本：1 = 还没有做过迁移。2 起 PIN 默认由平台的对话框收集
+    # （迁移逻辑见 FidoService.start，跑完会写成 2）
+    "settings_version": 1,
     # PIN 由谁收集：clientpin = 平台的 PIN 对话框（推荐，只有一个框）；
     # builtin = 本程序自己弹框（老行为，平台只显示「触摸安全密钥」）
     "pin_mode": "clientpin",

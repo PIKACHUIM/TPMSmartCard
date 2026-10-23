@@ -295,21 +295,19 @@ class FidoService:
                 return session["card"], False
         if len(matches) == 1:
             card = matches[0]
-        elif len(matches) > 1:
-            # 多张卡都有该站点的凭据（例如同一个账号在两块卡上都注册过）：必须问用户
-            return self.active_card(), True
         else:
+            # 多张卡都有该站点的凭据、或这条请求看不出该用哪张（典型是注册新
+            # 凭据）：按设置里指定的卡 / 上次用过的卡来，不再为了「选卡」把用户
+            # 拦在一个额外弹窗上（平台的 PIN 框不能选卡，见 _pin_required）
             card = self.active_card()
         if card is None:
             return None, False
         store = self.store_of(card)
-        # 只有「卡上已经有凭据、但本机没有解锁材料」时才必须问 PIN：
+        # 只有「卡上已经有凭据、但本机没有解锁材料」时才需要用户输 PIN：
         # 这条正是还原 / 换机之后的状态（clientPIN 的 token 流程拿不到 PIN 原文，
         # 没有它就没法重建 guard，于是会一直报「PIN 不可用 / 找不到凭据」）。
         need_bind = bool(store is not None and store.credentials and not store.bound)
-        # 有多张卡、这条请求又看不出该用哪张（典型是注册新凭据）：让用户选
-        need_choice = len(items) > 1 and not matches
-        return card, bool(need_bind or need_choice)
+        return card, need_bind
 
     def _bind_session(self, card, store, master):
         self._session = {"store": store, "master": master, "card": card,
@@ -482,6 +480,9 @@ class FidoService:
         session = self._session
         if session and session["expires"] >= time.time():
             return session
+        if self._session is not None:
+            # 会话到期：平台手里的 pinToken 一并作废，下次操作必须重新输 PIN
+            self._pin.drop_token()
         self._session = None
         return None
 
@@ -490,6 +491,7 @@ class FidoService:
             if self._session:
                 self.log("会话已结束: %s" % self._session["card"].get("name"))
             self._session = None
+            self._pin.drop_token()
 
     def login(self, card_uuid, pin):
         """fido-go 的登录回调：校验卡片 PIN + 解锁凭据库。返回 rv 码。
@@ -575,13 +577,28 @@ class FidoService:
     def _ask_user(self, reason=""):
         """回一条「让 fido-go 弹窗」的响应（``platform_pin=False``）。
 
-        clientPIN 模式下平台那个 PIN 框不能选卡，也拿不到 PIN 明文；多卡或本机
-        没有解锁材料时必须由本程序问一次（见 :meth:`card_for_request`）。
+        只在 ``builtin`` 模式用：那时设备声明 ``uv=true``，平台只显示「触摸安全
+        密钥」，PIN 只能由 fido-go 自己的对话框收集。
         """
         if reason:
-            self.log("要求用户选卡并输入 PIN：%s" % reason)
+            self.log("要求用户选卡并输入 PIN（builtin 模式）：%s" % reason)
         return {"rv": FidoCtap.CTAP2_ERR_PIN_REQUIRED,
                 "data": {"platform_pin": False, "cards": self._dialog_cards()}}
+
+    def _pin_required(self, client_pin, reason=""):
+        """需要 PIN 时怎么回平台。
+
+        clientPIN 模式下**一定**让平台弹它自己的对话框（``platform_pin=True``）：
+        本程序如果在这里挂一个自己的窗口等用户输入，这条 CTAP 请求就一直不结束，
+        Windows 会停在「触摸安全密钥」直到超时（用户看到的就是「卡在等待触摸
+        密钥，多试几次才行」，而且输入框还是 Win32 默认样式的丑框）。
+        """
+        if client_pin:
+            if reason:
+                self.log("需要 PIN，交回平台对话框：%s" % reason)
+            return {"rv": FidoCtap.CTAP2_ERR_PIN_REQUIRED,
+                    "data": {"platform_pin": True}}
+        return self._ask_user(reason)
 
     def _handle_ctap(self, cmd, body):
         cbor = base64.b64decode(body.get("cbor_req") or "")
@@ -600,7 +617,9 @@ class FidoService:
             # 记住本条请求该用哪张卡：随后的 0x06 要靠它验 PIN
             self._pin_card = card["name"]
         if need_pin and self.session is None:
-            return self._ask_user(card["name"] if card else "没有可用卡片")
+            # clientPIN 模式下一律交回平台弹框（见 _pin_required 的说明）
+            return self._pin_required(client_pin,
+                                      card["name"] if card else "没有可用卡片")
         uv_ok = bool(client_pin and card is not None
                      and self._uv_card == card["name"]
                      and time.time() < self._uv_until)
@@ -666,14 +685,24 @@ class FidoService:
             # 设备端程序（fido-go.exe）是否支持转发 CTAP 0x06：不支持就别声明
             # clientPIN，否则 Windows 调 0x06 得到 invalid command 后会一直停在
             # 「触摸安全密钥」，既认证不了也不报错。
+            supported, note = FidoRuntime.runtime_features()
+            settings_now = self.settings
+            old_settings = int(settings_now.get("settings_version") or 1) < 2
             if self.pin_mode == FidoCtap.PIN_MODE_CLIENT:
-                supported, note = FidoRuntime.runtime_features()
                 if not supported:
                     self.log("设备端程序不支持 clientPIN（%s），本次自动退回内置 PIN 弹窗"
                              % note)
                     self.update_settings(pin_mode=FidoCtap.PIN_MODE_BUILTIN)
                 else:
                     self.log("设备端程序支持 clientPIN：%s" % note)
+            elif supported and old_settings:
+                # 1.7.0 起默认改成「Windows 自己的 PIN 对话框」。老版本存的是
+                # builtin——设备自己弹那个 Win32 默认样式的框，平台还会一直停在
+                # 「触摸安全密钥」直到超时。升级后一次性迁移，用户仍可改回去。
+                self.update_settings(pin_mode=FidoCtap.PIN_MODE_CLIENT)
+                self.log("设置迁移（1.7.0）：PIN 改由 Windows 安全对话框收集")
+            if old_settings:
+                self.update_settings(settings_version=2)
 
             FidoRuntime.clear_old_log()
             ok, text = FidoRuntime.start_service(pin_strings=self.pin_strings())
@@ -860,30 +889,29 @@ class FidoService:
 
     def delete_credential(self, card_key, entry_uuid):
         with self._lock:
-            store, shared = self._store_for_write(card_key)
+            store = self._store_for_write(card_key)[0]
             if store is None:
                 return False
             ok = store.delete_credential(entry_uuid)
             if ok:
-                # 凭据集合变了，当前会话语义上已经不可信：直接失效，下次认证
-                # 重新验 PIN（否则同一个 PIN 会话里还能继续用旧状态）
-                if shared:
-                    self.logout()
+                # 会话**故意保留**：删凭据不影响卡片 PIN 是否有效，而
+                # :meth:`_store_for_write` 拿到的就是会话里那份 store 实例，
+                # 删完就已经是最新状态。以前这里顺手 logout，结果删完再注册时
+                # 平台还得从头问一次 PIN，Windows 甚至会直接报「未知的设备状态」。
                 self._cards = (0.0, [])       # 凭据数量变了，重算缓存
                 self.log("已删除凭据: %s（%s）" % (entry_uuid, store.display_name))
             return ok
 
     def clear_credentials(self, card_key):
         with self._lock:
-            store, shared = self._store_for_write(card_key)
+            store = self._store_for_write(card_key)[0]
             if store is None:
                 return 0
             count = len(store.credentials)
             if not count:
                 return 0
             store.clear_credentials()
-            if shared:
-                self.logout()
+            # 同上：保留会话（会话里的 store 实例本身就是刚被清空的那一份）
             self._cards = (0.0, [])           # 凭据数量变了，重算缓存
             self.log("已清空卡片凭据: %s（%d 条）" % (store.display_name, count))
             return count
