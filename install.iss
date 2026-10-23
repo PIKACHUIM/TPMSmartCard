@@ -5,8 +5,8 @@
 ;  CI 编译：   .github/workflows/build-client-release.yml（自动设置下列环境变量）
 ;
 ;  可选环境变量（都有默认值，本地直接编译也能用）：
-;    TPMSMART_VERSION      显示版本号，如 1.6.0 / 1.6.2026.1012（默认 1.6.0）
-;    TPMSMART_VERSION4     写入 exe 版本资源的 4 段版本号，如 1.6.0.0（默认 1.6.0.0）
+;    TPMSMART_VERSION      显示版本号，如 1.7.0 / 1.7.2026.1012（默认 1.7.0）
+;    TPMSMART_VERSION4     写入 exe 版本资源的 4 段版本号，如 1.7.0.0（默认 1.7.0.0）
 ;    TPMSMART_PACKAGENAME  产物基础名 = TPMSmartCard-<打包方式>-<通道>-<系统>-<架构>
 ;                          （默认 TPMSmartCard-cxfree-local-win10-x64；安装包名在此基础上拼 -setup）
 ;    TPMSMART_BUILDDIR     打包产物目录：cx_Freeze 的 build\exe.win-amd64-3.13
@@ -62,12 +62,12 @@
 ; ---- 版本号 ---------------------------------------------------------------
 #define AppVersion GetEnv("TPMSMART_VERSION")
 #if Len(AppVersion) == 0
-  #define AppVersion "1.6.0"
+  #define AppVersion "1.7.0"
 #endif
 
 #define Version4 GetEnv("TPMSMART_VERSION4")
 #if Len(Version4) == 0
-  #define Version4 "1.6.0.0"
+  #define Version4 "1.7.0.0"
 #endif
 
 ; ---- 产物名（基础名，安装包最终叫 <PackageName>-setup.exe）-----------------

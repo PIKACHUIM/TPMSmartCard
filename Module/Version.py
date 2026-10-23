@@ -10,7 +10,7 @@ import os
 import re
 
 # 工具版本（与 GitHub Release 的 Tag 对应）
-VERSION = os.environ.get("TPMSMART_VERSION") or "1.6.0"
+VERSION = os.environ.get("TPMSMART_VERSION") or "1.7.0"
 
 # 项目仓库信息
 GITHUB_OWNER = "PIKACHUIM"

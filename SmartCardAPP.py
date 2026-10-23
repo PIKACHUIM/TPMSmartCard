@@ -142,6 +142,8 @@ class SmartCardAPP:
         self.open_backup()
         # FIDO2：按设置自动开启（后台线程，失败只记日志）
         self.root.after(1500, self.startup_fido)
+        # WinSSH 代理：按设置随程序一起拉起（后台线程，缺文件时只记日志）
+        self.root.after(1200, self.startup_ssh_agent)
         self.root.mainloop()
 
     def load_fonts(self):
@@ -304,12 +306,14 @@ class SmartCardAPP:
     def startup_fido(self):
         """按设置自动开启 FIDO2；失败只写日志，不打断程序启动。
 
-        驱动已经装好就直接把设备端进程拉起来（默认设置里服务是开启的），
-        用户不必每次开机后再去设置里点一次「启动」；驱动没装则只记一行日志。
+        只要装了虚拟总线驱动就把设备端进程拉起来（默认设置里就是开启的），
+        用户不必每次开机后再去设置里点一次「启动」。刚登录时驱动/设备可能还没
+        就绪，所以这里重试几次，而不是一次不成就放弃。
         """
         try:
             service = self.fido_service()
             if not service.settings.get("enabled"):
+                print("FIDO2：设置里已关闭「程序启动时自动开启」，跳过")
                 return None
         except Exception as err:
             print("FIDO2 设置读取失败:", err)
@@ -318,14 +322,52 @@ class SmartCardAPP:
         def worker():
             try:
                 from Module import FidoRuntime
-                state, text, _driver = FidoRuntime.driver_state()
-                if state != "ok":
-                    print("FIDO2：驱动未就绪，跳过自动启动（%s）" % text)
-                    return
-                ok, started = service.start()
-                print("FIDO2:", started)
+                starts = 0
+                for attempt in range(1, 7):
+                    if FidoRuntime.service_running():
+                        print("FIDO2：设备端进程已在运行，无需重复启动")
+                        return None
+                    state, text, _driver = FidoRuntime.driver_state()
+                    if state == "ok":
+                        starts += 1
+                        ok, started = service.start()
+                        print("FIDO2: %s" % started)
+                        if ok:
+                            return None
+                        if starts >= 2:
+                            # 驱动没问题、启动本身失败（端口被占、日志里有原因）：
+                            # 再重试也只是反复重启，直接交给用户手动处理
+                            break
+                    else:
+                        print("FIDO2：驱动未就绪（%s），第 %d 次重试" % (text, attempt))
+                    time.sleep(3)
+                print("FIDO2：自动启动未成功，请在「系统设置 - FIDO2」里手动启动")
             except Exception as err:
                 print("FIDO2 启动失败:", err)
+            return None
+
+        threading.Thread(target=worker, daemon=True).start()
+        return None
+
+    def startup_ssh_agent(self):
+        """按设置随程序启动 WinSSH 代理；失败只写日志。
+
+        ``Module.MoreConfig`` 已经会判断代理文件是否存在、是否已在运行，
+        这里只负责在后台线程里调一下，别让启动路径被进程拉起拖住。
+        """
+        try:
+            from Module import MoreConfig
+        except Exception as err:
+            print("WinSSH 代理不可用:", err)
+            return None
+
+        def worker():
+            try:
+                started, text = MoreConfig.startSSHIfNeeded()
+                print("WinSSH 代理: %s" % text)
+            except Exception as err:
+                print("WinSSH 代理启动失败:", err)
+            return None
 
         threading.Thread(target=worker, daemon=True).start()
         return None
@@ -538,6 +580,7 @@ class SmartCardAPP:
             "cert_info": self.view_frames("cert_info"),
             "cert_user": self.view_frames("cert_user"),
             "cert_last": self.view_frames("cert_last"),
+            "fido_info": self.view_frames("fido_info"),
             "main_main": self.view_frames("main_main"),
         }
 
@@ -566,6 +609,9 @@ class SmartCardAPP:
             "cert_info": self.view_labels("cert_info"),
             "cert_user": self.view_labels("cert_user"),
             "cert_last": self.view_labels("cert_last"),
+            # 通行密钥（FIDO2 凭据）有自己的详情分组：它不是 X.509 证书，
+            # 证书那套字段（CA/摘要/使用者/颁发者）在这里全是 N/A
+            "fido_info": self.view_labels("fido_info"),
         }
         # 按钮行在两块之间垂直居中，保证按钮上下间距一致
         self.align_button_rows()
@@ -576,6 +622,7 @@ class SmartCardAPP:
             "cert_info": self.view_hint("cert_info", "msg_hint_cert"),
             "cert_user": self.view_hint("cert_user", "msg_hint_cert"),
             "cert_last": self.view_hint("cert_last", "msg_hint_cert"),
+            "fido_info": self.view_hint("fido_info", "msg_hint_fido"),
         }
         # 构建阶段就把详情字段收起来：未选中卡片/证书时应当直接显示「选择…查看详情」，
         # 否则启动时（读卡数据完成前，例如 TPM 提示框弹出期间窗口已被绘制）
@@ -778,12 +825,18 @@ class SmartCardAPP:
         self.button["card_opts"]["bak"].config(state=tk.DISABLED)
         self.tables["card_main"][0].delete(*self.tables["card_main"][0].get_children())
         self.tables["cert_main"][0].delete(*self.tables["cert_main"][0].get_children())
-        for item_name in ["card_info", "cert_info", "cert_user", "cert_last"]:
+        for item_name in ["card_info", "cert_info", "cert_user", "cert_last",
+                          "fido_info"]:
             for fill_name in self.labels[item_name]:
                 self.labels[item_name][fill_name][1].config(text="")
         # 还没选卡片/证书：详情区只留一行提示，标签整体不显示
-        for hint_name in ["card_info", "cert_info", "cert_user", "cert_last"]:
+        for hint_name in ["card_info", "cert_info", "cert_user", "cert_last",
+                          "fido_info"]:
             self.toggle_labels(hint_name, False)
+        # 分组框回到默认布局：证书三框在位（框内是提示），通行密钥框收起
+        for item_name in ["cert_info", "cert_user", "cert_last"]:
+            self.show_frame(item_name, True)
+        self.show_frame("fido_info", False)
         for card_now in self.data.cards:
             if "card_main" in self.tables:
                 self.tables["card_main"][0].insert("", tk.END, values=(
@@ -885,10 +938,15 @@ class SmartCardAPP:
     def clear_cert_pick(self):
         """清空证书选中状态：详情区回到居中提示，相关按钮禁用。"""
         self.pick["cert"] = ""
-        for item_name in ["cert_info", "cert_user", "cert_last"]:
+        for item_name in ["cert_info", "cert_user", "cert_last", "fido_info"]:
             for fill_name in self.labels[item_name]:
                 self.labels[item_name][fill_name][1].config(text="")
             self.toggle_labels(item_name, False)
+        # 分组框也按「证书」的默认样子恢复：证书三框留着（虚线提示），
+        # 通行密钥框收起（下次选中通行密钥时再显示）
+        for item_name in ["cert_info", "cert_user", "cert_last"]:
+            self.show_frame(item_name, True)
+        self.show_frame("fido_info", False)
         for key in ["non", "sys", "out"]:
             self.button["cert_main"][key].config(state=tk.DISABLED)
         return None
@@ -1217,6 +1275,22 @@ class SmartCardAPP:
             hint.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         return None
 
+    def show_frame(self, in_name, in_visible):
+        """显示/隐藏一个详情分组框（连框带内容）。
+
+        通行密钥没有证书那套字段：选中它时把「证书信息 / 使用者 / 颁发者」
+        三个框整块收起来，只留「通行密钥信息」，界面才不像在用证书逻辑。
+        """
+        frame_now = self.frames.get(in_name)
+        if frame_now is None:
+            return None
+        if in_visible:
+            conf_now = self.conf.get('frames', {}).get(in_name) or [0, 0, 0, 0]
+            frame_now.place(x=conf_now[2], y=conf_now[3])
+        else:
+            frame_now.place_forget()
+        return None
+
     def table_blank_click(self, in_name, event):
         """点击表格空白处取消选中。
 
@@ -1405,52 +1479,32 @@ class SmartCardAPP:
         return None
 
     def show_fido_credential(self, uuid_now):
-        """在证书详情区显示一条 FIDO2 凭据。
+        """在「通行密钥信息」分组里显示一条 FIDO2 凭据。
 
-        用户明确要求：这里要看的是「凭据的网站、用户名、时间」，而不是证书
-        字段；没有 X.509 证书，所以导出/装到系统的按钮直接禁用。
+        通行密钥不是 X.509 证书（没有 CA/摘要/使用者/颁发者/有效期），所以
+        不再借用证书那三组字段，只填它自己的几项：站点、用户、卡片、算法、
+        创建/最近使用时间、凭据 ID。导出与写系统证书库不可用，删除可用。
         """
         row = self.fido_rows.get(uuid_now) or {}
         self.pick["cert"] = "fido:" + uuid_now
         empty_tag = self.i18n("msg_empty")
         none_tag = self.i18n("msg_na")
-        site = str(row.get("rp_id") or row.get("rp_name") or "")
-        created = str(row.get("created_at") or "") or none_tag
-        used = str(row.get("last_used_at") or "") or none_tag
+        site = str(row.get("rp_id") or row.get("rp_name") or "") or none_tag
+        user = str(row.get("user_name") or "") or empty_tag
         values = {
-            "cert_uuid": uuid_now,
-            "cert_name": site,
-            "cert_sign": "ES256 / P-256",
-            "cert_type": self.i18n("msg_fido_type"),
-            "cert_open": created,
-            "cert_stop": used,
-            "is_ca_cert": none_tag,
-            "is_expired": none_tag,
-            "cert_sha1": none_tag,
-            "key_usages": self.i18n("msg_fido_usages"),
-            "sub_usages": str(row.get("card") or ""),
-            "key_identy": str(row.get("credential_id") or "")[:32],
-            "uid_serial": none_tag,
-            "sub_identy": none_tag,
-            "cer_policy": none_tag,
-            "user_name": str(row.get("user_name") or "") or empty_tag,
-            "user_code": none_tag,
-            "user_area": none_tag,
-            "user_city": none_tag,
-            "user_on_t": str(row.get("user_display_name") or "") or empty_tag,
-            "user_ou_t": empty_tag,
-            "last_name": str(row.get("rp_name") or site),
-            "last_code": none_tag,
-            "last_area": none_tag,
-            "last_city": none_tag,
-            "last_on_t": str(row.get("card") or ""),
-            "last_ou_t": empty_tag,
+            "msg_fido_cred_rp": site,
+            "msg_fido_cred_card": str(row.get("card") or "") or none_tag,
+            "msg_fido_cred_user": user,
+            "msg_fido_cred_alg": "ES256 (P-256)",
+            "msg_fido_cred_created": str(row.get("created_at") or "") or none_tag,
+            "msg_fido_cred_used": str(row.get("last_used_at") or "") or none_tag,
+            "msg_fido_cred_id": self.cert_value(
+                str(row.get("credential_id") or ""), 44),
         }
+        labels_now = self.labels.get("fido_info") or {}
         for fill_name, text in values.items():
-            for label in ["cert_info", "cert_user", "cert_last"]:
-                label_now = self.labels[label]
-                if fill_name in label_now:
-                    label_now[fill_name][1].config(text=text)
+            if fill_name in labels_now:
+                labels_now[fill_name][1].config(text=text)
         # 删除可用（删除凭据），导出/写系统证书库不可用
         self.button["cert_main"]["non"].config(state=tk.NORMAL)
         self.button["cert_main"]["sys"].config(state=tk.DISABLED)
@@ -1540,18 +1594,23 @@ class SmartCardAPP:
     def cert_select(self, event):
         treeview = event.widget
         selected_item = treeview.selection()
-        for item_name in ["cert_info", "cert_user", "cert_last"]:
+        for item_name in ["cert_info", "cert_user", "cert_last", "fido_info"]:
             for fill_name in self.labels[item_name]:
                 self.labels[item_name][fill_name][1].config(text="")
-        # 有选中证书才显示详情，否则三个分组框都只留一行居中提示
-        has_cert = len(selected_item) > 0
+        # 选中行是证书还是通行密钥，决定显示哪一组详情：
+        # 通行密钥没有 X.509 字段，用专门的「通行密钥信息」分组，证书那三组整块收起
+        selected_uuid = treeview.set(selected_item[0], '#1') if selected_item else ""
+        is_fido = bool(selected_uuid) and selected_uuid in self.fido_rows
+        has_cert = bool(selected_item) and not is_fido
         for toggle_name in ["cert_info", "cert_user", "cert_last"]:
             self.toggle_labels(toggle_name, has_cert)
+            self.show_frame(toggle_name, has_cert)
+        self.toggle_labels("fido_info", is_fido)
+        self.show_frame("fido_info", is_fido)
         if len(selected_item) > 0:
             selected_name = treeview.set(selected_item[0], '#2')
-            selected_uuid = treeview.set(selected_item[0], '#1')
             # FIDO2 凭据：不是证书，走单独的详情填充（站点/用户名/时间）
-            if selected_uuid in self.fido_rows:
+            if is_fido:
                 self.show_fido_credential(selected_uuid)
                 return None
             selected_name = selected_name.replace(self.i18n("msg_no_cert"), "")
@@ -1743,6 +1802,13 @@ class SmartCardAPP:
         make.geometry("%dx%d" % (760 if self.wide else 700, 200))
         make.geometry(f"+{self.size[0]}+{self.size[1]}")
         make.title(self.i18n("msg_pass_change_tx") if in_type == "pin" else self.i18n("msg_pass_resets_tx"))
+        # 置顶并抢焦点：这个框要用户马上输入，被主窗口/其它窗口压住就等于「没反应」
+        try:
+            make.attributes('-topmost', True)
+            make.lift()
+            make.focus_force()
+        except Exception:
+            pass
 
         pass_lan = self.i18n("msg_old") + " PIN: " if in_type == "pin" else self.i18n("msg_card") + " PUK: "
         pass_var = tk.StringVar()
@@ -1983,7 +2049,25 @@ class SmartCardAPP:
 
     def data_delete(self, in_name="card"):
         data = self.data.cards if in_name == "card" else self.data.certs
-        if self.pick[in_name] in data:
+        target = str(self.pick.get(in_name) or "")
+        # 通行密钥的选中标识是 "fido:<uuid>"，不在证书字典里；以前这里直接判空，
+        # 于是主页选中一条通行密钥点「删除」什么都不会发生
+        is_fido = in_name == "cert" and target.startswith("fido:")
+        if target in data or is_fido:
+            # 对话框里给用户看的名字：通行密钥用「站点（用户名）」
+            target_name = target
+            kind_key = "msg_" + in_name
+            if is_fido:
+                row_now = self.fido_rows.get(target[5:]) or {}
+                site_now = str(row_now.get("rp_id") or row_now.get("rp_name") or "")
+                user_now = str(row_now.get("user_name") or "")
+                target_name = ("%s（%s）" % (site_now, user_now)) if user_now else site_now
+                target_name = target_name or self.i18n("msg_fido_type")
+                kind_key = "msg_fido_type"
+            kind_now = self.i18n(kind_key)
+            # 「删除」+ 对象名：拉丁字母开头要留一个空格（Remove Certificate /
+            # 删除 FIDO2 通行密钥），汉字开头直接拼（删除证书）
+            join = " " if kind_now[:1].isascii() else ""
             make = ttk.Toplevel(self.root)
             # 点右上角 × 也走 close_dialog：先取消主题订阅再销毁
             make.protocol("WM_DELETE_WINDOW", lambda: self.close_dialog(make))
@@ -1992,7 +2076,14 @@ class SmartCardAPP:
             make.geometry("%dx%d" % (dialog_w, 240))
             make.resizable(False, False)
             make.geometry(f"+{self.size[0]}+{self.size[1]}")
-            make.title(self.i18n("msg_remove") + self.i18n("msg_" + in_name))
+            make.title(self.i18n("msg_remove") + join + kind_now)
+            # 置顶并抢焦点：主窗口常有别的窗口压在上面时，确认框会「看不见」
+            try:
+                make.attributes('-topmost', True)
+                make.lift()
+                make.focus_force()
+            except Exception:
+                pass
 
             def submit():
                 if in_name == "card" and not TPMSmartCard.isElevated():
@@ -2008,14 +2099,12 @@ class SmartCardAPP:
                     make.attributes('-topmost', True)
                     return None
                 # FIDO2 凭据不是证书：删除走凭据库（且不能带「重启生效」那句）
-                fido_target = (in_name == "cert"
-                               and str(self.pick.get("cert") or "").startswith("fido:"))
                 if in_name == "card":
                     result = TPMSmartCard.dropCards(self.data.cards[self.pick[in_name]].sc_path)
                     # 卡片没了：FIDO2 服务里的卡片缓存与会话必须作废，否则还会拿它
                     # 去验 PIN（读卡器编号也可能已经错位）
                     self.invalidate_fido()
-                elif fido_target:
+                elif is_fido:
                     result = self.delete_fido_credential()
                 elif in_name == "cert":
                     result = TPMSmartCard.dropCerts(self.pick["cert"])
@@ -2023,7 +2112,7 @@ class SmartCardAPP:
                 self.load_status()
                 self.close_dialog(make)
                 if len(result) > 0:
-                    if in_name == "cert" and not fido_target:
+                    if in_name == "cert" and not is_fido:
                         result += self.i18n("delete_cert_reboot")
                     messagebox.showinfo(self.i18n("msg_remove") + self.i18n("msg_result"), result)
 
@@ -2037,7 +2126,7 @@ class SmartCardAPP:
             wrap = dialog_w - 40
             kill_tag = ttk.Label(make,
                                  text=self.i18n("delete_cert_titles") % (
-                                     self.i18n("msg_" + in_name), self.pick[in_name]),
+                                     kind_now, target_name),
                                  justify=tk.LEFT, wraplength=wrap)
             kill_tag.grid(row=0, column=0, columnspan=2, padx=20, pady=(15, 0), sticky=W)
 
@@ -2045,11 +2134,14 @@ class SmartCardAPP:
             if in_name == "card":
                 # 删卡同时会让本工具的备份还原失效：备份里不含 TPM 内的密钥
                 detail = "%s\n\n%s" % (detail, self.i18n("delete_card_backup"))
+            elif is_fido:
+                # 凭据删掉后该网站只能重新注册，别让用户以为是「这台设备坏了」
+                detail = "%s\n\n%s" % (detail, self.i18n("msg_fido_confirm_delete"))
             kill_tip = ttk.Label(make, bootstyle="danger", justify=tk.LEFT, wraplength=wrap,
                                  text=detail)
             kill_tip.grid(row=1, column=0, columnspan=2, padx=20, pady=(12, 0), sticky=W)
             kill_var = tk.BooleanVar()
-            kill_yes = ttk.Checkbutton(make, text=self.i18n("delete_cert_checks") % self.i18n("msg_" + in_name),
+            kill_yes = ttk.Checkbutton(make, text=self.i18n("delete_cert_checks") % kind_now,
                                        bootstyle="dark", command=checks, variable=kill_var)
             kill_yes.state(['!alternate'])
             kill_yes.grid(row=2, column=0, columnspan=2, padx=20, pady=(12, 0), sticky=W)

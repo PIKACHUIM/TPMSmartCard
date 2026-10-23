@@ -67,6 +67,51 @@ def is_wow64():
     return bool(WOW64_ARCH)
 
 
+def process_running(in_name):
+    """是否有指定文件名（如 ``SSHCardAgent.exe``）的进程在运行。
+
+    用 Toolhelp32 快照，不额外起 tasklist 进程（那要几十毫秒，还得解析文本）。
+    """
+    name = str(in_name or "").strip().lower()
+    if not name:
+        return False
+    try:
+        import ctypes
+
+        class _PROCESSENTRY32W(ctypes.Structure):
+            _fields_ = [("dwSize", ctypes.c_uint32),
+                        ("cntUsage", ctypes.c_uint32),
+                        ("th32ProcessID", ctypes.c_uint32),
+                        ("th32DefaultHeapID", ctypes.c_void_p),
+                        ("th32ModuleID", ctypes.c_uint32),
+                        ("cntThreads", ctypes.c_uint32),
+                        ("th32ParentProcessID", ctypes.c_uint32),
+                        ("pcPriClassBase", ctypes.c_long),
+                        ("dwFlags", ctypes.c_uint32),
+                        ("szExeFile", ctypes.c_wchar * 260)]
+
+        kernel32 = ctypes.WinDLL("kernel32.dll", use_last_error=True)
+        kernel32.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
+        snapshot = kernel32.CreateToolhelp32Snapshot(0x00000002, 0)   # SNAPPROCESS
+        if not snapshot or snapshot == ctypes.c_void_p(-1).value:
+            return False
+        entry = _PROCESSENTRY32W()
+        entry.dwSize = ctypes.sizeof(_PROCESSENTRY32W)
+        found = False
+        try:
+            ok = kernel32.Process32FirstW(ctypes.c_void_p(snapshot), ctypes.byref(entry))
+            while ok:
+                if str(entry.szExeFile).lower() == name:
+                    found = True
+                    break
+                ok = kernel32.Process32NextW(ctypes.c_void_p(snapshot), ctypes.byref(entry))
+        finally:
+            kernel32.CloseHandle(ctypes.c_void_p(snapshot))
+        return found
+    except Exception:
+        return False
+
+
 def is_64bit_os():
     """操作系统本身是不是 64 位（不看当前进程位宽）。"""
     if WOW64_ARCH:

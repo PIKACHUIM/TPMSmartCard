@@ -139,6 +139,15 @@ class SystemSettings:
         if in_size is not None:
             self.page.geometry("+%d+%d" % (in_size[0], in_size[1]))
         self.page.protocol("WM_DELETE_WINDOW", self.close)
+        # 从主窗口打开时贴住主窗口并抬到最前：否则它可能弹在主窗口后面，
+        # 看起来像「点了设置没反应」
+        try:
+            if in_root is not None:
+                self.page.transient(in_root)
+            self.page.lift()
+            self.page.focus_force()
+        except Exception:
+            pass
         # 页签（外观在最前、关于与更新在最后）====================================
         self.notebook = ttk.Notebook(self.page)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=12, pady=(12, 6))
@@ -492,16 +501,40 @@ class SystemSettings:
                    command=self.install_ssh).pack(side=tk.LEFT)
         ttk.Button(line, bootstyle="primary-outline", text=self.t("msg_set_ssh_start"),
                    command=self.start_ssh).pack(side=tk.LEFT, padx=8)
+        # 随程序启动代理：勾上以后每次打开本程序就把代理拉起来，不用单独启动
+        self.ssh_auto = tk.BooleanVar(value=MoreConfig.sshAutoStart())
+        self.ssh_auto_box = ttk.Checkbutton(
+            page, bootstyle="info-round-toggle", text=self.t("msg_set_ssh_auto"),
+            variable=self.ssh_auto, command=self.toggle_ssh_auto)
+        self.ssh_auto_box.pack(anchor=tk.W, pady=(14, 0))
         self.ssh_var = tk.StringVar()
         ttk.Label(page, justify=tk.LEFT, wraplength=self.wrap,
-                  textvariable=self.ssh_var).pack(anchor=tk.W, pady=(14, 0))
+                  textvariable=self.ssh_var).pack(anchor=tk.W, pady=(10, 0))
         self.show_ssh()
 
     def show_ssh(self):
-        """展示随程序分发的 SSH 代理路径；文件缺失时给出提示。"""
+        """展示随程序分发的 SSH 代理路径与运行状态；文件缺失时给出提示。"""
         agent_path = MoreConfig.sshAgentPath()
-        self.ssh_var.set(agent_path if agent_path else self.t("msg_set_ssh_missing"))
+        if not agent_path:
+            self.ssh_var.set(self.t("msg_set_ssh_missing"))
+            self.ssh_auto_box.config(state=tk.DISABLED)
+            return agent_path
+        state = self.t("msg_set_ssh_state_running" if MoreConfig.sshAgentRunning()
+                       else "msg_set_ssh_state_stopped")
+        self.ssh_var.set("%s\n%s" % (agent_path, state))
         return agent_path
+
+    def toggle_ssh_auto(self):
+        """记住「程序启动时自动启动代理」，勾上时顺带立刻启动一次。"""
+        want = bool(self.ssh_auto.get())
+        if not MoreConfig.setSshAutoStart(want):
+            messagebox.showwarning(self.t("msg_set_title"), self.t("msg_set_startup_fail"))
+            self.ssh_auto.set(not want)
+            return None
+        if want:
+            MoreConfig.startSSHIfNeeded()
+        self.show_ssh()
+        return None
 
     def install_ssh(self):
         """通过 Chocolatey 安装 WinSSH 代理并启动。"""
@@ -512,6 +545,7 @@ class SystemSettings:
     def start_ssh(self):
         if not MoreConfig.startSSH():
             messagebox.showwarning(self.t("msg_set_title"), self.t("msg_set_ssh_missing"))
+        self.show_ssh()
         return None
 
     # 页签：FIDO2 / 通行密钥 ==================================================
@@ -636,13 +670,14 @@ class SystemSettings:
         if not self.alive or not payload:
             return None
         info = payload.get("info") or {}
+        # 状态只留三行：驱动 / 设备端进程（在跑就带 PID）/ 自检。
+        # 以前这里有一行「启动 FIDO2 服务: 未启用」，很容易被读成「自动启动没开」，
+        # 其实它说的是设备端进程在不在。
         lines = [
             "• %s" % info["driver_text"],
-            "• %s %s" % (self.t("msg_fido_runtime"),
-                          info.get("clientpin_text") or ""),
-            "• %s: %s" % (self.t("msg_fido_start"),
-                          ("PID %d" % info["pid"]) if info["process"]
-                          else self.t("msg_set_startup_off")),
+            "• %s %s%s" % (self.t("msg_fido_runtime"),
+                            info.get("clientpin_text") or "",
+                            ("（PID %d）" % info["pid"]) if info["process"] else ""),
             "• %s: %s" % (self.t("msg_fido_check"),
                           "OK" if info["device"] and info["service"]
                           else self.t("msg_set_startup_off")),
@@ -752,6 +787,10 @@ class SystemSettings:
         text = "\n".join(lines)
         if ok:
             messagebox.showinfo(self.t("msg_set_fido"), text)
+            # 驱动装好就顺手把设备端服务拉起来（装完不启动的话，用户还得再点一次
+            # 「启动」，下次开机也不会自动跑）
+            if not self.fido().running:
+                self.start_fido()
         else:
             messagebox.showerror(self.t("msg_set_fido"),
                                  "%s\n\n%s" % (text, self.t("msg_fido_driver_missing")))

@@ -120,5 +120,28 @@
         "last_ou_t": 20
       }
     ]
+  },
+  "fido_info": {
+    "conf": [
+      434,
+      239
+    ],
+    "data": [
+      {
+        "msg_fido_cred_rp": 200,
+        "msg_fido_cred_card": 150
+      },
+      {
+        "msg_fido_cred_user": 200,
+        "msg_fido_cred_alg": 150
+      },
+      {
+        "msg_fido_cred_created": 200,
+        "msg_fido_cred_used": 150
+      },
+      {
+        "msg_fido_cred_id": 320
+      }
+    ]
   }
 }

@@ -123,7 +123,7 @@ def env_flag(name):
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
-def version4(text, fallback="1.6.0.0"):
+def version4(text, fallback="1.7.0.0"):
     """把版本号转成 exe 版本资源要求的 4 段数字（缺位补 0）。"""
     parts = [item for item in re.split(r"[^0-9]+", str(text or "")) if item]
     if not parts:

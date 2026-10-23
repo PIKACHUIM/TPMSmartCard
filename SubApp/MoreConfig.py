@@ -46,6 +46,8 @@ OPENSC_LOG = "TPMSmartCard-opensc-install.log"
 OPENSC_STAGE_DIR = "TPMSmartCard-OpenSC"
 # 随程序分发的 SSH 代理
 SSH_AGENT = "SSHCardAgent.exe"
+# 用户设置里「程序启动时自动启动代理」的键（与主题/语言同一个 settings.json）
+SSH_AUTOSTART_KEY = "ssh_agent_autostart"
 
 
 class MoreConfig:
@@ -340,6 +342,42 @@ class MoreConfig:
         """返回随程序分发的 SSH 代理绝对路径；文件缺失时返回空字符串。"""
         path_now = Paths.resource(SSH_AGENT)
         return path_now if os.path.isfile(path_now) else ""
+
+    @staticmethod
+    def sshAutoStart():
+        """程序启动时是否自动拉起 WinSSH 代理（用户设置，默认关）。"""
+        from Module.I18n import read_user_settings
+        return bool(read_user_settings().get(SSH_AUTOSTART_KEY))
+
+    @staticmethod
+    def setSshAutoStart(in_value):
+        """记住「程序启动时自动启动代理」开关；失败返回 False。"""
+        from Module.I18n import read_user_settings, write_user_settings
+        settings = read_user_settings()
+        settings[SSH_AUTOSTART_KEY] = bool(in_value)
+        return write_user_settings(settings)
+
+    @staticmethod
+    def sshAgentRunning():
+        """代理进程是否已经在跑（避免重复拉起）。"""
+        from Module import WinPlatform
+        return WinPlatform.process_running(SSH_AGENT)
+
+    @staticmethod
+    def startSSHIfNeeded():
+        """程序启动时按设置拉起代理；返回 ``(是否拉起, 说明)``。"""
+        if not MoreConfig.sshAutoStart():
+            return False, "未开启「程序启动时自动启动」"
+        path_now = MoreConfig.sshAgentPath()
+        if not path_now:
+            return False, "找不到随程序分发的 %s" % SSH_AGENT
+        if MoreConfig.sshAgentRunning():
+            return False, "代理已在运行"
+        try:
+            os.startfile(path_now)
+        except Exception as err:
+            return False, "启动失败: %s" % err
+        return True, "已启动 %s" % path_now
 
     @staticmethod
     def setupSSH():
