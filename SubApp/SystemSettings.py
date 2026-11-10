@@ -8,15 +8,19 @@
   「项目主页」按钮已合并到这里，统一指向 GitHub 项目主页）；
 * 「外观」可切换界面主题（原版主题 / 美化配色，配置见 Config/themes.json）
   与界面语言，应用后由调用方重建主界面（``self.changed``）；
-* 「OpenSC」「WinSSH 代理」把原来挂在工具条上的安装/启动操作收进设置
+* 「OpenSC」把原来挂在工具条上的安装操作收进设置
   （安装耗时，放在子线程执行，避免设置窗口卡死）；
-* 「启动与托盘」管理本程序与 WinSSH 代理的开机自启（见 Module/AutoStart.py：
-  需要提权的本程序注册成登录触发的计划任务，登录时不会弹 UAC）；
+* 「SSH 登录」管理内置 SSH 代理与公钥登记（见 Module/SSHAgent.py：代理跑在本程序
+  进程里，不再依赖随包的 SSHCardAgent.exe）；
+* 「启动与托盘」管理本程序与（可选的）外挂 WinSSH 代理的开机自启
+  （见 Module/AutoStart.py：需要提权的本程序注册成登录触发的计划任务，
+  登录时不会弹 UAC；启用内置代理后外挂代理的自启项会被停用，避免抢同一个管道）；
 * 「版本更新」优先读取 GitHub Release API，被限流时回退到
   ``/releases/latest`` 的 302 跳转解析 Tag（不依赖 API 配额）。
 """
 
 import json
+import os
 import threading
 import urllib.error
 import urllib.request
@@ -29,6 +33,7 @@ import ttkbootstrap as ttk
 
 from Module import AutoStart
 from Module import Paths
+from Module import SSHAgent
 from Module import Theme
 from Module.I18n import get_i18n
 from Module.TPMSmartCard import TPMSmartCard
@@ -354,7 +359,7 @@ class SystemSettings:
         def collect():
             entry = AutoStart.app_entry()
             info = {"enabled": entry.is_enabled(), "state": self.startup_state(entry),
-                    "agent": None}
+                    "agent": None, "builtin": SSHAgent.builtin_enabled()}
             if agent_path:
                 info["agent"] = AutoStart.agent_entry(agent_path).is_enabled()
             return info
@@ -367,6 +372,13 @@ class SystemSettings:
             return None
         self.appstart_var.set(bool(info.get("enabled")))
         self.appstart_state.set(info.get("state") or self.t("msg_set_startup_off"))
+        if info.get("builtin"):
+            # 内置代理已经占着同一个命名管道：外挂 exe 的自启项要停用，
+            # 否则两个代理抢连接，各自只能看到一半请求
+            self.agentstart_box.config(state=tk.DISABLED)
+            self.agentstart_var.set(False)
+            self.agent_state.set(self.t("msg_set_startup_agent_builtin"))
+            return None
         if info.get("agent") is None:
             self.agentstart_box.config(state=tk.DISABLED)
             self.agentstart_var.set(False)
@@ -490,62 +502,171 @@ class SystemSettings:
                                  MoreConfig.installFailText(self.i18n, code, log_path))
         return None
 
-    # 页签：WinSSH 代理 ========================================================
+    # 页签：SSH 登录（内置代理 + 公钥登记）=====================================
     def view_ssh(self, page, title):
+        """内置 SSH 代理（替代随包的 SSHCardAgent.exe）与公钥登记开关。
+
+        代理跑在本程序进程里（见 Module/SSHAgent.py），不再需要安装/启动外挂 exe，
+        所以这一页只剩三个开关与状态：总开关、自动登记（启动登记 / 退出反登记）、
+        以及手动启停与查看 authorized_keys。
+        """
         self.notebook.add(page, text=title)
         ttk.Label(page, bootstyle="secondary", justify=tk.LEFT, wraplength=self.wrap,
                   text=self.t("msg_set_ssh_tip")).pack(anchor=tk.W)
-        line = ttk.Frame(page)
-        line.pack(anchor=tk.W, pady=(14, 0))
-        ttk.Button(line, bootstyle="primary", text=self.t("msg_set_ssh_install"),
-                   command=self.install_ssh).pack(side=tk.LEFT)
-        ttk.Button(line, bootstyle="primary-outline", text=self.t("msg_set_ssh_start"),
-                   command=self.start_ssh).pack(side=tk.LEFT, padx=8)
-        # 随程序启动代理：勾上以后每次打开本程序就把代理拉起来，不用单独启动
-        self.ssh_auto = tk.BooleanVar(value=MoreConfig.sshAutoStart())
-        self.ssh_auto_box = ttk.Checkbutton(
-            page, bootstyle="info-round-toggle", text=self.t("msg_set_ssh_auto"),
-            variable=self.ssh_auto, command=self.toggle_ssh_auto)
-        self.ssh_auto_box.pack(anchor=tk.W, pady=(14, 0))
+        # 总开关 ---------------------------------------------------------------
+        self.ssh_bi_var = tk.BooleanVar(value=SSHAgent.builtin_enabled())
+        ttk.Checkbutton(page, bootstyle="info-round-toggle",
+                        text=self.t("msg_set_ssh_builtin"), variable=self.ssh_bi_var,
+                        command=self.toggle_ssh_builtin).pack(anchor=tk.W, pady=(14, 0))
+        # 自动登记 -------------------------------------------------------------
+        self.ssh_reg_var = tk.BooleanVar(value=SSHAgent.register_enabled())
+        ttk.Checkbutton(page, bootstyle="info-round-toggle",
+                        text=self.t("msg_set_ssh_register"), variable=self.ssh_reg_var,
+                        command=self.toggle_ssh_register).pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(page, bootstyle="secondary", justify=tk.LEFT, wraplength=self.wrap,
+                  text=self.t("msg_set_ssh_register_tip")).pack(anchor=tk.W, padx=26,
+                                                               pady=(2, 0))
+        # Git 接入：Git for Windows 自带的 ssh 连不上命名管道，要切到系统 OpenSSH
+        self.ssh_git_var = tk.BooleanVar(value=SSHAgent.git_linked())
+        ttk.Checkbutton(page, bootstyle="info-round-toggle",
+                        text=self.t("msg_set_ssh_git"), variable=self.ssh_git_var,
+                        command=self.toggle_ssh_git).pack(anchor=tk.W, pady=(8, 0))
         self.ssh_var = tk.StringVar()
         ttk.Label(page, justify=tk.LEFT, wraplength=self.wrap,
-                  textvariable=self.ssh_var).pack(anchor=tk.W, pady=(10, 0))
+                  textvariable=self.ssh_var).pack(anchor=tk.W, pady=(12, 0))
+        line = ttk.Frame(page)
+        line.pack(anchor=tk.W, pady=(12, 0))
+        ttk.Button(line, bootstyle="primary", text=self.t("msg_set_ssh_start"),
+                   command=self.start_ssh).pack(side=tk.LEFT)
+        ttk.Button(line, bootstyle="primary-outline", text=self.t("msg_set_ssh_stop"),
+                   command=self.stop_ssh).pack(side=tk.LEFT, padx=8)
+        ttk.Button(line, bootstyle="secondary-outline", text=self.t("msg_set_ssh_open"),
+                   command=self.open_authorized_keys).pack(side=tk.LEFT, padx=8)
+        ttk.Button(line, bootstyle="secondary-outline", text=self.t("msg_set_ssh_check"),
+                   command=self.check_ssh).pack(side=tk.LEFT)
         self.show_ssh()
 
     def show_ssh(self):
-        """展示随程序分发的 SSH 代理路径与运行状态；文件缺失时给出提示。"""
-        agent_path = MoreConfig.sshAgentPath()
-        if not agent_path:
-            self.ssh_var.set(self.t("msg_set_ssh_missing"))
-            self.ssh_auto_box.config(state=tk.DISABLED)
-            return agent_path
-        state = self.t("msg_set_ssh_state_running" if MoreConfig.sshAgentRunning()
-                       else "msg_set_ssh_state_stopped")
-        self.ssh_var.set("%s\n%s" % (agent_path, state))
-        return agent_path
-
-    def toggle_ssh_auto(self):
-        """记住「程序启动时自动启动代理」，勾上时顺带立刻启动一次。"""
-        want = bool(self.ssh_auto.get())
-        if not MoreConfig.setSshAutoStart(want):
-            messagebox.showwarning(self.t("msg_set_title"), self.t("msg_set_startup_fail"))
-            self.ssh_auto.set(not want)
+        """刷新 SSH 页签：代理运行状态、当前登记的证书、已暴露的密钥数量。"""
+        try:
+            info = SSHAgent.status()
+        except Exception as err:
+            self.ssh_var.set(str(err))
             return None
-        if want:
-            MoreConfig.startSSHIfNeeded()
+        state = self.t("msg_set_ssh_state_running" if info["running"]
+                       else "msg_set_ssh_state_stopped")
+        if info.get("error"):
+            state = "%s\n%s" % (state, info["error"])
+        cert_now = info.get("cert") or self.t("msg_set_ssh_cert_none")
+        ssh_now, source = SSHAgent.git_ssh_now()
+        lines = [state,
+                 self.t("msg_set_ssh_cert") % cert_now,
+                 self.t("msg_set_ssh_keys") % info.get("keys", 0),
+                 self.t("msg_set_ssh_check_git") % (ssh_now or "-", source),
+                 SSHAgent.authorized_keys_path()]
+        self.ssh_var.set("\n".join(lines))
+        self.ssh_git_var.set(SSHAgent.git_linked())
+        return None
+
+    def toggle_ssh_git(self):
+        """让 Git 改用系统 OpenSSH（它会自动连上本代理），或还原原来的设置。"""
+        want = bool(self.ssh_git_var.get())
+        if not want and not SSHAgent.git_ours():
+            # Git 本来就（经 PATH）用着系统 OpenSSH：没有可还原的配置，说明一下
+            messagebox.showinfo(self.t("msg_set_title"), self.t("msg_set_ssh_git_native"))
+            self.show_ssh()
+            return None
+        ok, text = SSHAgent.set_git_linked(want)
+        if not ok:
+            self.ssh_git_var.set(not want)
+            messagebox.showwarning(self.t("msg_set_title"), text)
         self.show_ssh()
         return None
 
-    def install_ssh(self):
-        """通过 Chocolatey 安装 WinSSH 代理并启动。"""
-        if self.run_task(MoreConfig.setupSSH, self.show_ssh):
-            self.ssh_var.set(self.t("msg_set_installing"))
+    def check_ssh(self):
+        """环境自检：代理 → 系统 OpenSSH → Git，逐条告诉用户能不能连上。
+
+        以管理员身份运行时管道是「高完整性」对象，普通权限的 git/ssh 会被拒绝，
+        自检里能连上不一定代表普通终端也能连上，所以顺带把管道安全模式也报出来。
+        """
+        info = SSHAgent.status()
+        lines = [
+            self.t("msg_set_ssh_check_agent") % (
+                self.t("msg_set_ssh_state_running" if info["running"]
+                       else "msg_set_ssh_state_stopped"),
+                info.get("security") or "-"),
+            self.t("msg_set_ssh_keys") % info.get("keys", 0),
+        ]
+        ok, text = SSHAgent.ssh_add_list(SSHAgent.system_ssh())
+        lines.append(self.t("msg_set_ssh_check_sys") % (SSHAgent.system_ssh() or "-"))
+        lines.append("    %s：%s" % (
+            self.t("msg_set_ssh_conn_ok" if ok else "msg_set_ssh_conn_no"), text))
+        ssh_now, source = SSHAgent.git_ssh_now()
+        lines.append(self.t("msg_set_ssh_check_git") % (ssh_now or "-", source))
+        git_ok, git_text = SSHAgent.ssh_add_list(ssh_now)
+        lines.append("    %s：%s" % (
+            self.t("msg_set_ssh_conn_ok" if git_ok else "msg_set_ssh_conn_no"), git_text))
+        messagebox.showinfo(self.t("msg_set_ssh_check_title"), "\n".join(lines))
+        return None
+
+    def toggle_ssh_builtin(self):
+        """开关内置代理；打开时顺带按记忆的证书重新登记公钥。"""
+        want = bool(self.ssh_bi_var.get())
+        if not SSHAgent.set_builtin_enabled(want):
+            self.ssh_bi_var.set(not want)
+            messagebox.showwarning(self.t("msg_set_title"), self.t("msg_set_startup_fail"))
+            return None
+        if want:
+            ok, text = SSHAgent.start_agent()
+            if not ok:
+                messagebox.showwarning(self.t("msg_set_title"), text)
+            if SSHAgent.register_enabled():
+                SSHAgent.auto_register()
+        else:
+            # 代理停了就别留着登记的密钥（留着只会让 ssh 找不到 agent 而失败）
+            if SSHAgent.register_enabled():
+                SSHAgent.unregister()
+            if SSHAgent.agent_running():
+                SSHAgent.stop_agent()
+        self.show_ssh()
+        return None
+
+    def toggle_ssh_register(self):
+        """开关「启动时自动登记 / 退出时反登记」。"""
+        want = bool(self.ssh_reg_var.get())
+        if not SSHAgent.set_register_enabled(want):
+            self.ssh_reg_var.set(not want)
+            messagebox.showwarning(self.t("msg_set_title"), self.t("msg_set_startup_fail"))
+            return None
+        if want:
+            ok, text = SSHAgent.auto_register()
+            if not ok:
+                # 还没在主界面选过证书属于正常情况，不弹窗打扰
+                print("SSH: 自动登记跳过：%s" % text)
+        else:
+            SSHAgent.unregister()
+        self.show_ssh()
         return None
 
     def start_ssh(self):
-        if not MoreConfig.startSSH():
-            messagebox.showwarning(self.t("msg_set_title"), self.t("msg_set_ssh_missing"))
+        ok, text = SSHAgent.start_agent()
+        if not ok:
+            messagebox.showwarning(self.t("msg_set_title"), text)
         self.show_ssh()
+        return None
+
+    def stop_ssh(self):
+        SSHAgent.stop_agent()
+        self.show_ssh()
+        return None
+
+    def open_authorized_keys(self):
+        """用系统默认程序打开 ``~/.ssh/authorized_keys``（没有就提示）。"""
+        path_now = SSHAgent.authorized_keys_path()
+        if not os.path.isfile(path_now):
+            messagebox.showinfo(self.t("msg_set_title"), self.t("msg_set_ssh_no_keys"))
+            return None
+        os.startfile(path_now)
         return None
 
     # 页签：FIDO2 / 通行密钥 ==================================================

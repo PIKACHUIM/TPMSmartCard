@@ -128,6 +128,9 @@ class SmartCardAPP:
         self.scan_gen = 0
         # 按钮内边距实测值缓存（配色 -> 像素，见 measure_button）
         self._button_pads = dict()
+        # 每排按钮的定位参数（按钮组 -> 按钮名 -> [x, y, width]）：
+        # 「导入行」与「SSH 行」叠在同一位置互相切换，藏起来再显示时要能回到原位
+        self._btn_slots = dict()
         self.setup_fonts()
         self.build_ui()
         # 托盘先建好：后面的启动检查、状态刷新如果弹框，用户也能从托盘找回窗口
@@ -285,7 +288,8 @@ class SmartCardAPP:
         return None
 
     def quit_app(self):
-        """退出程序：先停 FIDO2 设备服务、摘掉托盘图标，再销毁主窗口。"""
+        """退出程序：先停 SSH 代理与 FIDO2 服务、摘掉托盘图标，再销毁主窗口。"""
+        self.stop_ssh(force=True)
         self.stop_fido(force=True)
         if self.tray is not None:
             self.tray.stop()
@@ -350,18 +354,37 @@ class SmartCardAPP:
         return None
 
     def startup_ssh_agent(self):
-        """按设置随程序启动 WinSSH 代理；失败只写日志。
+        """启动 SSH 能力：内置代理（默认）或旧的 SSHCardAgent.exe（未启用内置时）。
 
-        ``Module.MoreConfig`` 已经会判断代理文件是否存在、是否已在运行，
-        这里只负责在后台线程里调一下，别让启动路径被进程拉起拖住。
+        内置代理跑在本进程里（见 Module/SSHAgent.py），不再依赖随包 exe；启用后还会
+        按设置把记住的证书公钥自动登记到 ``~/.ssh/authorized_keys``。
+        整个过程在后台线程执行，失败只写日志，不打断启动。
         """
+        from Module import SSHAgent
+        if SSHAgent.builtin_enabled():
+            def worker():
+                try:
+                    ok, text = SSHAgent.start_agent()
+                    print("内置 SSH 代理: %s" % text)
+                    if not ok:
+                        return None
+                    if SSHAgent.register_enabled():
+                        _ok, info = SSHAgent.auto_register()
+                        print("SSH 公钥登记: %s" % info.replace("\n", " "))
+                except Exception as err:
+                    print("内置 SSH 代理启动失败:", err)
+                return None
+
+            threading.Thread(target=worker, daemon=True).start()
+            return None
+        # 没启用内置代理：保持原来的外挂 exe 行为（兼容老设置）
         try:
             from Module import MoreConfig
         except Exception as err:
             print("WinSSH 代理不可用:", err)
             return None
 
-        def worker():
+        def legacy():
             try:
                 started, text = MoreConfig.startSSHIfNeeded()
                 print("WinSSH 代理: %s" % text)
@@ -369,7 +392,27 @@ class SmartCardAPP:
                 print("WinSSH 代理启动失败:", err)
             return None
 
-        threading.Thread(target=worker, daemon=True).start()
+        threading.Thread(target=legacy, daemon=True).start()
+        return None
+
+    def stop_ssh(self, force=False):
+        """退出时收拾 SSH：先按设置摘掉登记的公钥，再停掉内置代理。
+
+        顺序不能反：公钥要在进程还在的时候删干净（``~/.ssh/authorized_keys`` 是用户
+        文件，写失败至少还能把原因打出来）。
+        """
+        if not force:
+            return None
+        try:
+            from Module import SSHAgent
+            if SSHAgent.register_enabled():
+                ok, text = SSHAgent.unregister()
+                print("SSH 公钥反登记: %s" % text)
+            if SSHAgent.agent_running():
+                SSHAgent.stop_agent()
+                print("内置 SSH 代理已停止")
+        except Exception as err:
+            print("SSH 清理失败:", err)
         return None
 
     def stop_fido(self, force=False):
@@ -600,6 +643,9 @@ class SmartCardAPP:
         self.button = {
             "card_main": self.view_button("card_main"),
             "cert_main": self.view_button("cert_main"),
+            # 选中证书时用这一行替换「导入 PFX / 导入 CER / 创建 CSR」，
+            # 换成 SSH 登录相关的按钮（两行叠在同一位置，靠 place/place_forget 切换）
+            "cert_ssh": self.view_button("cert_ssh"),
             "main_main": self.view_button("main_main"),
             "card_opts": self.view_button("card_opts"),
         }
@@ -634,9 +680,13 @@ class SmartCardAPP:
         self.button["card_main"]["puk"].config(state=tk.DISABLED)
         self.button["card_opts"]["del"].config(state=tk.DISABLED)
         self.button["card_opts"]["bak"].config(state=tk.DISABLED)
-        self.button["cert_main"]["sys"].config(state=tk.DISABLED)
-        self.button["cert_main"]["out"].config(state=tk.DISABLED)
-        self.button["cert_main"]["non"].config(state=tk.DISABLED)
+        self.set_cert_state("sys", tk.DISABLED)
+        self.set_cert_state("out", tk.DISABLED)
+        self.set_cert_state("non", tk.DISABLED)
+        self.set_cert_state("reg", tk.DISABLED)
+        self.set_cert_state("pub", tk.DISABLED)
+        # 默认（没选证书）显示导入行，SSH 行收起来
+        self.cert_row(False)
 
     def i18n(self, in_name):
         """界面文案翻译；多级回退顺序由 Module.I18n 决定，缺词条时返回键名。"""
@@ -817,12 +867,16 @@ class SmartCardAPP:
         self.pick["card"] = ""
         self.pick["cert"] = ""
         self.button["card_opts"]["del"].config(state=tk.DISABLED)
-        self.button["cert_main"]["non"].config(state=tk.DISABLED)
+        self.set_cert_state("non", tk.DISABLED)
         self.button["card_main"]["pin"].config(state=tk.DISABLED)
         self.button["card_main"]["puk"].config(state=tk.DISABLED)
-        self.button["cert_main"]["sys"].config(state=tk.DISABLED)
-        self.button["cert_main"]["out"].config(state=tk.DISABLED)
+        self.set_cert_state("sys", tk.DISABLED)
+        self.set_cert_state("out", tk.DISABLED)
+        self.set_cert_state("reg", tk.DISABLED)
+        self.set_cert_state("pub", tk.DISABLED)
         self.button["card_opts"]["bak"].config(state=tk.DISABLED)
+        # 表格重建后没有选中行：按钮行回到「导入 PFX / CER / CSR」
+        self.cert_row(False)
         self.tables["card_main"][0].delete(*self.tables["card_main"][0].get_children())
         self.tables["cert_main"][0].delete(*self.tables["cert_main"][0].get_children())
         for item_name in ["card_info", "cert_info", "cert_user", "cert_last",
@@ -947,8 +1001,10 @@ class SmartCardAPP:
         for item_name in ["cert_info", "cert_user", "cert_last"]:
             self.show_frame(item_name, True)
         self.show_frame("fido_info", False)
-        for key in ["non", "sys", "out"]:
-            self.button["cert_main"][key].config(state=tk.DISABLED)
+        for key in ["non", "sys", "out", "reg", "pub"]:
+            self.set_cert_state(key, tk.DISABLED)
+        # 没有选中证书：按钮行回到「导入 PFX / 导入 CER / 创建 CSR」
+        self.cert_row(False)
         return None
 
     # 按钮行垂直居中 ==========================================================
@@ -956,6 +1012,8 @@ class SmartCardAPP:
     BUTTON_ROWS = (
         ("card_main", "table:card_main", "frame:card_info"),
         ("cert_main", "table:cert_main", "frame:cert_info"),
+        # SSH 行与导入行叠在同一位置，只显示其中一行（见 cert_row）
+        ("cert_ssh", "table:cert_main", "frame:cert_info"),
         ("card_opts", "frame:card_info", "end:card_main"),
     )
 
@@ -976,9 +1034,44 @@ class SmartCardAPP:
             if top is None or bottom is None or bottom - top <= row_height:
                 continue
             row_y = top + (bottom - top - row_height) // 2
-            for widget in buttons.values():
+            slots = self._btn_slots.setdefault(group, dict())
+            for name_now, widget in buttons.items():
+                if name_now in slots:
+                    slots[name_now][1] = row_y
+                # 藏起来的行（未显示的那一行）只更新位置表，不要顺手把它 place 出来
+                if widget.winfo_manager() != "place":
+                    continue
                 widget.place_configure(y=row_y)
                 widget.lift()
+        return None
+
+    def cert_row(self, in_ssh):
+        """切换证书区的按钮行：``False`` 显示导入行，``True`` 显示 SSH 行。
+
+        选中一张证书之后，「导入 PFX / 导入 CER / 创建 CSR」在语义上说不通（证书已经
+        在卡上了），所以整行换成 SSH 登录相关的按钮；取消选中就换回来。两行控件都
+        提前建好，只做 place / place_forget，切换时不会卡界面。
+        """
+        show_name = "cert_ssh" if in_ssh else "cert_main"
+        for group in ("cert_main", "cert_ssh"):
+            widgets = self.button.get(group) or {}
+            slots = self._btn_slots.get(group) or {}
+            for name_now, widget in widgets.items():
+                if group == show_name:
+                    slot = slots.get(name_now)
+                    if slot:
+                        widget.place(x=slot[0], y=slot[1], width=slot[2])
+                    widget.lift()
+                else:
+                    widget.place_forget()
+        return None
+
+    def set_cert_state(self, in_name, in_state):
+        """同时设置两行里同名按钮的状态（隐藏的那一行也要跟着变）。"""
+        for group in ("cert_main", "cert_ssh"):
+            widget = (self.button.get(group) or {}).get(in_name)
+            if widget is not None:
+                widget.config(state=in_state)
         return None
 
     def block_edge(self, in_name, bottom=True):
@@ -1112,6 +1205,9 @@ class SmartCardAPP:
             "sys": (self.cert_system, None),
             "out": (self.cert_out_to, None),
             "non": (self.data_delete, "cert"),
+            # 选中证书时的 SSH 行（与导入行互斥，见 cert_row）
+            "reg": (self.ssh_register_toggle, None),
+            "pub": (self.ssh_copy_public, None),
 
             # 刷新按钮走后台读卡：读卡要起一串 OpenSC 进程，同步跑会卡住界面
             "ing": (partial(self.load_status, True), None),
@@ -1124,12 +1220,16 @@ class SmartCardAPP:
         bt_texts = [self.i18n(now['text']) for now in bt_all]
         bt_styles = [self.button_style(now) for now in bt_all]
         bt_sizes = self.fit_buttons(bt_texts, bt_styles, bt_total, bt_gap, bt_all)
+        slots = self._btn_slots.setdefault(in_name, dict())
         for now, bta_text, bta_style, bta_size in zip(bt_all, bt_texts, bt_styles, bt_sizes):
             bt_fun = bt_map[now['name']] if now['name'] in bt_map else (None, None)
             bta = self.new_widget("Button", bta_style, text=bta_text,
                                   command=bt_fun[0] if bt_fun[1] is None
                                   else partial(bt_fun[0], bt_fun[1]))
             bta.place(x=bt_btx, y=bt_bty, width=bta_size)
+            # 记下位置：这一行被藏起来（见 cert_row）再显示时按它回到原位，
+            # 纵向位置随后由 align_button_rows 统一修正
+            slots[now['name']] = [bt_btx, bt_bty, bta_size]
             bt_btx = bt_btx + bta_size + bt_gap
             bt_dict[now['name']] = bta
         return bt_dict
@@ -1225,9 +1325,28 @@ class SmartCardAPP:
             tb_it_y = tb_conf['conf'][1]
             # 行高可选（缺省 20）：详情框越高的分组可以排得松一些
             tb_row = tb_conf['conf'][2] if len(tb_conf['conf']) > 2 else LABEL_ROW_HEIGHT
+            # 标签列宽可选：置 1 时按当前语言实测标签宽度（拉丁/西里尔语言的
+            # 标签比中文长，写死 60px 会被长标签盖住后面的取值）
+            tb_fit = bool(tb_conf['conf'][3]) if len(tb_conf['conf']) > 3 else False
+            label_width = LABEL_WIDTH
+            avail_right = None
+            if tb_fit:
+                label_width = max([LABEL_WIDTH] + [
+                    self.t_fonts['label_name'].measure(self.i18n(tb_item) + ": ")
+                    for tb_line in tb_conf['data'] for tb_item in tb_line])
+                # 详情框右侧内边界：每行最后一列用它吃掉剩余宽度，
+                # 标签变宽后右侧不会忽宽忽窄，也不会顶出框外
+                frame_conf = (self.conf.get('frames') or {}).get(in_name) or []
+                if len(frame_conf) > 2:
+                    avail_right = frame_conf[2] + frame_conf[0] - 14
             for tb_line in tb_conf['data']:
                 tb_it_x = tb_ln_x
-                for tb_item in tb_line:
+                items = list(tb_line.items())
+                for index, (tb_item, tb_item_w) in enumerate(items):
+                    item_w = tb_item_w
+                    if avail_right is not None and index == len(items) - 1 and index > 0:
+                        # 最后一列按详情框右边界取宽：有余量就填满，语言变宽就收窄
+                        item_w = max(120, avail_right - (tb_it_x + label_width + LABEL_GAP))
                     tag = self.new_widget("Label", "default",
                                           text=self.i18n(tb_item) + ": ",
                                           font=self.t_fonts['label_name'])
@@ -1238,12 +1357,12 @@ class SmartCardAPP:
                         # 超出可用宽度的长文本自动折行，多行时左对齐
                         inf.config(wraplength=wrap_conf[tb_item],
                                    justify=tk.LEFT)
-                    inf.place(x=tb_it_x + LABEL_WIDTH + LABEL_GAP, y=tb_it_y)
+                    inf.place(x=tb_it_x + label_width + LABEL_GAP, y=tb_it_y)
                     # 同时记下坐标，未选中卡片/证书时要整组隐藏
                     tb_data[tb_item] = [tag, inf,
                                         (tb_it_x, tb_it_y),
-                                        (tb_it_x + LABEL_WIDTH + LABEL_GAP, tb_it_y)]
-                    tb_it_x += LABEL_WIDTH + LABEL_GAP + tb_line[tb_item]
+                                        (tb_it_x + label_width + LABEL_GAP, tb_it_y)]
+                    tb_it_x += label_width + LABEL_GAP + item_w
                 tb_it_y += tb_row
         return tb_data
 
@@ -1482,8 +1601,9 @@ class SmartCardAPP:
         """在「通行密钥信息」分组里显示一条 FIDO2 凭据。
 
         通行密钥不是 X.509 证书（没有 CA/摘要/使用者/颁发者/有效期），所以
-        不再借用证书那三组字段，只填它自己的几项：站点、用户、卡片、算法、
-        创建/最近使用时间、凭据 ID。导出与写系统证书库不可用，删除可用。
+        不再借用证书那三组字段，只填它自己的几项：站点、用户（含显示名）、
+        卡片、算法、创建/最近使用时间、签名计数、凭据 ID。导出与写系统证书库
+        不可用，删除可用。
         """
         row = self.fido_rows.get(uuid_now) or {}
         self.pick["cert"] = "fido:" + uuid_now
@@ -1491,24 +1611,35 @@ class SmartCardAPP:
         none_tag = self.i18n("msg_na")
         site = str(row.get("rp_id") or row.get("rp_name") or "") or none_tag
         user = str(row.get("user_name") or "") or empty_tag
+        display = str(row.get("user_display_name") or "") or empty_tag
+        # 签名计数可能是 0（还没认证过），不能按「空值」判成未提供
+        counter = row.get("counter")
+        counter_text = none_tag if counter is None else str(counter)
         values = {
             "msg_fido_cred_rp": site,
             "msg_fido_cred_card": str(row.get("card") or "") or none_tag,
             "msg_fido_cred_user": user,
+            "msg_fido_cred_display": display,
             "msg_fido_cred_alg": "ES256 (P-256)",
             "msg_fido_cred_created": str(row.get("created_at") or "") or none_tag,
             "msg_fido_cred_used": str(row.get("last_used_at") or "") or none_tag,
+            "msg_fido_cred_counter": counter_text,
+            "msg_fido_cred_rp_name": str(row.get("rp_name") or "") or empty_tag,
+            "msg_fido_cred_uuid": uuid_now,
+            # 详情里整行都给它，不必像表格那样狠截
             "msg_fido_cred_id": self.cert_value(
-                str(row.get("credential_id") or ""), 44),
+                str(row.get("credential_id") or ""), 74),
         }
         labels_now = self.labels.get("fido_info") or {}
         for fill_name, text in values.items():
             if fill_name in labels_now:
                 labels_now[fill_name][1].config(text=text)
-        # 删除可用（删除凭据），导出/写系统证书库不可用
-        self.button["cert_main"]["non"].config(state=tk.NORMAL)
-        self.button["cert_main"]["sys"].config(state=tk.DISABLED)
-        self.button["cert_main"]["out"].config(state=tk.DISABLED)
+        # 删除可用（删除凭据），导出/写系统证书库不可用；SSH 登录只对 X.509 证书有意义
+        self.set_cert_state("non", tk.NORMAL)
+        self.set_cert_state("sys", tk.DISABLED)
+        self.set_cert_state("out", tk.DISABLED)
+        self.set_cert_state("reg", tk.DISABLED)
+        self.set_cert_state("pub", tk.DISABLED)
         return None
 
     def invalidate_fido(self):
@@ -1578,6 +1709,179 @@ class SmartCardAPP:
         if save_path is not None and os.path.exists(save_path):
             os.system("explorer %s" % save_path)
 
+    # SSH 登录（公钥登记 + 内置代理）==========================================
+    def cert_key_of(self, in_item):
+        """证书表格的一行 → ``data.certs`` 的键（对不上就返回空串）。"""
+        tree = self.tables["cert_main"][0]
+        try:
+            uuid_now = tree.set(in_item, '#1')
+            name_now = tree.set(in_item, '#2').replace(self.i18n("msg_no_cert"), "")
+        except Exception:
+            return ""
+        key = ("%s %s" % (name_now, uuid_now)).strip() if name_now else uuid_now
+        if key in self.data.certs:
+            return key
+        for now_line in self.data.certs:
+            if now_line.split(" ")[-1] == uuid_now:
+                return now_line
+        return ""
+
+    def selected_cert_pems(self):
+        """当前选中的**全部**证书（Ctrl/Shift 多选，按表格顺序）。
+
+        返回 ``[{"key", "name", "pem"}]``；通行密钥是 FIDO2 凭据、不是 X.509 证书，
+        没有可用的 SSH 公钥，直接跳过。
+        """
+        tree = self.tables["cert_main"][0]
+        result = []
+        for item in tree.selection():
+            if tree.set(item, '#1') in self.fido_rows:
+                continue
+            key = self.cert_key_of(item)
+            cert_now = self.data.certs.get(key) if key else None
+            if cert_now is None:
+                continue
+            pem = str(getattr(cert_now, "sc_text", "") or "")
+            if not pem:
+                continue
+            common = str(getattr(getattr(cert_now, "sc_cert", None), "CommonName", "") or "")
+            name = common or (" ".join(key.split(" ")[:-1]) if " " in key else key)
+            result.append({"key": key, "name": name, "pem": pem})
+        return result
+
+    def selected_cert_pem(self):
+        """选中的第一张证书的 PEM（没有就是空串）。"""
+        items = self.selected_cert_pems()
+        return items[0]["pem"] if items else ""
+
+    def selected_cert_name(self):
+        """选中的第一张证书的显示名（优先用证书里的 CN）。"""
+        items = self.selected_cert_pems()
+        return items[0]["name"] if items else ""
+
+    def ssh_registered_flags(self, in_items=None):
+        """每张选中证书是否已登记；authorized_keys 只读一次，多选时也不卡。"""
+        from Module import SSHAgent
+        items = self.selected_cert_pems() if in_items is None else in_items
+        lines = SSHAgent.read_registered()
+        flags = []
+        for item in items:
+            try:
+                flags.append(SSHAgent.is_registered(item["pem"], lines))
+            except Exception as err:
+                print("SSH: 判断登记状态失败:", err)
+                flags.append(False)
+        return flags
+
+    def ssh_refresh_buttons(self):
+        """刷新 SSH 行：没公钥就禁用；选中的**全部**登记过才显示「停用SSH」。"""
+        widgets = self.button.get("cert_ssh") or {}
+        widget = widgets.get("reg")
+        if widget is None:
+            return None
+        items = self.selected_cert_pems()
+        if not items:
+            if widgets.get("pub") is not None:
+                widgets["pub"].config(state=tk.DISABLED)
+            widget.config(text=self.i18n("b_ssh_reg"), state=tk.DISABLED)
+            return None
+        if widgets.get("pub") is not None:
+            widgets["pub"].config(state=tk.NORMAL)
+        flags = self.ssh_registered_flags(items)
+        all_registered = bool(flags) and all(flags)
+        widget.config(text=self.i18n("b_ssh_unreg" if all_registered else "b_ssh_reg"),
+                      state=tk.NORMAL)
+        return None
+
+    def ssh_register_toggle(self):
+        """把选中证书（可多张）的公钥写进 ``~/.ssh/authorized_keys``，或取消登记。
+
+        * 选中的都还没登记 → 逐张登记，并把它们一起记进设置（启动时全部重新登记、
+          退出时全部摘掉）；
+        * 选中的全部已登记 → 只摘掉这几张的公钥与记忆，其它证书不受影响。
+        """
+        from Module import SSHAgent
+        items = self.selected_cert_pems()
+        if not items:
+            messagebox.showwarning(self.i18n("warn"), self.i18n("msg_ssh_no_cert"))
+            return None
+        flags = self.ssh_registered_flags(items)
+        if all(flags):
+            failed = []
+            for item in items:
+                try:
+                    ok, text = SSHAgent.unregister_one(item["pem"])
+                except Exception as err:
+                    ok, text = False, str(err)
+                if not ok:
+                    failed.append("%s：%s" % (item["name"], text))
+            try:
+                SSHAgent.remove_remembered([SSHAgent.cert_thumbprint(item["pem"])
+                                            for item in items])
+            except Exception as err:
+                print("SSH: 清理记忆列表失败:", err)
+            if not SSHAgent.remembered_certs():
+                SSHAgent.set_register_enabled(False)
+            if failed:
+                messagebox.showerror(self.i18n("msg_ssh_title"), "\n".join(failed))
+            else:
+                messagebox.showinfo(self.i18n("msg_ssh_title"),
+                                    self.i18n("msg_ssh_unreg_done") % len(items))
+        else:
+            done, failed = [], []
+            for item, registered in zip(items, flags):
+                if registered:
+                    done.append(item["name"])
+                    continue
+                try:
+                    ok, text = SSHAgent.register(item["pem"], item["name"])
+                except Exception as err:
+                    ok, text = False, str(err)
+                if ok:
+                    done.append(item["name"])
+                else:
+                    failed.append("%s：%s" % (item["name"], text))
+            if done:
+                SSHAgent.set_register_enabled(True)
+            text = self.i18n("msg_ssh_reg_done") % len(done)
+            text += "\n" + SSHAgent.authorized_keys_path()
+            if failed:
+                text += "\n\n" + "\n".join(failed)
+            # 登记了公钥却没有代理等于白登记：内置代理开着就顺手拉起来，
+            # 没开就明确告诉用户去哪儿开（否则会以为是「登记了却不生效」）
+            if done:
+                if SSHAgent.builtin_enabled():
+                    if not SSHAgent.agent_running():
+                        _started, info = SSHAgent.start_agent()
+                        text += "\n" + info
+                else:
+                    text += "\n" + self.i18n("msg_ssh_agent_off_hint")
+            if failed:
+                messagebox.showerror(self.i18n("msg_ssh_title"), text)
+            else:
+                messagebox.showinfo(self.i18n("msg_ssh_title"), text)
+        self.ssh_refresh_buttons()
+        return None
+
+    def ssh_copy_public(self):
+        """把选中证书（可多张）的 SSH 公钥复制到剪贴板（一行一张）。"""
+        from Module import SSHAgent
+        items = self.selected_cert_pems()
+        if not items:
+            messagebox.showwarning(self.i18n("warn"), self.i18n("msg_ssh_no_cert"))
+            return None
+        lines = []
+        for item in items:
+            try:
+                lines.append(SSHAgent.public_key_line(
+                    item["pem"], "%s%s" % (SSHAgent.MARKER, item["name"] or "ssh")))
+            except Exception as err:
+                messagebox.showerror(self.i18n("fail"), "%s：%s" % (item["name"], err))
+                return None
+        pyperclip.copy("\n".join(lines))
+        messagebox.showinfo(self.i18n("msg_ssh_title"), self.i18n("msg_ssh_pub_copied"))
+        return None
+
     def cert_value(self, in_text, in_limit=0):
         """证书扩展字段的显示值。
 
@@ -1607,6 +1911,9 @@ class SmartCardAPP:
             self.show_frame(toggle_name, has_cert)
         self.toggle_labels("fido_info", is_fido)
         self.show_frame("fido_info", is_fido)
+        # 选中真实证书时把「导入 PFX / 导入 CER / 创建 CSR」整行换成 SSH 登录按钮；
+        # 通行密钥与空选中都回到导入行（见 cert_row）
+        self.cert_row(has_cert)
         if len(selected_item) > 0:
             selected_name = treeview.set(selected_item[0], '#2')
             # FIDO2 凭据：不是证书，走单独的详情填充（站点/用户名/时间）
@@ -1625,13 +1932,15 @@ class SmartCardAPP:
                     if now_uuid == selected_uuid:
                         self.pick["cert"] = now_line
                         break
-            self.button["cert_main"]["non"].config(state=tk.NORMAL)
+            self.set_cert_state("non", tk.NORMAL)
             # 精确查找证书 =============================================================================
             if self.pick["cert"] in self.data.certs:
                 cert_now = self.data.certs[self.pick["cert"]]
                 if cert_now.sc_cert is not None:
-                    self.button["cert_main"]["sys"].config(state=tk.NORMAL)
-                    self.button["cert_main"]["out"].config(state=tk.NORMAL)
+                    self.set_cert_state("sys", tk.NORMAL)
+                    self.set_cert_state("out", tk.NORMAL)
+                    # SSH 行的两个按钮只在证书能解析出公钥时可用（文案随登记状态变）
+                    self.ssh_refresh_buttons()
                     cert_now = cert_now.sc_cert
                     Algorithms = str(cert_now.Algorithms).split("With")[0]
                     empty_tag = self.i18n("msg_empty")
@@ -1691,8 +2000,11 @@ class SmartCardAPP:
                             if fill_name in label_now:
                                 label_now[fill_name][1].config(text=cert_map[fill_name])
                 else:
-                    self.button["cert_main"]["sys"].config(state=tk.DISABLED)
-                    self.button["cert_main"]["out"].config(state=tk.DISABLED)
+                    # 证书解析失败：既不能导出也不能当 SSH 密钥用
+                    self.set_cert_state("sys", tk.DISABLED)
+                    self.set_cert_state("out", tk.DISABLED)
+                    self.set_cert_state("reg", tk.DISABLED)
+                    self.set_cert_state("pub", tk.DISABLED)
             print(selected_name)
         else:
             # 取消选中：清空选证状态，详情回到提示，相关按钮禁用

@@ -120,5 +120,43 @@
       "type": "danger-outline",
       "w": 102
     }
+  ],
+  "cert_ssh": [
+    [
+      430,
+      172,
+      6,
+      622
+    ],
+    {
+      "name": "reg",
+      "text": "b_ssh_reg",
+      "type": "primary",
+      "w": 118
+    },
+    {
+      "name": "pub",
+      "text": "b_ssh_pub",
+      "type": "primary-outline",
+      "w": 118
+    },
+    {
+      "name": "sys",
+      "text": "b_sys",
+      "type": "secondary-outline",
+      "w": 98
+    },
+    {
+      "name": "out",
+      "text": "b_out",
+      "type": "secondary-outline",
+      "w": 98
+    },
+    {
+      "name": "non",
+      "text": "b_non",
+      "type": "danger-outline",
+      "w": 102
+    }
   ]
 }

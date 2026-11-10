@@ -41,8 +41,8 @@ _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 
 ### 场景与工具
 
-* **SSH2登录**：配合 WinCryptSSHAgent 用卡上私钥登录远程服务器
-* **环境工具**：安装 / 启动 OpenSC 与 SSH 代理、查看 TPM 状态、导出证书与公钥
+* **SSH2登录**：**内置 SSH 代理**（不再外挂 exe）用卡上私钥登录远程服务器，公钥可一键登记到 `~/.ssh/authorized_keys`
+* **环境工具**：安装 OpenSC、查看 TPM 状态、导出证书与公钥
 * **语言界面**：11 种语言（简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Italiano / Português / Русский / Español）
 
 ---
@@ -51,7 +51,7 @@ _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 
 1. 到 [Releases](https://github.com/PIKACHUIM/TPMSmartCard/releases) 下载 `TPMSmartCard-*-setup.exe`（或绿色版 zip）并安装；
 2. **以管理员身份运行**（注册卡片设备、读写系统目录都需要管理员权限）；
-3. 在「卡片管理」里创建卡片 → 导入或生成证书 →（可选）在「系统设置」里安装并启动 SSH 代理；
+3. 在「卡片管理」里创建卡片 → 导入或生成证书 →（可选）在「系统设置 → SSH 登录」里启用内置 SSH 代理；
 4. 备份：选中卡片 → 备份，得到 `.tsb`；还原：选中 `.tsb` → 还原。
 
 > [!IMPORTANT]
@@ -72,7 +72,7 @@ _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 | 系统 | Windows 8 x86 / x64 或更高（**需要管理员权限**） |
 | 硬件 | TPM 1.2 / 2.0 或更高 |
 | 系统组件 | `tpmvscmgr`、`certutil`（系统自带） |
-| 随包组件 | OpenSC 工具、WinCryptSSHAgent、`Import`（.NET 证书导入工具） |
+| 随包组件 | OpenSC 工具、`Import`（.NET 证书导入工具）；SSH 代理已内建在主程序里 |
 
 ---
 
@@ -186,7 +186,7 @@ python BuildNuitka.py             # Nuitka：build/nuitka/TPMSmartCard/
 
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) —— 开源智能卡工具与中间件
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
-3. WinCryptSSHAgent —— 用智能卡私钥做 SSH 认证的代理程序
+3. [buptczq/WinCryptSSHAgent](https://github.com/buptczq/WinCryptSSHAgent) —— 内置 SSH 代理（`Module/SSHAgent.py`）的实现参考
 
 
 
