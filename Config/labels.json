@@ -3,7 +3,8 @@
     [
       "X 偏移量",
       "Y 偏移量",
-      "行高（可选，缺省 20）"
+      "行高（可选，缺省 20）",
+      "标签列宽自适应（可选，1/0，缺省 0 即固定 60px）"
     ],
     [
       "..."
@@ -124,23 +125,33 @@
   "fido_info": {
     "conf": [
       434,
-      239
+      240,
+      28,
+      1
     ],
     "data": [
       {
-        "msg_fido_cred_rp": 200,
-        "msg_fido_cred_card": 150
+        "msg_fido_cred_rp": 190,
+        "msg_fido_cred_card": 190
       },
       {
-        "msg_fido_cred_user": 200,
-        "msg_fido_cred_alg": 150
+        "msg_fido_cred_user": 190,
+        "msg_fido_cred_display": 190
       },
       {
-        "msg_fido_cred_created": 200,
-        "msg_fido_cred_used": 150
+        "msg_fido_cred_created": 190,
+        "msg_fido_cred_used": 190
       },
       {
-        "msg_fido_cred_id": 320
+        "msg_fido_cred_counter": 190,
+        "msg_fido_cred_alg": 190
+      },
+      {
+        "msg_fido_cred_rp_name": 190,
+        "msg_fido_cred_uuid": 190
+      },
+      {
+        "msg_fido_cred_id": 490
       }
     ]
   }

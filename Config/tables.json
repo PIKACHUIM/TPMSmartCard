@@ -29,19 +29,19 @@
     "pack": [430, 25, 132, 622],
     "data": {
       "ITEM": [
-        90,
+        264,
         "cert_guid"
       ],
       "NAME": [
-        270,
+        150,
         "cert_name"
       ],
       "LENS": [
-        80,
+        78,
         "pub_length"
       ],
       "USED": [
-        168,
+        107,
         "key_usages"
       ]
     }
