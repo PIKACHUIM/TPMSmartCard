@@ -13,8 +13,11 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/PIKACHUIM/tpmsmartcard/internal/platform"
@@ -43,12 +46,35 @@ func Detect() (*Backend, bool) {
 	return b, true
 }
 
+// lookPath 依次查找：PATH → 可执行文件同级 OpenSC/ → 上一级 OpenSC/。
+//
+// v1 把 OpenSC 随包分发在 `OpenSC/`；v2 的发布包沿用这一布局，
+// 因此不能只依赖 PATH（用户机器上通常没有安装 OpenSC）。
 func lookPath(name string) string {
-	path, err := exec.LookPath(name)
+	if path, err := exec.LookPath(name); err == nil {
+		return path
+	}
+	exe, err := os.Executable()
 	if err != nil {
 		return ""
 	}
-	return path
+	suffix := ""
+	if runtime.GOOS == "windows" {
+		suffix = ".exe"
+	}
+	dir := filepath.Dir(exe)
+	candidates := []string{
+		filepath.Join(dir, "OpenSC", name+suffix),
+		filepath.Join(dir, "..", "OpenSC", name+suffix),
+		// 开发态：dist/tpmsc.exe 与仓库内归档的 OpenSC 同级
+		filepath.Join(dir, "..", "legacy", "OpenSC", name+suffix),
+	}
+	for _, candidate := range candidates {
+		if info, statErr := os.Stat(candidate); statErr == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func (b *Backend) ID() string                    { return "opensc" }
@@ -105,19 +131,53 @@ func (b *Backend) Readers(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 输出形如：
+	//   # Detected readers (pcsc)
+	//   Nr.  Card  Features  Name
+	//   0    Yes             Personal TPM Virtual Smart Card 0
 	var readers []string
 	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || !strings.HasPrefix(line, "#") {
+		line = strings.TrimSpace(strings.TrimSuffix(line, "\r"))
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "Nr.") {
 			continue
 		}
-		// 形如 "#0  Microsoft Virtual Smart Card 0 00 00"
-		if idx := strings.Index(line, "  "); idx >= 0 {
-			line = strings.TrimSpace(line[idx:])
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
 		}
-		readers = append(readers, line)
+		if _, err := strconv.Atoi(fields[0]); err != nil {
+			continue
+		}
+		start := 1
+		if fields[1] == "Yes" || fields[1] == "No" {
+			start = 2
+		}
+		name := strings.TrimSpace(strings.Join(fields[start:], " "))
+		if name != "" {
+			readers = append(readers, name)
+		}
 	}
 	return readers, nil
+}
+
+// MatchReader 把 PnP 名称（"Personal TPM Virtual Smart Card"）匹配到
+// OpenSC 的实际读卡器名（"Personal TPM Virtual Smart Card 0"）。
+func (b *Backend) MatchReader(ctx context.Context, hint string) string {
+	readers, err := b.Readers(ctx)
+	if err != nil {
+		return hint
+	}
+	for _, reader := range readers {
+		if strings.HasPrefix(reader, hint) || strings.HasPrefix(hint, reader) {
+			return reader
+		}
+	}
+	// PnP 名称与 PC/SC 名称可能完全不同（驱动名 vs 设备名）；
+	// 只有一个读卡器时没有歧义，直接使用它。
+	if len(readers) == 1 {
+		return readers[0]
+	}
+	return hint
 }
 
 // ListCertificates 用 pkcs15-tool 读取证书并解析为 X.509 视图。

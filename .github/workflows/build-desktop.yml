@@ -113,6 +113,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item "desktop/dist/TPMSmartCard.exe" $stage
           Copy-Item README.md, LICENSE $stage
+          if (Test-Path "legacy/OpenSC") {
+            Copy-Item "legacy/OpenSC" (Join-Path $stage "OpenSC") -Recurse
+          }
           Compress-Archive -Path "$stage/*" -DestinationPath "$stage.zip" -Force
 
       - name: 打包（Linux）

@@ -1,7 +1,7 @@
 # 开发与调试指南（v1 / Python）
 
 > [!WARNING]
-> 本文描述的是 **v1（Python）** 的开发方式。v1 代码已归档到仓库的 [`legacy/`](../legacy/README.md)，
+> 本文描述的是 **v1（Python）** 的开发方式。v1 代码已归档到仓库的 [`legacy/`](https://github.com/PIKACHUIM/TPMSmartCard/tree/main/legacy)，
 > 下方命令中的路径需加 `legacy/` 前缀。
 >
 > v2（Go + Wails + React + Hono）的开发与构建见

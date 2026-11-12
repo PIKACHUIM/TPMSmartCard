@@ -73,6 +73,13 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item $exe $stage
 Copy-Item (Join-Path $root "README.md") $stage
 Copy-Item (Join-Path $root "LICENSE") $stage
+# 随包分发 OpenSC：读卡与证书解析依赖它，用户机通常没有安装
+$opensc = Join-Path $root "legacy\OpenSC"
+if (Test-Path $opensc) {
+  Copy-Item $opensc (Join-Path $stage "OpenSC") -Recurse
+} else {
+  Write-Host "!! legacy\OpenSC not found: certificate operations will require system OpenSC" -ForegroundColor Yellow
+}
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath "$stage.zip" -Force
 
 Pop-Location

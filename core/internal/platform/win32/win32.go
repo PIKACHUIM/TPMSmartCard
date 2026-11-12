@@ -71,7 +71,8 @@ func (s *Slot) List(ctx context.Context) ([]platform.Card, error) {
 	for _, reader := range readers {
 		certCount := 0
 		if s.p11 != nil {
-			s.p11.SetReader(reader.Name)
+			// PnP 名称与 OpenSC 读卡器名可能差一个序号后缀，交给后端匹配
+			s.p11.SetReader(s.p11.MatchReader(ctx, reader.Name))
 			if certs, err := s.p11.ListCertificates(ctx, reader.InstanceID); err == nil {
 				certCount = len(certs)
 			}

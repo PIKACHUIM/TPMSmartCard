@@ -5,15 +5,13 @@ package factory
 
 import (
 	"github.com/PIKACHUIM/tpmsmartcard/internal/platform"
-	"github.com/PIKACHUIM/tpmsmartcard/internal/platform/p11"
 	"github.com/PIKACHUIM/tpmsmartcard/internal/platform/win32"
 )
 
-// Slots 返回当前平台可用的卡槽（顺序即前端展示顺序）。
+// Slots 返回当前平台可用的卡槽。
+//
+// Windows 只需要一个卡槽：win32 内部已经复用 OpenSC 读取证书，
+// 再挂一个 p11 后端会在界面上出现同一张卡的两个条目。
 func Slots() []platform.Slot {
-	slots := []platform.Slot{win32.New()}
-	if backend, ok := p11.Detect(); ok {
-		slots = append(slots, backend)
-	}
-	return slots
+	return []platform.Slot{win32.New()}
 }
