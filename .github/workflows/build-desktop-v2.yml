@@ -110,6 +110,25 @@ jobs:
           path: desktop/dist/${{ matrix.artifact }}*
           if-no-files-found: error
 
+  build-fido:
+    name: fido-go (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: Fido/src/fido-go/go.sum
+      - name: 构建 FIDO2 服务
+        working-directory: Fido/src/fido-go
+        run: |
+          go build -trimpath -ldflags "-s -w -H windowsgui" -o ../../../dist/fido-go.exe .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fido-go-windows
+          path: dist/fido-go.exe
+          if-no-files-found: error
+
   # macOS / Windows 的签名与公证依赖 Secrets，缺失时整步跳过而不是让构建失败。
   sign-placeholder:
     needs: build

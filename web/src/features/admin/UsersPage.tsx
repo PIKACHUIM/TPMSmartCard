@@ -3,7 +3,7 @@ import { Plus, ShieldCheck, UserCog } from "lucide-react";
 import { api } from "@/lib/api";
 import type { AdminRole, AdminUser } from "@/lib/types";
 import { useAppStore } from "@/lib/store";
-import { Badge, Button, Field, Panel, SectionTitle } from "@/components/ui/primitives";
+import { Badge, Button, Field, Panel } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Modal } from "@/components/ui/Modal";
 
@@ -172,31 +172,6 @@ export function UsersPage() {
         </div>
         <div className="p-2">
           <DataTable columns={columns} rows={users} rowKey={(row) => row.id} caption="用户列表" dense />
-        </div>
-      </Panel>
-
-      <Panel>
-        <SectionTitle title="角色与权限" hint="内置角色不可删除；自定义角色可组合任意权限码" />
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-          {roles.map((role) => (
-            <div key={role.id} className="rounded-control border border-line/70 px-3 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-[12px] text-ink-0">{role.name}</span>
-                <Badge tone={role.builtin ? "muted" : "info"}>{role.builtin ? "内置" : "自定义"}</Badge>
-              </div>
-              <p className="mt-1 text-[11.5px] text-ink-3">{role.description ?? "—"}</p>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {role.permissions.slice(0, 5).map((permission) => (
-                  <span key={permission} className="rounded border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-2">
-                    {permission}
-                  </span>
-                ))}
-                {role.permissions.length > 5 ? (
-                  <span className="px-1 font-mono text-[10px] text-ink-3">+{role.permissions.length - 5}</span>
-                ) : null}
-              </div>
-            </div>
-          ))}
         </div>
       </Panel>
 

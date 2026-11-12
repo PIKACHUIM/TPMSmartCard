@@ -20,7 +20,11 @@ if (!existsSync(source)) {
   process.exit(1);
 }
 
-await rm(target, { recursive: true, force: true });
+// Windows 上 dist 里的文件可能被 IDE 索引或杀毒短暂占用；
+// 删除失败时降级为「覆盖写入」，不阻断打包（旧 hash 文件不会影响 index.html）。
+await rm(target, { recursive: true, force: true }).catch((err) => {
+  console.error("清理旧产物失败，改为覆盖写入:", err.message);
+});
 await mkdir(target, { recursive: true });
 
 async function copyDir(from, to) {

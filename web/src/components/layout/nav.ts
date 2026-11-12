@@ -3,6 +3,7 @@ import {
   ArchiveRestore,
   CreditCard,
   FileKey2,
+  KeySquare,
   ScrollText,
   ShieldCheck,
   Settings2,
@@ -42,6 +43,14 @@ export const NAV_ITEMS: NavItem[] = [
     group: "console",
   },
   {
+    to: "/admin/roles",
+    labelKey: "admin.roles",
+    fallback: "角色",
+    icon: KeySquare,
+    permission: "user:read",
+    group: "console",
+  },
+  {
     to: "/admin/audit",
     labelKey: "admin.audit",
     fallback: "审计日志",
@@ -58,6 +67,7 @@ export const PAGE_TITLES: Record<string, { title: string; hint: string }> = {
   "/backup": { title: "备份还原", hint: "整卡打包、还原诊断与风险提示" },
   "/settings": { title: "设置", hint: "外观、语言、自启与代理" },
   "/admin/records": { title: "下发记录", hint: "取件码与传输密钥的存续状态" },
-  "/admin/users": { title: "用户与角色", hint: "多用户、角色与细粒度权限" },
+  "/admin/users": { title: "用户", hint: "账号、状态与角色分配" },
+  "/admin/roles": { title: "角色与权限", hint: "细粒度权限码与自定义角色" },
   "/admin/audit": { title: "审计日志", hint: "谁在何时对什么做了什么" },
 };

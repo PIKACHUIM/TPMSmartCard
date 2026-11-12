@@ -29,6 +29,10 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
+    // 某些 Windows 环境（IDE 索引 / 杀毒扫描）会短暂锁住 dist 里的文件，
+    // 清空目录会失败并中断构建。保留旧 hash 文件没有副作用，
+    // index.html 只引用本次产物；CI 是干净检出，不受影响。
+    emptyOutDir: false,
     sourcemap: false,
     chunkSizeWarningLimit: 1200,
   },

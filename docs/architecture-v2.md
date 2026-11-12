@@ -46,7 +46,7 @@
 | `desktop/wails` | Wails v2 外壳、反代、单实例、托盘 | 🟡 Windows 托盘可用；macOS/Linux 托盘待 P2 |
 | `web` | 设计系统 + 9 个页面 + 11 语言骨架 | ✅ 可构建 |
 | `worker` | `/card/*`、RBAC、审计、投递 | ✅ 单测通过，待真机部署 |
-| `core/internal/fido` | FIDO2（源 `Fido/src/fido-go`） | ⏳ 源码已是 Go 独立模块，纳入发布待做 |
+| `Fido/src/fido-go` | FIDO2 服务（已是 Go 独立模块） | 🟡 已纳入 CI 构建；尚未与桌面端生命周期联动 |
 
 ## 3. 平台能力矩阵
 

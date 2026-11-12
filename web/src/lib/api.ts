@@ -185,6 +185,14 @@ export const api = {
     return withDemo("/api/v1/roles", () => ({ roles: mock.mockRoles }));
   },
 
+  createRole(payload: {
+    name: string;
+    description?: string;
+    permissions: string[];
+  }): Promise<{ id: string; name: string; permissions: string[] }> {
+    return request("/api/v1/roles", { method: "POST", body: payload });
+  },
+
   audit(query: { actor?: string; action?: string; limit?: number; offset?: number } = {}): Promise<{
     rows: AuditRow[];
     total: number;

@@ -10,6 +10,7 @@ import { BackupPage } from "@/features/backup/BackupPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { RecordsPage } from "@/features/admin/RecordsPage";
 import { UsersPage } from "@/features/admin/UsersPage";
+import { RolesPage } from "@/features/admin/RolesPage";
 import { AuditPage } from "@/features/admin/AuditPage";
 
 /** 管理台页面需要登录；设备页（卡片/证书/备份）由本地后端鉴权，不强制登录 */
@@ -45,6 +46,14 @@ export default function App() {
           element={
             <RequireAuth>
               <UsersPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="admin/roles"
+          element={
+            <RequireAuth>
+              <RolesPage />
             </RequireAuth>
           }
         />
