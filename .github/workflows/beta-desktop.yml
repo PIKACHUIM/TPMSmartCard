@@ -41,6 +41,8 @@ jobs:
       - name: 更新 beta 预发布
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 该 job 没有 checkout，gh 无法从 git remote 推断仓库，必须显式指定
+          GH_REPO: ${{ github.repository }}
           TAG: beta
           SHA: ${{ github.sha }}
           RUN: ${{ github.run_number }}
