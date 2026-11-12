@@ -1,8 +1,0 @@
-2026-11-12T11:28:01.9360000Z Requested labels: ubuntu-24.04-arm
-2026-11-12T11:28:01.9360000Z Job defined at: PIKACHUIM/TPMSmartCard/.github/workflows/build-desktop.yml@refs/heads/main
-2026-11-12T11:28:01.9360000Z Waiting for a runner to pick up this job...
-2026-11-12T11:28:01.9290000Z Evaluating build.if
-2026-11-12T11:28:01.9290000Z Evaluating: success()
-2026-11-12T11:28:01.9290000Z Result: true
-2026-11-12T11:28:01.9730000Z Job is waiting for a hosted runner to come online.
-2026-11-12T11:28:01.9740000Z Job is about to start running on the hosted runner: GitHub Actions 1000009810

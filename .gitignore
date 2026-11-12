@@ -48,4 +48,7 @@ release.json
 release-resp.json
 # CI 日志排查产物
 /logs/
+/runlogs/
 logs.zip
+runlogs.zip
+linux-log.zip
