@@ -47,12 +47,13 @@ jobs:
             os: ubuntu-24.04-arm
             goarch: arm64
             cgo: "1"
+          # macOS 13 runner 已进入退役流程，改用 macos-15-intel / macos-15
           - name: macos-amd64
-            os: macos-13
+            os: macos-15-intel
             goarch: amd64
             cgo: "1"
           - name: macos-arm64
-            os: macos-14
+            os: macos-15
             goarch: arm64
             cgo: "1"
 
