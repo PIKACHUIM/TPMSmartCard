@@ -1,0 +1,24 @@
+{
+  "name": "tpmsmartcard",
+  "version": "2.0.0",
+  "private": true,
+  "description": "TPM 虚拟智能卡管理器 · 跨平台桌面端 + 证书下发 Worker",
+  "workspaces": [
+    "packages/*",
+    "web",
+    "worker"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @tpmsc/web",
+    "dev:worker": "npm run dev -w @tpmsc/worker",
+    "build": "npm run build -w @tpmsc/web",
+    "build:worker": "npm run build -w @tpmsc/worker",
+    "typecheck": "npm run typecheck -w @tpmsc/web && npm run typecheck -w @tpmsc/worker",
+    "test": "npm run test -w @tpmsc/worker",
+    "deploy:worker": "npm run deploy -w @tpmsc/worker",
+    "db:migrate": "npm run db:migrate -w @tpmsc/worker"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

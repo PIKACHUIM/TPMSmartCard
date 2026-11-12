@@ -1,0 +1,21 @@
+# 本地开发凭据：复制为 .dev.vars（已在 .gitignore 中忽略）
+# 生产环境请用 `wrangler secret put <NAME>` 配置同名变量。
+
+# 首次启动的引导管理员口令（也是旧管理接口的兼容凭据）
+CARD_ADMIN_PASSWORD=change-me-please-2026
+
+# 会话签名密钥；不配置时回退到 CARD_ADMIN_PASSWORD
+SESSION_SECRET=local-dev-session-secret
+
+# 取件码指纹 pepper
+CARD_CODE_PEPPER=local-dev-code-pepper
+
+# 服务间投递（OpenCertRepo server-card 推送用）
+DELIVERY_CLIENT_ID=opencert
+DELIVERY_CLIENT_SECRET=local-dev-delivery-secret
+
+# 本地允许匿名上传，便于调试；生产建议 false
+CARD_ALLOW_ANONYMOUS=true
+# 本地把 PBKDF2 迭代降下来，避免 wrangler dev 登录卡顿
+PBKDF2_ITERATIONS=10000
+CARD_CODE_ITERATIONS=10000

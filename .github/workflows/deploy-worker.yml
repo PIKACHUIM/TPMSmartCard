@@ -1,0 +1,49 @@
+name: deploy-worker
+
+# 证书下发 Worker：测试 → 构建前端 → wrangler deploy
+# 需要 Secrets：CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID
+# D1 迁移不在此自动执行（生产库需人工确认）：
+#   cd worker && npx wrangler d1 migrations apply tpmsc --remote
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "worker/**"
+      - "packages/**"
+      - "web/**"
+      - ".github/workflows/deploy-worker.yml"
+
+concurrency:
+  group: deploy-worker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Worker 类型检查
+        run: npm run typecheck -w @tpmsc/worker
+
+      - name: 协议与鉴权单元测试
+        run: npm run test -w @tpmsc/worker
+
+      - name: 构建管理台前端
+        run: npm run build -w @tpmsc/web
+
+      - name: 部署
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy

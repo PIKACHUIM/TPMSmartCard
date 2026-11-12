@@ -20,5 +20,22 @@ docs/.vitepress/dist/
 docs/public/CNAME
 # 智能体工作区数据（不随代码分发）
 .workbuddy/
+# ===== 新版 monorepo（Go + Wails + Hono）=====
+# 前端与 Worker 构建产物
+web/dist/
+.wrangler/
+*.tsbuildinfo
+coverage/
+# Go 构建产物与嵌入的前端资源（构建时从 web/dist 同步）
+core/bin/
+core/ui/dist/
+desktop/build/
+desktop/dist/
+# Wails 生成的前端绑定（由 CLI 生成，不入库）
+desktop/wails/frontend/wailsjs/
+# 本地 Worker 数据（D1 模拟库）
+worker/.dev.vars
+worker/.wrangler/
+worker/.dryrun/
 # 工具链临时目录（YAML 校验等）
 ._yamlcheck/

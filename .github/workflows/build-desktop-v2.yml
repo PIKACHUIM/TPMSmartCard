@@ -1,0 +1,122 @@
+name: build-desktop-v2
+
+# 新版（Go + Wails + React）桌面端构建矩阵。
+# 与旧的 Python 流水线（build-client-*.yml）并行存在，P2 验收后旧流水线退役。
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "core/**"
+      - "desktop/**"
+      - "web/**"
+      - "packages/**"
+      - "scripts/**"
+      - ".github/workflows/build-desktop-v2.yml"
+
+concurrency:
+  group: build-desktop-v2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-amd64
+            os: windows-latest
+            goarch: amd64
+            cgo: "0"
+            artifact: TPMSmartCard-windows-amd64.exe
+          - name: windows-arm64
+            os: windows-latest
+            goarch: arm64
+            cgo: "0"
+            artifact: TPMSmartCard-windows-arm64.exe
+          - name: linux-amd64
+            os: ubuntu-22.04
+            goarch: amd64
+            cgo: "1"
+            artifact: TPMSmartCard-linux-amd64
+          - name: macos-arm64
+            os: macos-14
+            goarch: arm64
+            cgo: "1"
+            artifact: TPMSmartCard-darwin-arm64
+          - name: macos-amd64
+            os: macos-13
+            goarch: amd64
+            cgo: "1"
+            artifact: TPMSmartCard-darwin-amd64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: |
+            core/go.sum
+            desktop/wails/go.sum
+
+      - name: 安装 Linux WebKit / GTK 依赖
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev pkg-config
+
+      - name: 安装依赖并构建前端
+        run: |
+          npm ci
+          npm run build -w @tpmsc/web
+          node scripts/prepare-ui.mjs
+
+      - name: Go 单元测试
+        working-directory: core
+        run: go test ./...
+
+      - name: 交叉编译检查（Linux/macOS 卡槽）
+        working-directory: core
+        shell: bash
+        run: |
+          GOOS=linux GOARCH=amd64 go build ./...
+          GOOS=darwin GOARCH=arm64 go build ./...
+
+      - name: 构建桌面端
+        working-directory: desktop/wails
+        shell: bash
+        env:
+          CGO_ENABLED: ${{ matrix.cgo }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p ../dist
+          EXT=""
+          if [ "${{ runner.os }}" = "Windows" ]; then EXT=".exe"; fi
+          go build -tags desktop -trimpath \
+            -ldflags "-s -w -X main.Version=2.0.0 -X main.Commit=${GITHUB_SHA::8}" \
+            -o "../dist/${{ matrix.artifact }}${EXT}" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: desktop/dist/${{ matrix.artifact }}*
+          if-no-files-found: error
+
+  # macOS / Windows 的签名与公证依赖 Secrets，缺失时整步跳过而不是让构建失败。
+  sign-placeholder:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 签名与公证说明
+        run: |
+          echo "Windows: 复用 Builds/Sign-Windows.ps1（signtool + Certum）"
+          echo "macOS:   codesign --deep --options runtime 后 xcrun notarytool submit"
+          echo "本轮只产出未签名二进制，签名在 P2 发布流程中接入。"

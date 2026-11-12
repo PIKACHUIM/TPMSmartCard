@@ -1,0 +1,55 @@
+name = "tpmsmartcard"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+# 与 PikaTestCert 同站部署模式：前端构建产物由 Static Assets 托管，
+# /api/* 与 /card/* 由 Worker 处理，其余请求回退到 SPA。
+[assets]
+directory = "../web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true
+
+# ===== D1：用户 / 角色 / 下发记录 / 审计 / 服务客户端 =====
+[[d1_databases]]
+binding = "DB"
+database_name = "tpmsc"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# ===== KV：证书密文载荷（v1 传输密钥 / v2 取件码） =====
+[[kv_namespaces]]
+binding = "CARD_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+
+[vars]
+# 是否允许未登录上传 / 生成取件码（取回接口不受影响）
+CARD_ALLOW_ANONYMOUS = "false"
+# 传输密钥模式记录保留时长（秒）
+CARD_TTL_SECONDS = "604800"
+# 取件码默认有效期 / 次数 / PBKDF2 迭代次数
+CARD_CODE_TTL_SECONDS = "86400"
+CARD_CODE_USES = "1"
+CARD_CODE_ITERATIONS = "100000"
+# 单个 PFX 上限（字节）
+CARD_MAX_BYTES = "8388608"
+# 会话有效期（秒）
+CARD_ADMIN_SESSION_SECONDS = "43200"
+# 登录失败容忍次数（每窗口 10 分钟 / 每来源 IP）
+CARD_LOGIN_MAX_FAILURES = "5"
+# 管理台脚本调用方（与服务端 HMAC 投递共用）
+DELIVERY_CLIENT_ID = "opencert"
+
+[dev]
+port = 8787
+local_protocol = "http"
+
+# ⚠️ 以下用 `wrangler secret put <NAME>` 配置，切勿写入本文件：
+#   SESSION_SECRET        会话签名密钥（未配置时回退 CARD_ADMIN_PASSWORD）
+#   CARD_ADMIN_PASSWORD   首次部署的引导管理员口令（同时也是兼容旧管理接口的凭据）
+#   CARD_ADMIN_TOKEN      旧版静态令牌（脚本兼容）
+#   CARD_MASTER_KEY       PFX 口令加密密钥（本实现用于取件码 pepper 回退）
+#   CARD_CODE_PEPPER      取件码指纹 pepper
+#   DELIVERY_CLIENT_SECRET OpenCertRepo 投递签名密钥

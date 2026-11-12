@@ -25,6 +25,15 @@ _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 
 ---
 
+> [!NOTE]
+> **v2 重构进行中**：后端迁移到 **Go**（Windows / Linux / macOS），前端重写为 **React 18**，
+> 证书下发服务迁移到 **Hono + Cloudflare Workers**（RBAC + 审计）。
+> v1（Python）仍是可用的稳定版本，两条流水线并行。
+>
+> 📐 [v2 架构](docs/architecture-v2.md) · 🔐 [协议契约](docs/protocol.md) · 🧭 [迁移与功能对等](docs/migration-v2.md)
+
+---
+
 ## ✨ 功能
 
 ### 卡片与凭据
