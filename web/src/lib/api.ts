@@ -157,6 +157,38 @@ export const api = {
     return withDemo("/api/v1/desktop/backups", () => ({ backups: mock.mockBackups }));
   },
 
+  /** 生成证书与元数据备份包（不含私钥）。 */
+  createBackup(cardId: string): Promise<BackupEntry> {
+    if (useAppStore.getState().demo) {
+      return Promise.resolve({
+        id: `bak-${Date.now()}`,
+        file: "演示备份.tsb",
+        card_name: "演示卡片",
+        created_at: new Date().toISOString(),
+        size_bytes: 2048,
+        protected_by: "certificates",
+        key_exportable: false,
+        status: "verified",
+      });
+    }
+    return request("/api/v1/desktop/backups", { method: "POST", body: { card_id: cardId } });
+  },
+
+  /** 把备份包里的证书写回卡片。 */
+  restoreBackup(file: string, cardId: string, pin?: string): Promise<{
+    restored: number;
+    failures: string[];
+    warnings?: string[];
+  }> {
+    if (useAppStore.getState().demo) {
+      return Promise.resolve({ restored: 1, failures: [] });
+    }
+    return request(`/api/v1/desktop/backups/${encodeURIComponent(file)}/restore`, {
+      method: "POST",
+      body: { card_id: cardId, pin },
+    });
+  },
+
   autostart(): Promise<{ enabled: boolean; detail: string; args: string }> {
     return withDemo("/api/v1/desktop/autostart", () => ({ enabled: true, detail: "", args: "--minimized" }));
   },

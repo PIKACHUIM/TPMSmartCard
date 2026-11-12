@@ -23,6 +23,7 @@
 | Go 核心（crypto/cloud/backup/api/sshagent） | ✅ | `go test ./...` 全绿 |
 | Windows 建卡/删卡/改 PIN/证书读取 | 🟡 | 实机枚举/health/CSRF 已验证；建卡需提权真机 |
 | 证书 PEM 导入/导出 | ✅ | 新接口 + 契约测试（`POST`/`GET .../pem`） |
+| 备份 / 还原（证书与元数据） | ✅ | `POST /backups` 打包证书、`POST /backups/{file}/restore` 写回卡片；含路径穿越与 v1 包拒绝测试 |
 | 三平台 × amd64/arm64 CI | ✅ | [`43212825754`](https://github.com/PIKACHUIM/TPMSmartCard/actions/runs/43212825754) 7/7 通过 |
 | Beta / Release 发布 | ✅ | `beta-desktop.yml`（滚动）+ `release-desktop.yml`（标签） |
 | DPAPI 整卡备份采集 | ⏳ | 需 SYSTEM 令牌借用与真机 |
@@ -43,7 +44,7 @@
 | `Module/CertutilDeal.py` | 待补 | ⏳ | v1 的 certutil 回退后端未迁移 |
 | `Module/OpenSCDealer.py` | `platform/p11` | 🟡 | 证书读取已迁移；解析覆盖常见格式 |
 | `Module/Certificates.py` | `platform.Certificate` | ✅ | X.509 视图 + PEM 导入/导出；CSR 需 PKCS#11 引擎（未接） |
-| `Module/TPMBackup.py` | `internal/backup` | 🟡 | v2 包格式与校验完成；DPAPI 采集未接 |
+| `Module/TPMBackup.py` | `internal/backup` + 本地 API | ✅ | 证书与元数据备份/还原已打通（`.tsb v2` + 逐部件校验）；整卡 DPAPI 采集仍未接 |
 | `Module/DPAPI.py` | 待补 | ⏳ | 需借用 SYSTEM 令牌，P1 关键项 |
 | `Module/SSHAgent.py` | `internal/sshagent` | 🟡 | 协议帧/身份/签名分发 + 测试完成；卡上签名适配待 `Slot.Sign` |
 | `Module/Fido*` + `Fido/src/fido-go` | `Fido/src/fido-go` | 🟡 | 本身已是 Go 模块（含 vendored virtual-fido），待并入统一构建与发布 |

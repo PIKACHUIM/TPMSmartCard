@@ -46,9 +46,12 @@ export interface BackupEntry {
   card_name: string;
   created_at: string;
   size_bytes: number;
-  protected_by: "dpapi" | "tpm2" | "keychain" | "passphrase";
+  /** certificates = 只含公钥证书与元数据（当前默认），私钥永不导出 */
+  protected_by: "dpapi" | "tpm2" | "keychain" | "passphrase" | "certificates";
   key_exportable: boolean;
   status: "verified" | "unverified" | "failed";
+  warnings?: string[];
+  certificates?: number;
 }
 
 export interface SystemHealth {

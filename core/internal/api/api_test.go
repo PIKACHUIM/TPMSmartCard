@@ -120,9 +120,10 @@ func newTestServer(t *testing.T) (*httptest.Server, *fakeSlot) {
 	t.Helper()
 	slot := &fakeSlot{}
 	server := New(Options{
-		Slots:    []platform.Slot{slot},
-		Platform: "test",
-		Version:  "test",
+		Slots:      []platform.Slot{slot},
+		Platform:   "test",
+		Version:    "test",
+		BackupsDir: t.TempDir(),
 	})
 	ts := httptest.NewServer(server.Handler())
 	t.Cleanup(ts.Close)
@@ -317,6 +318,92 @@ func TestImportAndExportCertificate(t *testing.T) {
 	}
 	if disposition := exportResp.Header.Get("Content-Disposition"); !strings.Contains(disposition, ".pem") {
 		t.Fatalf("content-disposition = %q", disposition)
+	}
+}
+
+func TestBackupAndRestore(t *testing.T) {
+	ts, slot := newTestServer(t)
+	slot.exportPEM = selfSignedPEM(t)
+	if _, err := slot.Create(context.Background(), platform.CreateOptions{Name: "备份卡", PIN: "123456"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1) 生成备份
+	createBody := `{"card_id":"fake-备份卡"}`
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/desktop/backups", strings.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Requested-With", "tpmsc")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d, body = %s", resp.StatusCode, raw)
+	}
+	var created struct {
+		Data struct {
+			File string `json:"file"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Data.File == "" {
+		t.Fatalf("empty backup file: %s", raw)
+	}
+
+	// 2) 列表应包含刚生成的包
+	var list envelope[struct {
+		Backups []map[string]any `json:"backups"`
+	}]
+	getJSON(t, ts.URL+"/api/v1/desktop/backups", &list)
+	if len(list.Data.Backups) != 1 {
+		t.Fatalf("backups = %d", len(list.Data.Backups))
+	}
+	if protect, _ := list.Data.Backups[0]["protected_by"].(string); protect != "certificates" {
+		t.Fatalf("protected_by = %v", list.Data.Backups[0]["protected_by"])
+	}
+
+	// 3) 还原到同一卡片
+	restoreBody := fmt.Sprintf(`{"card_id":"fake-备份卡","pin":"123456"}`)
+	restoreReq, _ := http.NewRequest(http.MethodPost,
+		ts.URL+"/api/v1/desktop/backups/"+url.PathEscape(created.Data.File)+"/restore",
+		strings.NewReader(restoreBody))
+	restoreReq.Header.Set("Content-Type", "application/json")
+	restoreReq.Header.Set("X-Requested-With", "tpmsc")
+	restoreResp, err := http.DefaultClient.Do(restoreReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restoreRaw, _ := io.ReadAll(restoreResp.Body)
+	restoreResp.Body.Close()
+	if restoreResp.StatusCode != http.StatusOK {
+		t.Fatalf("restore status = %d, body = %s", restoreResp.StatusCode, restoreRaw)
+	}
+	if len(slot.imported) == 0 {
+		t.Fatal("restore did not import any certificate")
+	}
+}
+
+func TestRestoreRejectsPathTraversal(t *testing.T) {
+	ts, slot := newTestServer(t)
+	if _, err := slot.Create(context.Background(), platform.CreateOptions{Name: "备份卡", PIN: "123456"}); err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest(http.MethodPost,
+		ts.URL+"/api/v1/desktop/backups/..%2F..%2Fetc%2Fpasswd.tsb/restore",
+		strings.NewReader(`{"card_id":"fake-备份卡"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Requested-With", "tpmsc")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		t.Fatal("path traversal should not be accepted")
 	}
 }
 

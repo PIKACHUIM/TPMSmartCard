@@ -386,6 +386,8 @@ func (s *Server) handleListBackups(w http.ResponseWriter, r *http.Request) {
 					"protected_by":   manifest.Protection,
 					"key_exportable": manifest.KeyExportable,
 					"status":         status,
+					"warnings":       manifest.Warnings,
+					"certificates":   len(manifest.Parts),
 				}
 				if entry["card_name"] == "" {
 					entry["card_name"] = "未知卡片"
@@ -400,6 +402,10 @@ func (s *Server) handleListBackups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"backups": entries})
 }
 
+// handleCreateBackup 生成「证书与元数据」备份包。
+//
+// 私钥永远不进入备份：Windows TPM / macOS SE / Linux TPM2 的密钥都不可导出。
+// 完整整卡备份（含 DPAPI keymaps / 设备注册表）仍需 SYSTEM 令牌借用，另行实现。
 func (s *Server) handleCreateBackup(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CardID string `json:"card_id"`
@@ -416,6 +422,35 @@ func (s *Server) handleCreateBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	certs, err := slot.ListCertificates(ctx, card.ID)
+	if err != nil {
+		// 读卡器/卡片不可用是常见状态，不应该报 500
+		if errors.Is(err, platform.ErrUnsupported) {
+			writeError(w, http.StatusNotImplemented, protocol.ErrBadRequest, err.Error())
+			return
+		}
+		writeError(w, http.StatusConflict, protocol.ErrConflict,
+			"无法读取卡片证书："+err.Error()+"（确认卡片已插入、读卡器服务正常，且不在远程会话限制下）")
+		return
+	}
+	entries := make([]backup.Entry, 0, len(certs))
+	for _, cert := range certs {
+		pemBytes, err := slot.ExportCertificate(ctx, card.ID, cert.ID)
+		if err != nil {
+			continue
+		}
+		entries = append(entries, backup.Entry{
+			Name:   "cert-" + safePart(cert.ID) + ".pem",
+			Data:   pemBytes,
+			Source: cert.Subject,
+			Note:   cert.Fingerprint,
+		})
+	}
+	if len(entries) == 0 {
+		writeError(w, http.StatusConflict, protocol.ErrConflict, "卡片上没有可备份的证书；请先导入或签发证书")
+		return
+	}
+
 	dir := s.opts.BackupsDir
 	if dir == "" {
 		dir = "."
@@ -426,22 +461,142 @@ func (s *Server) handleCreateBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	name := sanitize(card.Name) + "-" + time.Now().Format("20060102-150405") + ".tsb"
 	path := filepath.Join(dir, name)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, "无法写入备份文件")
-		return
-	}
-	defer file.Close()
 
+	manifest := backup.NewManifest(platformOf(s.opts.Platform), card.Name, card.ID, "certificates", "", false)
 	s.broker.publish(map[string]any{"stage": "backup", "status": "running", "card": card.ID})
-	if err := slot.Backup(ctx, card.ID, file); err != nil {
+	if err := backup.Create(path, manifest, entries); err != nil {
 		_ = os.Remove(path)
 		s.broker.publish(map[string]any{"stage": "backup", "status": "failed", "message": err.Error()})
+		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, "写入备份包失败："+err.Error())
+		return
+	}
+	info, _ := os.Stat(path)
+	size := int64(0)
+	if info != nil {
+		size = info.Size()
+	}
+	s.broker.publish(map[string]any{"stage": "backup", "status": "ok", "file": name})
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"id":             name,
+		"file":           name,
+		"card_name":      card.Name,
+		"created_at":     manifest.CreatedAt,
+		"size_bytes":     size,
+		"protected_by":   manifest.Protection,
+		"key_exportable": false,
+		"status":         "verified",
+		"warnings":       manifest.Warnings,
+		"certificates":   len(entries),
+	})
+}
+
+// handleRestoreBackup 把备份包内的公钥证书重新写回指定卡片。
+func (s *Server) handleRestoreBackup(w http.ResponseWriter, r *http.Request) {
+	file := filepath.Base(r.PathValue("file"))
+	if file == "" || file == "." || !strings.HasSuffix(strings.ToLower(file), ".tsb") {
+		writeError(w, http.StatusBadRequest, protocol.ErrBadRequest, "备份文件名不合法")
+		return
+	}
+	var req struct {
+		CardID string `json:"card_id"`
+		PIN    string `json:"pin"`
+	}
+	if err := decodeJSON(r, &req); err != nil || req.CardID == "" {
+		writeError(w, http.StatusBadRequest, protocol.ErrBadRequest, "缺少 card_id")
+		return
+	}
+	dir := s.opts.BackupsDir
+	if dir == "" {
+		dir = "."
+	}
+	source := filepath.Join(dir, file)
+	if _, err := os.Stat(source); err != nil {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, "备份文件不存在："+file)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 180*time.Second)
+	defer cancel()
+	slot, card, err := s.resolve(ctx, req.CardID)
+	if err != nil {
 		writePlatformError(w, err)
 		return
 	}
-	s.broker.publish(map[string]any{"stage": "backup", "status": "ok", "file": name})
-	writeJSON(w, http.StatusCreated, map[string]any{"file": name})
+
+	extractDir, err := os.MkdirTemp("", "tpmsc-restore-*")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, "无法创建临时目录")
+		return
+	}
+	defer os.RemoveAll(extractDir)
+
+	manifest, err := backup.Extract(source, extractDir)
+	if err != nil {
+		if errors.Is(err, backup.ErrLegacyArchive) {
+			writeError(w, http.StatusBadRequest, protocol.ErrBadRequest, "这是 v1 备份包，只支持只读检查，不能用于还原")
+			return
+		}
+		writeError(w, http.StatusBadRequest, protocol.ErrBadRequest, "备份包校验失败："+err.Error())
+		return
+	}
+
+	files, err := os.ReadDir(extractDir)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, "读取备份内容失败")
+		return
+	}
+	restored := 0
+	var failures []string
+	for _, entry := range files {
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".pem") {
+			continue
+		}
+		data, readErr := os.ReadFile(filepath.Join(extractDir, entry.Name()))
+		if readErr != nil {
+			failures = append(failures, entry.Name()+": 读取失败")
+			continue
+		}
+		importErr := slot.ImportCertificate(ctx, card.ID, platform.ImportOptions{
+			Reader: card.Reader,
+			PIN:    req.PIN,
+			Label:  strings.TrimSuffix(entry.Name(), ".pem"),
+			Data:   data,
+		})
+		if importErr != nil {
+			failures = append(failures, entry.Name()+": "+importErr.Error())
+			continue
+		}
+		restored++
+	}
+	if restored == 0 && len(failures) > 0 {
+		writeError(w, http.StatusBadRequest, protocol.ErrBadRequest, "还原失败："+strings.Join(failures, "；"))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"restored":       restored,
+		"failures":       failures,
+		"file":           file,
+		"card_name":      card.Name,
+		"created_at":     manifest.CreatedAt,
+		"key_exportable": manifest.KeyExportable,
+		"warnings":       manifest.Warnings,
+	})
+}
+
+// safePart 把证书 ID 之类可能含冒号/斜杠的值收敛成文件名安全片段。
+func safePart(value string) string {
+	mapped := strings.Map(func(r rune) rune {
+		switch {
+		case r >= '0' && r <= '9', r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r == '-', r == '_':
+			return r
+		default:
+			return '-'
+		}
+	}, value)
+	if mapped == "" {
+		return "cert"
+	}
+	return mapped
 }
 
 func (s *Server) handleAutostart(w http.ResponseWriter, r *http.Request) {
