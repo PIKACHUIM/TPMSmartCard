@@ -43,10 +43,14 @@ jobs:
             os: ubuntu-22.04
             goarch: amd64
             cgo: "1"
+            webkit: "4.0"
+          # Ubuntu 24.04 只提供 webkit2gtk-4.1，Wails 需加 webkit2_41 构建标签
           - name: linux-arm64
             os: ubuntu-24.04-arm
             goarch: arm64
             cgo: "1"
+            webkit: "4.1"
+            wails_tags: "desktop,webkit2_41"
           # macOS 13 runner 已进入退役流程，改用 macos-15-intel / macos-15
           - name: macos-amd64
             os: macos-15-intel
@@ -75,9 +79,14 @@ jobs:
 
       - name: 安装 Linux WebKit / GTK 依赖
         if: runner.os == 'Linux'
+        shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libayatana-appindicator3-dev pkg-config
+          if [ "${{ matrix.webkit }}" = "4.1" ]; then
+            sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev pkg-config
+          else
+            sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libayatana-appindicator3-dev pkg-config
+          fi
 
       - name: 安装依赖并构建前端
         run: |
@@ -95,13 +104,14 @@ jobs:
         env:
           CGO_ENABLED: ${{ matrix.cgo }}
           GOARCH: ${{ matrix.goarch }}
+          TAGS: ${{ matrix.wails_tags || 'desktop' }}
           VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0' }}
         run: |
           set -euo pipefail
           EXT=""
           if [ "${{ runner.os }}" = "Windows" ]; then EXT=".exe"; fi
           mkdir -p ../dist
-          go build -tags desktop -trimpath \
+          go build -tags "$TAGS" -trimpath \
             -ldflags "-s -w -X main.Version=${VERSION#v} -X main.Commit=${GITHUB_SHA::8}" \
             -o "../dist/TPMSmartCard${EXT}" .
 
