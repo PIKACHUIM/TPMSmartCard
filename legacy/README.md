@@ -1,45 +1,56 @@
-# legacy —— 原 Python 实现（归档说明）
+# legacy —— v1（Python）归档
 
-本目录用于归档 **v1.x 的 Python 实现**，作为 Go 版本的功能对照与回退路径。
+本目录是 **v1.7.0** 的完整实现，作为 Go 版本（v2）的功能对照与回退路径。
+对应的 Git 标签是 [`v1.7.0`](https://github.com/PIKACHUIM/TPMSmartCard/releases/tag/v1.7.0)。
 
-## 当前状态
+## 目录内容
 
-P0/P1 阶段 Python 代码仍保留在仓库根目录（`SmartCardAPP.py`、`SmartCardWEB.py`、
-`Module/`、`SubApp/`、`Config/`、`templates/`、`static/`、`Builds/`、`install.iss`），
-原因有两条：
+| 路径 | 说明 |
+|---|---|
+| `SmartCardAPP.py` | Tkinter 主程序（需管理员权限） |
+| `SmartCardWEB.py` | Flask 证书下发服务（监听 `0.0.0.0:1080`） |
+| `Module/` | 核心库：TPM 虚拟卡、OpenSC、DPAPI、备份、SSH、FIDO |
+| `SubApp/` | 证书导入、系统设置等子程序 |
+| `Config/` | 布局 JSON、11 语言包、主题、图标、随包字体 |
+| `templates/` `static/` | Web 上传页 |
+| `Builds/` `install.iss` `BuildPackage.py` `BuildNuitka.py` | 打包与签名脚本（cx_Freeze / Nuitka / Inno Setup） |
+| `OpenSC/` `Import/` | 随包分发的 Windows 工具 |
+| `SSHCardAgent.exe` | 历史外挂 SSH 代理（v1.7 已内建，仅留档） |
 
-1. `.github/workflows/build-client-*.yml` 仍以根目录为构建上下文，立即移动会让现网发布流水线中断；
-2. Go 版本达到功能对等（P1 验收）之前，Python 版本是唯一的可用产物。
+## 运行 v1
 
-## 归档计划（P2 执行）
+```powershell
+# 1. 重建虚拟环境（x86 线用 -PythonVersion 3.10）
+powershell -File Builds\NewVenv-PY313.ps1
 
-当 P1 验收清单逐项通过后，按下列顺序整体迁移，并在一次提交中完成：
+# 2. 安装依赖
+pip install -r requirements.txt
 
-```bash
-git mv SmartCardAPP.py SmartCardWEB.py Module SubApp Config templates static \
-       Builds install.iss BuildNuitka.py BuildPackage.py \
-       requirements.txt requirements-nuitka.txt ChineseSimplified.isl \
-       legacy/
+# 3. 运行（管理员）
+python SmartCardAPP.py
+
+# 4. 打包
+python BuildPackage.py build      # cx_Freeze + Inno Setup
+python BuildNuitka.py             # Nuitka standalone
 ```
 
-迁移后需要同步修改：
+> 脚本里的相对路径以 `legacy/` 为工作目录；`Module/Paths.py` 通过「含 `Config` 子目录的目录」
+> 判定程序根目录，因此在 `legacy/` 下运行即可正确解析资源。
 
-| 位置 | 改动 |
+## 与 v2 的对应关系
+
+| v1 | v2 |
 |---|---|
-| `.github/workflows/build-client-*.yml` | 构建上下文改为 `legacy/`，或直接停用（由新 Go 流水线取代） |
-| `docs/dev-guide.md` | 命令前缀加 `legacy/` |
-| `README.md` | 标注「v1（Python，维护模式）/ v2（Go，主线）」 |
-
-## 对照用途
-
-`core/` 的 Go 实现以 Python 模块为行为基准，禁止「顺手优化」改变外部行为：
-
-| Python | Go 对应 |
-|---|---|
-| `Module/Cryptography.py` | `core/internal/crypto`（协议逐字节兼容） |
+| `Module/Cryptography.py` | `core/internal/crypto`（逐字节兼容） |
 | `Module/TPMSmartCard.py` | `core/internal/platform/win32` |
 | `Module/SmartCardAPI.py` | `core/internal/platform/p11` |
 | `Module/TPMBackup.py` | `core/internal/backup` |
-| `Module/SSHAgent.py` | `core/internal/sshagent` |
-| `Fido/src/fido-go` | `core/internal/fido`（直接搬迁） |
-| `Config/locales/*.json` | `web/src/locales/*.json`（键名不变） |
+| `Module/SSHAgent.py` | `core/internal/sshagent`（协议层） |
+| `Fido/src/fido-go` | 保持原位的独立 Go 模块，由 CI 构建 |
+| `Config/locales/*.json` | `web/src/locales/*.json` |
+
+## 注意
+
+- v1 只支持 Windows；`tpmvscmgr` 建卡/删卡禁止在远程桌面会话中执行（`0x800704d3`）。
+- `.tsb` 备份绑定同一颗 TPM，删卡后不可还原。
+- 本目录不再接收功能更新，只做安全修复（如有）。

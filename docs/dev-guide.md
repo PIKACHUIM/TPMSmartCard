@@ -1,4 +1,11 @@
-# 开发与调试指南
+# 开发与调试指南（v1 / Python）
+
+> [!WARNING]
+> 本文描述的是 **v1（Python）** 的开发方式。v1 代码已归档到仓库的 [`legacy/`](../legacy/README.md)，
+> 下方命令中的路径需加 `legacy/` 前缀。
+>
+> v2（Go + Wails + React + Hono）的开发与构建见
+> [架构说明（v2）](architecture-v2.md) 与 [迁移说明](migration-v2.md)。
 
 ## 1. 环境
 

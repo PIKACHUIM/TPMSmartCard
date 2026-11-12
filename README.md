@@ -98,26 +98,37 @@ _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 
 ---
 
-## 🛠️ 开发构建
+## 🛠️ 开发构建（v2）
 
 ```bash
-# 1. 准备 Python 3.13 环境（推荐用仓库自带脚本重建 venv；x86 线用 -PythonVersion 3.10）
-powershell -File Builds\NewVenv-PY313.ps1
+# 1. 依赖（Node ≥ 20 · Go ≥ 1.23）
+npm ci
 
-# 2. 安装依赖
-pip install -r requirements.txt
+# 2. 前端（桌面端与管理台共用同一份产物）
+npm run build -w @tpmsc/web
+node scripts/prepare-ui.mjs          # web/dist → core/ui/dist（go:embed）
 
-# 3. 直接从源码运行（需要管理员权限）
-python SmartCardAPP.py
+# 3. 核心库与 CLI
+cd core && go test ./... && go run ./cmd/tpmsc doctor
 
-# 4. 打包
-python BuildPackage.py build      # cx_Freeze：三个 exe + 随包资源
-python BuildNuitka.py             # Nuitka：build/nuitka/TPMSmartCard/
+# 4. 桌面端（Windows 可 CGO_ENABLED=0）
+cd desktop/wails && go build -tags desktop -o ../dist/TPMSmartCard .
 ```
 
-* 依赖自查：`python Builds/check_imports.py`
-* 完整开发说明（运行方式、打包、签名、CI、真机调试方法）：[开发与调试指南](docs/dev-guide.md)
-* 代码结构与模块职责：[架构说明](docs/architecture.md)
+打包与发布：
+
+```bash
+powershell -File scripts\package-windows.ps1     # 绿色版 zip（+ 签名钩子）
+./scripts/package-desktop.sh 2.0.0               # Linux tar.gz / macOS .app（+ 公证钩子）
+```
+
+CI：`.github/workflows/build-desktop.yml`（Windows / Linux / macOS × amd64 / arm64）、
+`release-desktop.yml`（打 `v2.*` 标签自动发布）、`deploy-worker.yml`（证书下发 Worker）。
+
+* v2 架构（Go + Wails + Hono）：[架构说明](docs/architecture-v2.md)
+* 协议契约（X25519 / 取件码 / RBAC）：[协议说明](docs/protocol.md)
+* 迁移与功能对等清单：[迁移说明](docs/migration-v2.md)
+* v1（Python）已归档到 [`legacy/`](legacy/README.md)，仍可按其中的说明运行与打包。
 
 ---
 

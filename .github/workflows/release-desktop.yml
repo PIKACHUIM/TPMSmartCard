@@ -1,0 +1,46 @@
+name: release-desktop
+
+# 打标签（v2.* 或 v1.7.0 之后的版本）时构建三平台产物并创建 GitHub Release。
+on:
+  push:
+    tags:
+      - "v2.*"
+      - "v2.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布的标签（例如 v2.0.0）"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-desktop.yml
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: 发布
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          ls -lh artifacts
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/* --clobber
+          else
+            gh release create "$TAG" artifacts/* \
+              --title "$TAG" \
+              --generate-notes
+          fi

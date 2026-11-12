@@ -1,0 +1,189 @@
+name: build-desktop
+
+# Go + Wails 桌面端构建矩阵：Windows / Linux / macOS × amd64 / arm64。
+# 旧的 Python 流水线（build-client-*.yml）已移除，v1 代码归档在 legacy/。
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "core/**"
+      - "desktop/**"
+      - "web/**"
+      - "packages/**"
+      - "scripts/**"
+      - "Fido/**"
+      - ".github/workflows/build-desktop.yml"
+
+concurrency:
+  group: build-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-amd64
+            os: windows-latest
+            goarch: amd64
+            cgo: "0"
+          - name: windows-arm64
+            os: windows-latest
+            goarch: arm64
+            cgo: "0"
+          - name: linux-amd64
+            os: ubuntu-22.04
+            goarch: amd64
+            cgo: "1"
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+            goarch: arm64
+            cgo: "1"
+          - name: macos-amd64
+            os: macos-13
+            goarch: amd64
+            cgo: "1"
+          - name: macos-arm64
+            os: macos-14
+            goarch: arm64
+            cgo: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: |
+            core/go.sum
+            desktop/wails/go.sum
+            Fido/src/fido-go/go.sum
+
+      - name: 安装 Linux WebKit / GTK 依赖
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libayatana-appindicator3-dev pkg-config
+
+      - name: 安装依赖并构建前端
+        run: |
+          npm ci
+          npm run build -w @tpmsc/web
+          node scripts/prepare-ui.mjs
+
+      - name: Go 单元测试
+        working-directory: core
+        run: go test ./...
+
+      - name: 构建桌面端
+        working-directory: desktop/wails
+        shell: bash
+        env:
+          CGO_ENABLED: ${{ matrix.cgo }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0' }}
+        run: |
+          set -euo pipefail
+          EXT=""
+          if [ "${{ runner.os }}" = "Windows" ]; then EXT=".exe"; fi
+          mkdir -p ../dist
+          go build -tags desktop -trimpath \
+            -ldflags "-s -w -X main.Version=${VERSION#v} -X main.Commit=${GITHUB_SHA::8}" \
+            -o "../dist/TPMSmartCard${EXT}" .
+
+      - name: 打包（Windows）
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = "${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0' }}".TrimStart("v")
+          $stage = "dist/TPMSmartCard-$version-windows-${{ matrix.goarch }}"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item "desktop/dist/TPMSmartCard.exe" $stage
+          Copy-Item README.md, LICENSE $stage
+          Compress-Archive -Path "$stage/*" -DestinationPath "$stage.zip" -Force
+
+      - name: 打包（Linux）
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0' }}"
+          VERSION="${VERSION#v}"
+          STAGE="dist/TPMSmartCard-${VERSION}-linux-${{ matrix.goarch }}"
+          mkdir -p "$STAGE/usr/bin" "$STAGE/usr/share/applications"
+          cp desktop/dist/TPMSmartCard "$STAGE/usr/bin/"
+          cp desktop/wails/build/linux/tpmsmartcard.desktop "$STAGE/usr/share/applications/"
+          cp legacy/Config/iconer/icon01.png "$STAGE/usr/share/applications/tpmsmartcard.png"
+          tar -czf "$STAGE.tar.gz" -C dist "$(basename "$STAGE")"
+
+      - name: 打包（macOS）
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          MACOS_NOTARY_PROFILE: ${{ secrets.MACOS_NOTARY_PROFILE }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0' }}"
+          VERSION="${VERSION#v}"
+          APP="dist/TPMSmartCard.app"
+          rm -rf "$APP"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp desktop/dist/TPMSmartCard "$APP/Contents/MacOS/"
+          cp desktop/wails/build/macos/Info.plist "$APP/Contents/"
+          cp desktop/wails/build/macos/entitlements.plist "$APP/Contents/Resources/"
+
+          if [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then
+            codesign --force --deep --options runtime \
+              --entitlements desktop/wails/build/macos/entitlements.plist \
+              --sign "$MACOS_SIGN_IDENTITY" "$APP"
+            if [ -n "${MACOS_NOTARY_PROFILE:-}" ]; then
+              ditto -c -k --keepParent "$APP" "dist/notarize.zip"
+              xcrun notarytool submit "dist/notarize.zip" --keychain-profile "$MACOS_NOTARY_PROFILE" --wait
+              xcrun stapler staple "$APP"
+              rm -f "dist/notarize.zip"
+            fi
+          else
+            echo "::warning::未配置 MACOS_SIGN_IDENTITY：Secure Enclave 将降级为软件密钥"
+          fi
+
+          (cd dist && zip -qry "TPMSmartCard-${VERSION}-macos-${{ matrix.goarch }}.zip" TPMSmartCard.app)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  build-fido:
+    name: fido-go-windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: Fido/src/fido-go/go.sum
+      - name: 构建 FIDO2 服务
+        working-directory: Fido/src/fido-go
+        run: go build -trimpath -ldflags "-s -w -H windowsgui" -o ../../../dist/fido-go.exe .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fido-go-windows
+          path: dist/fido-go.exe
+          if-no-files-found: error

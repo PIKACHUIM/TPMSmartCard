@@ -63,7 +63,7 @@ case "$(uname -s)" in
     mkdir -p "$PKG/usr/bin" "$PKG/usr/share/applications"
     cp "$DIST/TPMSmartCard" "$PKG/usr/bin/TPMSmartCard"
     cp build/linux/tpmsmartcard.desktop "$PKG/usr/share/applications/"
-    cp "$ROOT/Config/iconer/icon01.png" "$PKG/usr/share/applications/tpmsmartcard.png"
+    cp "$ROOT/legacy/Config/iconer/icon01.png" "$PKG/usr/share/applications/tpmsmartcard.png"
     tar -czf "${PKG}.tar.gz" -C "$DIST" "$(basename "$PKG")"
     ;;
   *)

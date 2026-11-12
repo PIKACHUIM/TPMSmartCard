@@ -1,13 +1,13 @@
 build/
 build/*
-Caches/
-Caches/*
-# 打包中间产物与产物（install.iss / 工作流生成）
+legacy/Caches/
+legacy/Caches/*
+# 打包中间产物与产物（工作流生成）
 dist/
 staging/
 # 覆盖全局 gitignore 里的 *.msi（UGit 自动生成的规则）：
-# OpenSC 安装包需要随仓库分发，否则 CI 里打包/安装都会缺文件
-!OpenSC/*.msi
+# v1 的 OpenSC 安装包归档在 legacy/，需要随仓库分发
+!legacy/OpenSC/*.msi
 __pycache__
 .idea
 # FIDO2 设备端/服务端运行时日志（调试时产生）
@@ -39,5 +39,10 @@ desktop/wails/frontend/wailsjs/
 worker/.dev.vars
 worker/.wrangler/
 worker/.dryrun/
-# 工具链临时目录（YAML 校验等）
+# 工具链临时目录（YAML 校验、Release 资产搬运等）
 ._yamlcheck/
+tmp/
+# Release API 的临时响应文件
+beta.json
+release.json
+release-resp.json
