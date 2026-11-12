@@ -129,6 +129,15 @@ export const api = {
     return withDemo("/api/v1/desktop/backups", () => ({ backups: mock.mockBackups }));
   },
 
+  autostart(): Promise<{ enabled: boolean; detail: string; args: string }> {
+    return withDemo("/api/v1/desktop/autostart", () => ({ enabled: true, detail: "", args: "--minimized" }));
+  },
+
+  setAutostart(enabled: boolean): Promise<{ enabled: boolean; detail: string }> {
+    if (useAppStore.getState().demo) return Promise.resolve({ enabled, detail: "" });
+    return request("/api/v1/desktop/autostart", { method: "POST", body: { enabled } });
+  },
+
   records(query: { q?: string; mode?: string; state?: string; limit?: number; offset?: number } = {}): Promise<{
     rows: RecordRow[];
     total: number;

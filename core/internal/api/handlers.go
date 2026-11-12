@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PIKACHUIM/tpmsmartcard/internal/autostart"
 	"github.com/PIKACHUIM/tpmsmartcard/internal/backup"
 	"github.com/PIKACHUIM/tpmsmartcard/internal/platform"
 	"github.com/PIKACHUIM/tpmsmartcard/internal/protocol"
@@ -347,6 +349,55 @@ func (s *Server) handleCreateBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	s.broker.publish(map[string]any{"stage": "backup", "status": "ok", "file": name})
 	writeJSON(w, http.StatusCreated, map[string]any{"file": name})
+}
+
+func (s *Server) handleAutostart(w http.ResponseWriter, r *http.Request) {
+	enabled, detail, err := autostart.Status()
+	if err != nil && !errors.Is(err, autostart.ErrUnsupported) {
+		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"enabled": enabled,
+		"detail":  detail,
+		"args":    autostart.LaunchArgs,
+	})
+}
+
+func (s *Server) handleSetAutostart(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Enabled bool   `json:"enabled"`
+		Exe     string `json:"exe"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, protocol.ErrBadRequest, "请求体不是合法 JSON")
+		return
+	}
+	exe := req.Exe
+	if exe == "" {
+		resolved, err := autostart.Executable()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, protocol.ErrInternal, "无法确定可执行文件路径")
+			return
+		}
+		exe = resolved
+	}
+	var err error
+	if req.Enabled {
+		err = autostart.Enable(exe)
+	} else {
+		err = autostart.Disable()
+	}
+	if err != nil {
+		if errors.Is(err, autostart.ErrUnsupported) {
+			writeError(w, http.StatusNotImplemented, protocol.ErrBadRequest, "当前平台不支持自动启动")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, err.Error())
+		return
+	}
+	enabled, detail, _ := autostart.Status()
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": enabled, "detail": detail})
 }
 
 func sanitize(name string) string {

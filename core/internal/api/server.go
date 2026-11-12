@@ -63,6 +63,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/desktop/certificates", s.handleListCertificates)
 	mux.HandleFunc("GET /api/v1/desktop/backups", s.handleListBackups)
 	mux.HandleFunc("POST /api/v1/desktop/backups", s.handleCreateBackup)
+	mux.HandleFunc("GET /api/v1/desktop/autostart", s.handleAutostart)
+	mux.HandleFunc("POST /api/v1/desktop/autostart", s.handleSetAutostart)
 	mux.HandleFunc("GET /api/v1/events", s.handleEvents)
 	mux.Handle("/", s.uiHandler())
 

@@ -28,19 +28,19 @@
 | `Module/Certificates.py` | `platform.Certificate` | ✅ | X.509 视图字段对齐前端 |
 | `Module/TPMBackup.py` | `internal/backup` | 🟡 | v2 包格式与校验完成；DPAPI 采集未接 |
 | `Module/DPAPI.py` | 待补 | ⏳ | 需借用 SYSTEM 令牌，P1 关键项 |
-| `Module/SSHAgent.py` | `internal/sshagent` | ⏳ | 未开始 |
-| `Module/Fido*` + `Fido/src/fido-go` | `internal/fido` | ⏳ | 建议原样搬迁 33 个 .go 文件 |
+| `Module/SSHAgent.py` | `internal/sshagent` | 🟡 | 协议帧/身份/签名分发 + 测试完成；卡上签名适配待 `Slot.Sign` |
+| `Module/Fido*` + `Fido/src/fido-go` | `Fido/src/fido-go` | 🟡 | 本身已是 Go 模块（含 vendored virtual-fido），待并入统一构建与发布 |
 | `Module/I18n.py` + `Config/locales/*.json` | `web/src/locales/*.json` | 🟡 | 11 语言骨架；键集需补全到 v1 规模 |
 | `Module/Theme.py` + `Config/themes.json` | `web` 设计令牌 | ✅ | 石墨 + 紫铜，双主题 |
-| `Module/TrayIcon.py` | Wails 外壳 | ⏳ | 当前关闭窗口即退出，未接托盘 |
-| `Module/AutoStart.py` | 待补 | ⏳ | 计划任务 + Run 键 |
+| `Module/TrayIcon.py` | Wails 外壳 | 🟡 | Windows 托盘菜单（显示/浏览器/重启/退出）；macOS/Linux 待 P2 |
+| `Module/AutoStart.py` | `internal/autostart` | ✅ | Windows Run 项 / macOS LaunchAgent / Linux XDG，设置页可切换 |
 | `Module/Paths.py` / `Version.py` | `core/internal/api` + ldflags | ✅ | 数据目录与版本注入 |
 | `Module/WinPlatform.py` | `platform/win32` | 🟡 | 提权/远程会话判定已迁移 |
 | `SubApp/CertImport.py` | 本地 API + UI 导入 | 🟡 | 后端导入接口就绪，UI 走证书页 |
 | `SubApp/SystemSettings.py` | `web` 设置页 | 🟡 | 外观/语言/平台能力；自启与 SSH 待接后端 |
 | `SubApp/MoreConfig.py` | 设置页 | ⏳ | OpenSC 安装器分发未迁移 |
-| `BuildPackage.py` / `install.iss` | CI 矩阵 + 安装包 | ⏳ | 目前产出裸二进制，未做 msi/dmg/AppImage |
-| `Builds/Sign-Windows.ps1` | CI | ⏳ | 签名步骤已留位，未接 Secrets |
+| `BuildPackage.py` / `install.iss` | `scripts/package-*.{sh,ps1}` | 🟡 | Windows zip 与 Linux tar.gz / macOS .app 脚本就绪；msi/dmg 未做 |
+| `Builds/Sign-Windows.ps1` | CI + 打包脚本 | 🟡 | 签名钩子（`TPMSC_SIGN_TOOL` / `MACOS_SIGN_IDENTITY`）已留位，未接 Secrets |
 
 ## 3. P0 验收结果（已执行）
 
@@ -51,7 +51,10 @@
 | 前端构建 | ✅ `tsc -b && vite build` 通过 |
 | Go 单元测试 | ✅ crypto / cloud / backup 全部通过 |
 | 跨平台编译 | ✅ `GOOS=linux`、`GOOS=darwin` 均通过 |
-| Wails 桌面端 | ✅ `go build -tags desktop` 通过（Windows amd64） |
+| Wails 桌面端 | ✅ `go build -tags desktop` 通过（含 Windows 托盘） |
+| SSH agent 协议 | ✅ 3 用例（身份列表 / 签名验签 / 超长帧拒绝） |
+| Windows 打包脚本 | ✅ 产出 `dist/TPMSmartCard-2.0.0-windows-amd64.zip` |
+| 开机自启 | ⏳ 未执行真机写入（会改用户注册表 / LaunchAgent，需手动确认） |
 | 部署 | ⏳ 需配置 D1/KV 与 Secrets 后执行 |
 
 ## 4. 已知风险与对策

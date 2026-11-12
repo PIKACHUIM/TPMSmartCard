@@ -23,7 +23,29 @@ export function SettingsPage() {
       .health()
       .then(setHealth)
       .catch((err) => console.error("settings health failed", err));
+    void api
+      .autostart()
+      .then((result) => setAutostart(result.enabled))
+      .catch((err) => console.error("autostart read failed", err));
   }, []);
+
+  const toggleAutostart = (enabled: boolean) => {
+    setAutostart(enabled);
+    api
+      .setAutostart(enabled)
+      .then((result) => {
+        setAutostart(result.enabled);
+        pushToast({
+          kind: "ok",
+          title: result.enabled ? "已启用登录自启" : "已关闭登录自启",
+          detail: result.detail || undefined,
+        });
+      })
+      .catch((err: Error) => {
+        setAutostart(!enabled);
+        pushToast({ kind: "err", title: "自启设置失败", detail: err.message });
+      });
+  };
 
   if (!health) return <Spinner label="正在读取本机配置…" />;
 
@@ -91,9 +113,9 @@ export function SettingsPage() {
         <div className="grid gap-2">
           <Toggle
             label="开机自启（常驻托盘）"
-            hint="登录时以提权计划任务启动，失败回退到 HKCU\\...\\Run"
+            hint="Windows 写入 HKCU Run；macOS 写入 LaunchAgent；Linux 写入 XDG autostart"
             checked={autostart}
-            onChange={setAutostart}
+            onChange={toggleAutostart}
             icon={<MonitorCog className="h-4 w-4" />}
           />
           <Toggle

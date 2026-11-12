@@ -19,6 +19,7 @@ import (
 	"github.com/PIKACHUIM/tpmsmartcard/internal/platform/factory"
 	"github.com/PIKACHUIM/tpmsmartcard/ui"
 	"github.com/wailsapp/wails/v2/pkg/options"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // Desktop 是 Wails 桌面端对象：负责内嵌后端生命周期与原生能力。
@@ -31,8 +32,9 @@ type Desktop struct {
 	apiURL string
 	err    error
 
-	proxy    *proxyHandler
-	quitting atomic.Bool
+	proxy       *proxyHandler
+	quitting    atomic.Bool
+	trayStarted atomic.Bool
 }
 
 // NewDesktop 创建桌面端对象（此时尚未启动后端）。
@@ -42,6 +44,7 @@ func NewDesktop() *Desktop {
 
 func (d *Desktop) onStartup(ctx context.Context) {
 	d.ctx = ctx
+	d.startTray()
 	go func() {
 		if err := d.startBackend(); err != nil {
 			d.mu.Lock()
@@ -54,11 +57,17 @@ func (d *Desktop) onStartup(ctx context.Context) {
 
 func (d *Desktop) onShutdown(context.Context) {
 	d.quitting.Store(true)
+	d.stopTray()
 	d.stopBackend()
 }
 
-func (d *Desktop) onBeforeClose(context.Context) bool {
-	return false
+// onBeforeClose 拦截关闭：托盘可用时隐藏窗口，否则正常退出。
+func (d *Desktop) onBeforeClose(ctx context.Context) bool {
+	if d.quitting.Load() || !d.trayStarted.Load() {
+		return false
+	}
+	wailsruntime.WindowHide(ctx)
+	return true
 }
 
 func (d *Desktop) onSecondInstance(_ options.SecondInstanceData) {

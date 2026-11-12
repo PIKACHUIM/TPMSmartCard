@@ -3,6 +3,7 @@ module github.com/PIKACHUIM/tpmsmartcard/desktop
 go 1.23
 
 require (
+	fyne.io/systray v1.12.2
 	github.com/PIKACHUIM/tpmsmartcard v0.0.0
 	github.com/wailsapp/wails/v2 v2.10.2
 )

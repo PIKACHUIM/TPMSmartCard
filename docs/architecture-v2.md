@@ -40,12 +40,13 @@
 | `core/internal/platform/p11` | OpenSC CLI 只读后端 | ✅ 证书读取与导入 |
 | `core/internal/backup` | `.tsb` v2 清单 / 校验 / 解包 | ✅ 完成（含 v1 识别） |
 | `core/internal/api` | 本地 REST + SSE + CSRF 防线 | ✅ 完成 |
+| `core/internal/autostart` | Windows Run / macOS LaunchAgent / Linux XDG | ✅ 完成（UI 已接） |
+| `core/internal/sshagent` | SSH agent 协议帧、身份与签名分发 | ✅ 协议 + 测试（卡上签名适配待 `Slot.Sign`） |
 | `core/cmd/tpmsc` | CLI（doctor/card/cert/backup/cloud/serve） | ✅ 完成 |
-| `desktop/wails` | Wails v2 外壳、反代、单实例 | ✅ 可编译（托盘/自启待补） |
+| `desktop/wails` | Wails v2 外壳、反代、单实例、托盘 | 🟡 Windows 托盘可用；macOS/Linux 托盘待 P2 |
 | `web` | 设计系统 + 9 个页面 + 11 语言骨架 | ✅ 可构建 |
 | `worker` | `/card/*`、RBAC、审计、投递 | ✅ 单测通过，待真机部署 |
-| `core/internal/sshagent` | SSH agent 协议 | ⏳ P1 待迁移 |
-| `core/internal/fido` | FIDO2（源 `Fido/src/fido-go`） | ⏳ 直接搬迁，未开始 |
+| `core/internal/fido` | FIDO2（源 `Fido/src/fido-go`） | ⏳ 源码已是 Go 独立模块，纳入发布待做 |
 
 ## 3. 平台能力矩阵
 
@@ -56,8 +57,10 @@
 | 证书读取 | OpenSC `pkcs15-tool` | 同左 | `security` + OpenSC |
 | 密钥生成 / CSR | ⏳ PKCS#11 引擎 | ⏳ `tpm2tss-genkey` | ⏳ Secure Enclave cgo |
 | 备份还原 | ⏳ DPAPI 层 | ⏳ TPM2 seal | 仅证书/链/元数据 |
-| SSH Agent | ⏳ | ⏳ | ⏳ |
-| FIDO2 | ⏳ 搬迁 | ⏳ | ⏳ |
+| SSH Agent | 🟡 协议就绪，签名待接 | 🟡 同左（Unix socket 可用） | 🟡 同左 |
+| FIDO2 | ⏳ 独立模块待并入 | ⏳ | ⏳ |
+| 开机自启 | ✅ Run 项 | ✅ XDG autostart | ✅ LaunchAgent |
+| 系统托盘 | ✅（Windows） | ⏳ | ⏳ |
 
 > 「不支持」必须由 `Capability` 上报并由 UI 置灰说明，不允许静默失败。
 
