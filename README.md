@@ -92,9 +92,9 @@ _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 | 语言 / 运行时 | Python **3.13**（x64 与 arm64 线）、**3.10**（x86/低版本系统线）、**3.14**（Nuitka 线） |
 | 界面 | Tkinter + ttkbootstrap（纯代码构建界面，布局由 `Config/*.json` 驱动） |
 | 卡片操作 | `tpmvscmgr`（建卡 / 删卡 / 改 PIN）+ OpenSC（读卡与证书）+ 自研 PnP / SetupAPI 层 |
-| 备份还原 | 自研 `.tsb`（zip）打包；`Module/DPAPI.py` 负责 DPAPI 加解密与令牌借用 |
+| 备份还原 | 自研 `.tsb`（zip）打包；`legacy/Module/DPAPI.py` 负责 DPAPI 加解密与令牌借用 |
 | 打包 | 两条流水线：**cx_Freeze**（正式包，Inno Setup 出安装器）与 **Nuitka**（standalone 目录） |
-| 多语言 | `Config/locales/*.json`，11 种语言 |
+| 多语言 | `legacy/Config/locales/*.json`（v1）· `web/src/locales/*.json`（v2），11 种语言 |
 
 ---
 
@@ -206,7 +206,7 @@ CI：`.github/workflows/build-desktop.yml`（Windows / Linux / macOS × amd64 / 
 
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) —— 开源智能卡工具与中间件
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
-3. [buptczq/WinCryptSSHAgent](https://github.com/buptczq/WinCryptSSHAgent) —— 内置 SSH 代理（`Module/SSHAgent.py`）的实现参考
+3. [buptczq/WinCryptSSHAgent](https://github.com/buptczq/WinCryptSSHAgent) —— 内置 SSH 代理（v1 `legacy/Module/SSHAgent.py`、v2 `core/internal/sshagent`）的实现参考
 
 
 
