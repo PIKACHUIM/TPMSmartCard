@@ -23,6 +23,8 @@ docs/public/CNAME
 # ===== 新版 monorepo（Go + Wails + Hono）=====
 # 前端与 Worker 构建产物
 web/dist/
+# Vite 在加载配置时生成的临时文件（构建被中断会残留）
+web/vite.config.ts.timestamp-*
 .wrangler/
 *.tsbuildinfo
 coverage/

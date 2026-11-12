@@ -93,6 +93,10 @@ func (s *Server) guard(next http.Handler) http.Handler {
 }
 
 func (s *Server) tokenValid(r *http.Request) bool {
+	// 未配置令牌时不能把「空 == 空」当成通过，否则等于没有 CSRF 防线
+	if s.opts.Token == "" {
+		return false
+	}
 	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer ")) == s.opts.Token
 	}
