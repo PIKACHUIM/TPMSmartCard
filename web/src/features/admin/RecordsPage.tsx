@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { RefreshCw, Search, Trash2 } from "lucide-react";
+import { RefreshCw, Search, Trash2, UploadCloud } from "lucide-react";
 import { api } from "@/lib/api";
 import type { RecordRow } from "@tpmsc/protocol";
 import { useAppStore } from "@/lib/store";
 import { Badge, Button, Panel } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Modal } from "@/components/ui/Modal";
+import { DeliveryUploadModal } from "./DeliveryUploadModal";
 import { cn } from "@/lib/cn";
 
 const STATE: Record<RecordRow["state"], { text: string; tone: "ok" | "warn" | "danger" | "muted" }> = {
@@ -23,6 +24,7 @@ export function RecordsPage() {
   const [mode, setMode] = useState("");
   const [state, setState] = useState("");
   const [pending, setPending] = useState<RecordRow | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const can = useAppStore((store) => store.can);
   const pushToast = useAppStore((store) => store.pushToast);
 
@@ -180,6 +182,16 @@ export function RecordsPage() {
           <option value="revoked">已删除</option>
         </select>
 
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={!can("cert:deliver")}
+          onClick={() => setUploadOpen(true)}
+          icon={<UploadCloud className="h-3.5 w-3.5" />}
+        >
+          投递证书
+        </Button>
+
         <Button variant="ghost" size="sm" aria-label="刷新" onClick={load} icon={<RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />} />
       </div>
 
@@ -216,6 +228,8 @@ export function RecordsPage() {
           目标：<span className="font-mono text-ink-0">{pending?.label ?? pending?.id}</span>
         </p>
       </Modal>
+
+      <DeliveryUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onUploaded={load} />
     </Panel>
   );
 }

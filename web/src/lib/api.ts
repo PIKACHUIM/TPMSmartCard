@@ -158,6 +158,50 @@ export const api = {
     }));
   },
 
+  /**
+   * 从管理台上传 PFX（走与桌面端相同的 /card/put/cert 协议）。
+   * 注意：这个接口返回 `{flag,data}` 而不是标准包络，所以单独实现。
+   */
+  async uploadCertificate(input: {
+    mode: "code" | "key";
+    file: File;
+    pfxKey: string;
+    pubkey?: string;
+    code?: string;
+    ttlHours: number;
+    maxUses: number;
+    label?: string;
+  }): Promise<{ id: string; code?: string; expires_at?: string; max_uses: number }> {
+    const form = new FormData();
+    form.set("vaults", input.file);
+    form.set("pfxkey", input.pfxKey);
+    form.set("mode", input.mode);
+    form.set("ttl", String(Math.max(0, Math.round(input.ttlHours * 3600))));
+    form.set("max_uses", String(input.maxUses));
+    if (input.label) form.set("label", input.label);
+    if (input.mode === "key" && input.pubkey) form.set("pubkey", input.pubkey.trim());
+    if (input.mode === "code" && input.code) form.set("code", input.code.trim());
+
+    const response = await fetch(`${API_BASE}/card/put/cert`, {
+      method: "POST",
+      headers: { "X-Requested-With": "tpmsc" },
+      credentials: "include",
+      body: form,
+    });
+    const body = (await response.json().catch(() => null)) as
+      | { flag?: boolean; data?: { error?: string; id?: string; code?: string; expires_at?: string; max_uses?: number } }
+      | null;
+    if (!response.ok || !body?.flag) {
+      throw new ApiError(body?.data?.error ?? `上传失败（HTTP ${response.status}）`, "upload_failed", response.status);
+    }
+    return {
+      id: body.data?.id ?? "",
+      code: body.data?.code,
+      expires_at: body.data?.expires_at,
+      max_uses: body.data?.max_uses ?? input.maxUses,
+    };
+  },
+
   deleteRecord(id: string): Promise<{ done: boolean }> {
     if (useAppStore.getState().demo) return Promise.resolve({ done: true });
     return request(`/api/v1/records/${encodeURIComponent(id)}`, { method: "DELETE" });
