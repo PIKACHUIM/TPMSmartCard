@@ -2,19 +2,31 @@ package api
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
+	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PIKACHUIM/tpmsmartcard/internal/platform"
 )
 
 // fakeSlot 用内存数据验证 API 契约，不触碰真实硬件。
 type fakeSlot struct {
-	cards []platform.Card
+	cards     []platform.Card
+	imported  []platform.ImportOptions
+	exportPEM []byte
 }
 
 func (f *fakeSlot) ID() string          { return "fake" }
@@ -79,7 +91,16 @@ func (f *fakeSlot) ListCertificates(_ context.Context, cardID string) ([]platfor
 	}}, nil
 }
 
-func (f *fakeSlot) ImportCertificate(context.Context, string, platform.ImportOptions) error {
+func (f *fakeSlot) ExportCertificate(context.Context, string, string) ([]byte, error) {
+	if len(f.exportPEM) == 0 {
+		return nil, platform.ErrNotFound
+	}
+	return f.exportPEM, nil
+}
+
+func (f *fakeSlot) ImportCertificate(_ context.Context, _ string, opt platform.ImportOptions) error {
+	f.imported = append(f.imported, opt)
+	f.exportPEM = opt.Data
 	return nil
 }
 
@@ -227,5 +248,93 @@ func TestStatsShape(t *testing.T) {
 				t.Fatalf("stat missing %s: %+v", key, item)
 			}
 		}
+	}
+}
+
+func selfSignedPEM(t *testing.T) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(0x2A),
+		Subject:      pkix.Name{CommonName: "tpmsc-test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
+
+func TestImportAndExportCertificate(t *testing.T) {
+	ts, slot := newTestServer(t)
+	if _, err := slot.Create(context.Background(), platform.CreateOptions{Name: "测试卡", PIN: "123456"}); err != nil {
+		t.Fatal(err)
+	}
+
+	certPEM := selfSignedPEM(t)
+	payload := fmt.Sprintf(`{"card_id":%q,"pem":%q,"pin":"123456","label":"导入测试"}`,
+		"fake-测试卡", string(certPEM))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/desktop/certificates", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Requested-With", "tpmsc")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, body)
+	}
+	if len(slot.imported) != 1 {
+		t.Fatalf("expected 1 import, got %d", len(slot.imported))
+	}
+	if slot.imported[0].PIN != "123456" || len(slot.imported[0].Data) == 0 {
+		t.Fatalf("unexpected import options: %+v", slot.imported[0])
+	}
+	if slot.imported[0].Label != "导入测试" {
+		t.Fatalf("label = %q", slot.imported[0].Label)
+	}
+
+	exportURL := ts.URL + "/api/v1/desktop/certificates/cert-1/pem?card_id=" + url.QueryEscape("fake-测试卡")
+	exportResp, err := http.Get(exportURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer exportResp.Body.Close()
+	exported, _ := io.ReadAll(exportResp.Body)
+	if exportResp.StatusCode != http.StatusOK {
+		t.Fatalf("export status = %d", exportResp.StatusCode)
+	}
+	if !strings.Contains(string(exported), "BEGIN CERTIFICATE") {
+		t.Fatalf("export body = %s", exported)
+	}
+	if disposition := exportResp.Header.Get("Content-Disposition"); !strings.Contains(disposition, ".pem") {
+		t.Fatalf("content-disposition = %q", disposition)
+	}
+}
+
+func TestImportRejectsNonPEM(t *testing.T) {
+	ts, slot := newTestServer(t)
+	if _, err := slot.Create(context.Background(), platform.CreateOptions{Name: "测试卡", PIN: "123456"}); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"card_id":"fake-测试卡","pem":"not a certificate","pin":"123456"}`
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/desktop/certificates", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Requested-With", "tpmsc")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
 	}
 }

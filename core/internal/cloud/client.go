@@ -1,8 +1,9 @@
 // Package cloud 实现证书取回客户端（v1 传输密钥 / v2 取件码）。
 //
 // 与 Worker 的契约见 docs/protocol.md；两种模式最终都得到同一份 JSON：
-//   {"v":1,"pfx":"<base64>","pfxkey":"…","label":"…"}    // PKCS#12
-//   {"v":2,"cert_pem":"…","key_pem":"…","chain_pem":"…"}  // OpenCertRepo 投递
+//
+//	{"v":1,"pfx":"<base64>","pfxkey":"…","label":"…"}    // PKCS#12
+//	{"v":2,"cert_pem":"…","key_pem":"…","chain_pem":"…"}  // OpenCertRepo 投递
 package cloud
 
 import (

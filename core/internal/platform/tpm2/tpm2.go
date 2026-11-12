@@ -158,6 +158,13 @@ func (s *Slot) ListCertificates(ctx context.Context, cardID string) ([]platform.
 	return s.p11.ListCertificates(ctx, cardID)
 }
 
+func (s *Slot) ExportCertificate(ctx context.Context, cardID, certID string) ([]byte, error) {
+	if s.p11 == nil {
+		return nil, platform.Unsupported("未找到 OpenSC 工具")
+	}
+	return s.p11.ExportCertificate(ctx, cardID, certID)
+}
+
 func (s *Slot) ImportCertificate(ctx context.Context, cardID string, opt platform.ImportOptions) error {
 	if s.p11 == nil {
 		return platform.Unsupported("未找到 pkcs15-init")

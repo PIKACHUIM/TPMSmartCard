@@ -1,9 +1,10 @@
 // Package autostart 管理「登录后自动启动」。
 //
 // 三个平台各自使用系统推荐机制：
-//   Windows  HKCU\...\Run（用户级，无需管理员）
-//   macOS    ~/Library/LaunchAgents/com.pikachuim.tpmsmartcard.plist
-//   Linux    ~/.config/autostart/tpmsmartcard.desktop
+//
+//	Windows  HKCU\...\Run（用户级，无需管理员）
+//	macOS    ~/Library/LaunchAgents/com.pikachuim.tpmsmartcard.plist
+//	Linux    ~/.config/autostart/tpmsmartcard.desktop
 //
 // 统一以 `--minimized` 启动：只驻留托盘，不抢焦点。
 package autostart

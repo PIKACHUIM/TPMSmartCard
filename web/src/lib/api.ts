@@ -125,6 +125,34 @@ export const api = {
     }));
   },
 
+  /** 导入公钥证书（PEM）。私钥必须在 TPM / Secure Enclave 内生成，不能经网络传输。 */
+  importCertificate(input: {
+    card_id: string;
+    pem: string;
+    pin?: string;
+    label?: string;
+  }): Promise<{ imported: boolean; subject: string; serial: string }> {
+    if (useAppStore.getState().demo) {
+      return Promise.resolve({ imported: true, subject: "CN=演示证书", serial: "2A" });
+    }
+    return request("/api/v1/desktop/certificates", { method: "POST", body: input });
+  },
+
+  /** 导出证书 PEM（只含公钥证书）。 */
+  async exportCertificate(cardId: string, certId: string): Promise<string> {
+    if (useAppStore.getState().demo) {
+      return `-----BEGIN CERTIFICATE-----\nMIIB演示数据仅用于演示模式导出\n-----END CERTIFICATE-----\n`;
+    }
+    const response = await fetch(
+      `${API_BASE}/api/v1/desktop/certificates/${encodeURIComponent(certId)}/pem?card_id=${encodeURIComponent(cardId)}`,
+      { headers: { "X-Requested-With": "tpmsc" }, credentials: "include" },
+    );
+    if (!response.ok) {
+      throw new ApiError(`导出失败（HTTP ${response.status}）`, "export_failed", response.status);
+    }
+    return response.text();
+  },
+
   backups(): Promise<{ backups: BackupEntry[] }> {
     return withDemo("/api/v1/desktop/backups", () => ({ backups: mock.mockBackups }));
   },

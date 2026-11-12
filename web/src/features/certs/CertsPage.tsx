@@ -5,6 +5,17 @@ import type { CardInfo, CertificateInfo } from "@/lib/types";
 import { useAppStore } from "@/lib/store";
 import { Badge, Button, EmptyState, Panel, SectionTitle, Spinner } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { CertImportModal } from "./CertImportModal";
+
+function downloadPEM(name: string, pem: string) {
+  const blob = new Blob([pem], { type: "application/x-pem-file" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 
 function expiryTone(notAfter: string): { tone: "ok" | "warn" | "danger"; text: string } {
   const days = Math.ceil((Date.parse(notAfter) - Date.now()) / 86_400_000);
@@ -18,6 +29,7 @@ export function CertsPage() {
   const [cards, setCards] = useState<CardInfo[]>([]);
   const [cardFilter, setCardFilter] = useState<string>("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const pushToast = useAppStore((state) => state.pushToast);
 
   useEffect(() => {
@@ -34,6 +46,30 @@ export function CertsPage() {
       cancelled = true;
     };
   }, []);
+
+  const reload = () => {
+    api
+      .certificates()
+      .then((result) => {
+        setCerts(result.certificates);
+        setSelected((current) => current ?? result.certificates[0]?.id ?? null);
+      })
+      .catch((err: Error) => {
+        console.error("certificates reload failed", err);
+        pushToast({ kind: "err", title: "刷新证书列表失败", detail: err.message });
+      });
+  };
+
+  const exportCurrent = () => {
+    if (!current) return;
+    api
+      .exportCertificate(current.card_id, current.id)
+      .then((pem) => {
+        downloadPEM(`${current.serial || current.id}.pem`, pem);
+        pushToast({ kind: "ok", title: "已导出证书", detail: "只包含公钥证书，私钥始终留在卡片内" });
+      })
+      .catch((err: Error) => pushToast({ kind: "err", title: "导出失败", detail: err.message }));
+  };
 
   const rows = useMemo(
     () => (certs ?? []).filter((cert) => !cardFilter || cert.card_id === cardFilter),
@@ -104,7 +140,7 @@ export function CertsPage() {
               </option>
             ))}
           </select>
-          <Button size="sm" icon={<Upload className="h-3.5 w-3.5" />} onClick={() => pushToast({ kind: "info", title: "导入证书", detail: "选择 PFX / CER / CSR 后由本地后端调用 certutil 或 pkcs15-init" })}>
+          <Button size="sm" icon={<Upload className="h-3.5 w-3.5" />} onClick={() => setImportOpen(true)}>
             导入
           </Button>
         </div>
@@ -168,13 +204,21 @@ export function CertsPage() {
             </dl>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <Button size="sm" icon={<FileKey2 className="h-3.5 w-3.5" />} onClick={() => pushToast({ kind: "info", title: "生成 CSR", detail: "私钥在 TPM / Secure Enclave 内生成，CSR 只包含公钥" })}>
+              <Button
+                size="sm"
+                disabled
+                title="需要 PKCS#11 引擎在卡内生成密钥，当前平台尚未接入"
+                icon={<FileKey2 className="h-3.5 w-3.5" />}
+              >
                 生成 CSR
               </Button>
-              <Button size="sm" icon={<Download className="h-3.5 w-3.5" />} onClick={() => pushToast({ kind: "ok", title: "已导出证书与证书链", detail: "私钥不可导出，导出的只有公钥证书" })}>
+              <Button size="sm" icon={<Download className="h-3.5 w-3.5" />} onClick={exportCurrent}>
                 导出
               </Button>
             </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
+              CSR 需要在卡内生成密钥（PKCS#11 / Secure Enclave），当前构建只读；导出仅包含公钥证书与链。
+            </p>
           </Panel>
 
           <Panel>
@@ -198,6 +242,14 @@ export function CertsPage() {
           <EmptyState title="选择一张证书" hint="证书与私钥始终留在卡片上；云端只传输加密后的证书材料。" />
         </Panel>
       )}
+
+      <CertImportModal
+        open={importOpen}
+        cards={cards}
+        defaultCardId={cardFilter || current?.card_id}
+        onClose={() => setImportOpen(false)}
+        onImported={reload}
+      />
     </div>
   );
 }

@@ -13,12 +13,12 @@ import (
 
 // SSH agent 消息号（与 RFC 草案一致）。
 const (
-	msgFailure             = 5
-	msgRequestIdentities   = 11
-	msgIdentitiesAnswer    = 12
-	msgSignRequest         = 13
-	msgSignResponse        = 14
-	msgExtension           = 27
+	msgFailure           = 5
+	msgRequestIdentities = 11
+	msgIdentitiesAnswer  = 12
+	msgSignRequest       = 13
+	msgSignResponse      = 14
+	msgExtension         = 27
 )
 
 // MaxPacket 是单帧上限。SSH agent 的实际报文远小于此值，

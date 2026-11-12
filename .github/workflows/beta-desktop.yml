@@ -1,0 +1,59 @@
+name: beta-desktop
+
+# Rolling beta：main 每次通过构建后，把三平台双架构产物覆盖到 `beta` 预发布。
+# 与 release-desktop.yml 的区别：beta 是移动标签，release 由版本标签冻结。
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "core/**"
+      - "desktop/**"
+      - "web/**"
+      - "packages/**"
+      - "scripts/**"
+      - "Fido/**"
+      - ".github/workflows/beta-desktop.yml"
+      - ".github/workflows/build-desktop.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: beta-desktop
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-desktop.yml
+    with:
+      version: "2.0.0-beta.${{ github.run_number }}"
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: 更新 beta 预发布
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: beta
+          SHA: ${{ github.sha }}
+          RUN: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          ls -lh artifacts
+          NOTES=$(printf '自动构建 · beta.%s\n\n- 提交：`%s`\n- 构建：%s\n- 产物：Windows / Linux / macOS × amd64 / arm64\n\n> 这是移动标签，安装包会被后续构建覆盖；稳定版本请使用 v2.x 正式 Release。' "$RUN" "$SHA" "$RUN")
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/* --clobber
+            gh release edit "$TAG" --notes "$NOTES"
+          else
+            gh release create "$TAG" artifacts/* \
+              --prerelease \
+              --title "Beta（滚动构建）" \
+              --notes "$NOTES"
+          fi

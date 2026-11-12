@@ -39,16 +39,16 @@ type Part struct {
 
 // Manifest 是 v2 包的清单。
 type Manifest struct {
-	Format        string `json:"format"`
-	Version       int    `json:"version"`
-	CreatedAt     string `json:"created_at"`
-	Platform      string `json:"platform"`
-	CardName      string `json:"card_name"`
-	CardID        string `json:"card_id"`
-	EKFingerprint string `json:"ek_fingerprint,omitempty"`
-	Protection    string `json:"protection"`
-	KeyExportable bool   `json:"key_exportable"`
-	Parts         []Part `json:"parts"`
+	Format        string   `json:"format"`
+	Version       int      `json:"version"`
+	CreatedAt     string   `json:"created_at"`
+	Platform      string   `json:"platform"`
+	CardName      string   `json:"card_name"`
+	CardID        string   `json:"card_id"`
+	EKFingerprint string   `json:"ek_fingerprint,omitempty"`
+	Protection    string   `json:"protection"`
+	KeyExportable bool     `json:"key_exportable"`
+	Parts         []Part   `json:"parts"`
 	Warnings      []string `json:"warnings,omitempty"`
 }
 

@@ -125,6 +125,8 @@ type Slot interface {
 	Delete(ctx context.Context, id string) error
 	SetPIN(ctx context.Context, id, oldPIN, newPIN string) error
 	ListCertificates(ctx context.Context, cardID string) ([]Certificate, error)
+	// ExportCertificate 返回证书的 PEM 编码（只含公钥证书，不含私钥）。
+	ExportCertificate(ctx context.Context, cardID, certID string) ([]byte, error)
 	ImportCertificate(ctx context.Context, cardID string, opt ImportOptions) error
 	GenerateKey(ctx context.Context, cardID string, opt KeyOptions) (PublicKey, error)
 	Sign(ctx context.Context, cardID, keyID string, digest []byte, mechanism string) ([]byte, error)
@@ -133,11 +135,11 @@ type Slot interface {
 
 // 统一错误：调用方据此映射成可读提示，而不是把 raw error 抛给用户。
 var (
-	ErrUnsupported  = errors.New("platform: 当前平台不支持该操作")
-	ErrNotElevated  = errors.New("platform: 需要管理员权限")
+	ErrUnsupported   = errors.New("platform: 当前平台不支持该操作")
+	ErrNotElevated   = errors.New("platform: 需要管理员权限")
 	ErrRemoteSession = errors.New("platform: 不能在远程会话中操作虚拟智能卡（0x800704d3）")
-	ErrNotFound     = errors.New("platform: 卡片或对象不存在")
-	ErrPinRequired  = errors.New("platform: 该操作需要 PIN")
+	ErrNotFound      = errors.New("platform: 卡片或对象不存在")
+	ErrPinRequired   = errors.New("platform: 该操作需要 PIN")
 )
 
 // Unsupported 返回带原因的错误（原因会原样展示给用户）。

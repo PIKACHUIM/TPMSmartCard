@@ -61,6 +61,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/desktop/cards/{id}", s.handleDeleteCard)
 	mux.HandleFunc("POST /api/v1/desktop/cards/{id}/pin", s.handleSetPIN)
 	mux.HandleFunc("GET /api/v1/desktop/certificates", s.handleListCertificates)
+	mux.HandleFunc("POST /api/v1/desktop/certificates", s.handleImportCertificate)
+	mux.HandleFunc("GET /api/v1/desktop/certificates/{certID}/pem", s.handleExportCertificate)
 	mux.HandleFunc("GET /api/v1/desktop/backups", s.handleListBackups)
 	mux.HandleFunc("POST /api/v1/desktop/backups", s.handleCreateBackup)
 	mux.HandleFunc("GET /api/v1/desktop/autostart", s.handleAutostart)

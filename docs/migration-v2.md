@@ -13,6 +13,23 @@
 | **P1** | Go 核心库、CLI、平台卡槽、备份格式 | `go test ./...`、`tpmsc doctor`、`.tsb` v1→v2、云端取回 |
 | **P2** | Wails 桌面壳、完整 UI、三平台安装包 | 三平台构建、11 语言、签名/公证、文档站更新 |
 
+## 1.1 当前完成度（2026-11）
+
+| 维度 | 状态 | 证据 |
+|---|---|---|
+| Worker `/card/*` 协议 | ✅ | 金标测试 + 本地 D1 迁移通过 |
+| 多用户 RBAC + 审计 | ✅ | D1 表结构、权限中间件、审计脱敏 |
+| 管理台（登录/记录/用户/角色/审计/投递） | ✅ | 前端构建通过 |
+| Go 核心（crypto/cloud/backup/api/sshagent） | ✅ | `go test ./...` 全绿 |
+| Windows 建卡/删卡/改 PIN/证书读取 | 🟡 | 实机枚举/health/CSRF 已验证；建卡需提权真机 |
+| 证书 PEM 导入/导出 | ✅ | 新接口 + 契约测试（`POST`/`GET .../pem`） |
+| 三平台 × amd64/arm64 CI | ✅ | [`43212825754`](https://github.com/PIKACHUIM/TPMSmartCard/actions/runs/43212825754) 7/7 通过 |
+| Beta / Release 发布 | ✅ | `beta-desktop.yml`（滚动）+ `release-desktop.yml`（标签） |
+| DPAPI 整卡备份采集 | ⏳ | 需 SYSTEM 令牌借用与真机 |
+| macOS Secure Enclave | ⏳ | 需 `darwin && cgo` 与 Developer ID |
+| SSH 卡上签名 / FIDO 生命周期 | ⏳ | 协议层就绪，缺 `Slot.Sign` 与进程编排 |
+| 签名与公证 | ⏳ | 钩子就绪，缺 Secrets |
+
 ## 2. 模块对等表
 
 | v1 模块 | v2 对应 | 状态 | 说明 |
@@ -25,7 +42,7 @@
 | `Module/SmartCardAPI.py` | `platform/p11` | ✅ | `pkcs15-tool` 读取、`pkcs15-init` 导入 |
 | `Module/CertutilDeal.py` | 待补 | ⏳ | v1 的 certutil 回退后端未迁移 |
 | `Module/OpenSCDealer.py` | `platform/p11` | 🟡 | 证书读取已迁移；解析覆盖常见格式 |
-| `Module/Certificates.py` | `platform.Certificate` | ✅ | X.509 视图字段对齐前端 |
+| `Module/Certificates.py` | `platform.Certificate` | ✅ | X.509 视图 + PEM 导入/导出；CSR 需 PKCS#11 引擎（未接） |
 | `Module/TPMBackup.py` | `internal/backup` | 🟡 | v2 包格式与校验完成；DPAPI 采集未接 |
 | `Module/DPAPI.py` | 待补 | ⏳ | 需借用 SYSTEM 令牌，P1 关键项 |
 | `Module/SSHAgent.py` | `internal/sshagent` | 🟡 | 协议帧/身份/签名分发 + 测试完成；卡上签名适配待 `Slot.Sign` |
@@ -36,7 +53,7 @@
 | `Module/AutoStart.py` | `internal/autostart` | ✅ | Windows Run 项 / macOS LaunchAgent / Linux XDG，设置页可切换 |
 | `Module/Paths.py` / `Version.py` | `core/internal/api` + ldflags | ✅ | 数据目录与版本注入 |
 | `Module/WinPlatform.py` | `platform/win32` | 🟡 | 提权/远程会话判定已迁移 |
-| `SubApp/CertImport.py` | 本地 API + UI 导入 | 🟡 | 后端导入接口就绪，UI 走证书页 |
+| `SubApp/CertImport.py` | 本地 API + 证书页导入弹窗 | ✅ | `POST /api/v1/desktop/certificates` 校验 PEM 后交给平台槽 |
 | `SubApp/SystemSettings.py` | `web` 设置页 | 🟡 | 外观/语言/平台能力；自启与 SSH 待接后端 |
 | `SubApp/MoreConfig.py` | 设置页 | ⏳ | OpenSC 安装器分发未迁移 |
 | `BuildPackage.py` / `install.iss` | `scripts/package-*.{sh,ps1}` | 🟡 | Windows zip 与 Linux tar.gz / macOS .app 脚本就绪；msi/dmg 未做 |

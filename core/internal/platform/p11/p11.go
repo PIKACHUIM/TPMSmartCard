@@ -25,10 +25,10 @@ import (
 
 // Backend 实现只读证书能力；建卡由各平台专用 Slot 负责。
 type Backend struct {
-	pkcs15  string
-	opensc  string
-	pkcs11  string
-	reader  string
+	pkcs15   string
+	opensc   string
+	pkcs11   string
+	reader   string
 	platform string
 }
 
@@ -77,8 +77,8 @@ func lookPath(name string) string {
 	return ""
 }
 
-func (b *Backend) ID() string                    { return "opensc" }
-func (b *Backend) Kind() platform.Kind           { return platform.KindLocal }
+func (b *Backend) ID() string          { return "opensc" }
+func (b *Backend) Kind() platform.Kind { return platform.KindLocal }
 
 func (b *Backend) Info(ctx context.Context) (platform.SlotInfo, error) {
 	detail := "OpenSC 未安装"
@@ -110,12 +110,12 @@ func (b *Backend) List(ctx context.Context) ([]platform.Card, error) {
 	cards := make([]platform.Card, 0, len(readers))
 	for index, reader := range readers {
 		cards = append(cards, platform.Card{
-			ID:       fmt.Sprintf("opensc-%d", index),
-			Name:     reader,
-			Kind:     platform.KindLocal,
-			Platform: b.platform,
-			Security: platform.SecurityMedium,
-			Reader:   reader,
+			ID:        fmt.Sprintf("opensc-%d", index),
+			Name:      reader,
+			Kind:      platform.KindLocal,
+			Platform:  b.platform,
+			Security:  platform.SecurityMedium,
+			Reader:    reader,
 			CreatedAt: platform.Now(),
 		})
 	}
@@ -197,21 +197,41 @@ func (b *Backend) ListCertificates(ctx context.Context, cardID string) ([]platfo
 	ids := parseCertificateIDs(out)
 	certs := make([]platform.Certificate, 0, len(ids))
 	for _, id := range ids {
-		readArgs := []string{"--read-certificate", id}
-		if b.reader != "" {
-			readArgs = append(readArgs, "--reader", b.reader)
-		}
-		pemText, err := run(ctx, b.pkcs15, readArgs...)
+		pemBytes, err := b.ExportCertificate(ctx, cardID, id)
 		if err != nil {
 			continue
 		}
-		parsed, err := parseCertificate([]byte(pemText))
+		parsed, err := parseCertificate(pemBytes)
 		if err != nil {
 			continue
 		}
 		certs = append(certs, toCertificate(cardID, id, parsed))
 	}
 	return certs, nil
+}
+
+// ExportCertificate 读取卡上证书并统一输出为 PEM。
+func (b *Backend) ExportCertificate(ctx context.Context, cardID, certID string) ([]byte, error) {
+	if b.pkcs15 == "" {
+		return nil, platform.Unsupported("未找到 pkcs15-tool，请先安装 OpenSC")
+	}
+	args := []string{"--read-certificate", certID}
+	if b.reader != "" {
+		args = append(args, "--reader", b.reader)
+	}
+	out, err := run(ctx, b.pkcs15, args...)
+	if err != nil {
+		return nil, err
+	}
+	return normalizePEM([]byte(out)), nil
+}
+
+// normalizePEM 保证输出是标准 PEM（有些 OpenSC 版本会给裸 DER）。
+func normalizePEM(data []byte) []byte {
+	if block, _ := pem.Decode(data); block != nil {
+		return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: block.Bytes})
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: data})
 }
 
 func parseCertificateIDs(output string) []string {
@@ -280,10 +300,26 @@ func (b *Backend) ImportCertificate(ctx context.Context, cardID string, opt plat
 	if initTool == "" {
 		return platform.Unsupported("未找到 pkcs15-init，无法导入证书")
 	}
-	if opt.Path == "" {
-		return platform.Unsupported("暂只支持从文件路径导入")
+	path := opt.Path
+	if len(opt.Data) > 0 {
+		// pkcs15-init 只接受文件路径：写入临时文件后立即删除
+		file, err := os.CreateTemp("", "tpmsc-import-*.pem")
+		if err != nil {
+			return err
+		}
+		path = file.Name()
+		if _, writeErr := file.Write(opt.Data); writeErr != nil {
+			_ = file.Close()
+			_ = os.Remove(path)
+			return writeErr
+		}
+		_ = file.Close()
+		defer os.Remove(path)
 	}
-	args := []string{"--store-certificate", opt.Path}
+	if path == "" {
+		return platform.Unsupported("缺少证书内容（Path 或 Data 至少提供一个）")
+	}
+	args := []string{"--store-certificate", path}
 	if opt.ID != "" {
 		args = append(args, "--id", opt.ID)
 	}

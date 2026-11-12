@@ -137,6 +137,32 @@ func (s *Slot) ListCertificates(ctx context.Context, cardID string) ([]platform.
 	return certs, nil
 }
 
+func (s *Slot) ExportCertificate(ctx context.Context, cardID, certID string) ([]byte, error) {
+	if s.security == "" {
+		return nil, platform.Unsupported("未找到 security 命令")
+	}
+	out, err := exec.CommandContext(ctx, s.security, "find-certificate", "-a", "-p").Output()
+	if err != nil {
+		return nil, fmt.Errorf("读取钥匙串证书失败: %w", err)
+	}
+	rest := out
+	for {
+		block, remaining := pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		rest = remaining
+		parsed, parseErr := x509.ParseCertificate(block.Bytes)
+		if parseErr != nil {
+			continue
+		}
+		if strings.EqualFold(fmt.Sprintf("%X", parsed.SerialNumber), certID) {
+			return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: parsed.Raw}), nil
+		}
+	}
+	return nil, platform.ErrNotFound
+}
+
 func (s *Slot) ImportCertificate(ctx context.Context, cardID string, opt platform.ImportOptions) error {
 	if s.security == "" {
 		return platform.Unsupported("未找到 security 命令")

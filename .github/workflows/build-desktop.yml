@@ -4,6 +4,12 @@ name: build-desktop
 # 旧的 Python 流水线（build-client-*.yml）已移除，v1 代码归档在 legacy/。
 on:
   workflow_call:
+    inputs:
+      version:
+        description: "覆盖产物版本号（beta 流水线使用）"
+        required: false
+        type: string
+        default: ""
   workflow_dispatch:
   push:
     branches: [main]
@@ -105,7 +111,7 @@ jobs:
           CGO_ENABLED: ${{ matrix.cgo }}
           GOARCH: ${{ matrix.goarch }}
           TAGS: ${{ matrix.wails_tags || 'desktop' }}
-          VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0' }}
+          VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0') }}
         run: |
           set -euo pipefail
           EXT=""
@@ -118,8 +124,10 @@ jobs:
       - name: 打包（Windows）
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0') }}
         run: |
-          $version = "${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0' }}".TrimStart("v")
+          $version = $env:VERSION.TrimStart("v")
           $stage = "dist/TPMSmartCard-$version-windows-${{ matrix.goarch }}"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item "desktop/dist/TPMSmartCard.exe" $stage
@@ -132,9 +140,10 @@ jobs:
       - name: 打包（Linux）
         if: runner.os == 'Linux'
         shell: bash
+        env:
+          VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0') }}
         run: |
           set -euo pipefail
-          VERSION="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0' }}"
           VERSION="${VERSION#v}"
           STAGE="dist/TPMSmartCard-${VERSION}-linux-${{ matrix.goarch }}"
           mkdir -p "$STAGE/usr/bin" "$STAGE/usr/share/applications"
@@ -149,9 +158,9 @@ jobs:
         env:
           MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
           MACOS_NOTARY_PROFILE: ${{ secrets.MACOS_NOTARY_PROFILE }}
+          VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0') }}
         run: |
           set -euo pipefail
-          VERSION="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0' }}"
           VERSION="${VERSION#v}"
           APP="dist/TPMSmartCard.app"
           rm -rf "$APP"

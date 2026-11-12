@@ -2,7 +2,10 @@ package api
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -266,6 +269,96 @@ func (s *Server) handleListCertificates(w http.ResponseWriter, r *http.Request) 
 	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].NotAfter < all[j].NotAfter })
 	writeJSON(w, http.StatusOK, map[string]any{"certificates": all})
+}
+
+// handleImportCertificate 接收 PEM 文本，交给平台槽写入卡片。
+//
+// 只接受公钥证书：私钥必须留在 TPM / Secure Enclave，不能经 HTTP 传输。
+func (s *Server) handleImportCertificate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		CardID string `json:"card_id"`
+		PEM    string `json:"pem"`
+		PIN    string `json:"pin"`
+		Label  string `json:"label"`
+		CertID string `json:"cert_id"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, protocol.ErrBadRequest, "请求体不是合法 JSON")
+		return
+	}
+	if strings.TrimSpace(req.CardID) == "" {
+		writeError(w, http.StatusBadRequest, protocol.ErrBadRequest, "缺少 card_id")
+		return
+	}
+	block, _ := pem.Decode([]byte(req.PEM))
+	if block == nil || block.Type != "CERTIFICATE" {
+		writeError(w, http.StatusBadRequest, protocol.ErrBadRequest, "请提供 PEM 格式的证书（BEGIN CERTIFICATE）")
+		return
+	}
+	parsed, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, protocol.ErrBadRequest, "证书解析失败："+err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+	slot, card, err := s.resolve(ctx, req.CardID)
+	if err != nil {
+		writePlatformError(w, err)
+		return
+	}
+
+	label := req.Label
+	if label == "" {
+		label = parsed.Subject.CommonName
+	}
+	opt := platform.ImportOptions{
+		Reader: card.Reader,
+		Label:  label,
+		ID:     req.CertID,
+		PIN:    req.PIN,
+		Data:   pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: parsed.Raw}),
+	}
+	if err := slot.ImportCertificate(ctx, req.CardID, opt); err != nil {
+		writePlatformError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"imported": true,
+		"subject":  parsed.Subject.String(),
+		"serial":   fmt.Sprintf("%X", parsed.SerialNumber),
+	})
+}
+
+// handleExportCertificate 输出 PEM，供前端直接下载。
+func (s *Server) handleExportCertificate(w http.ResponseWriter, r *http.Request) {
+	cardID := r.URL.Query().Get("card_id")
+	certID := r.PathValue("certID")
+	if cardID == "" || certID == "" {
+		writeError(w, http.StatusBadRequest, protocol.ErrBadRequest, "缺少 card_id 或证书 ID")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	slot, _, err := s.resolve(ctx, cardID)
+	if err != nil {
+		writePlatformError(w, err)
+		return
+	}
+	pemBytes, err := slot.ExportCertificate(ctx, cardID, certID)
+	if err != nil {
+		writePlatformError(w, err)
+		return
+	}
+	if len(pemBytes) == 0 {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, "证书内容为空")
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-pem-file; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.pem\"", sanitize(certID)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(pemBytes)
 }
 
 func (s *Server) handleListBackups(w http.ResponseWriter, r *http.Request) {

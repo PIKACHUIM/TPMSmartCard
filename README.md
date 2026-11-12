@@ -123,6 +123,7 @@ powershell -File scripts\package-windows.ps1     # 绿色版 zip（+ 签名钩�
 ```
 
 CI：`.github/workflows/build-desktop.yml`（Windows / Linux / macOS × amd64 / arm64）、
+`beta-desktop.yml`（main 滚动更新 `beta` 预发布）、
 `release-desktop.yml`（打 `v2.*` 标签自动发布）、`deploy-worker.yml`（证书下发 Worker）。
 
 * v2 架构（Go + Wails + Hono）：[架构说明](docs/architecture-v2.md)
