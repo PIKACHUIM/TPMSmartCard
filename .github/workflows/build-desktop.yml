@@ -129,7 +129,7 @@ jobs:
           STAGE="dist/TPMSmartCard-${VERSION}-linux-${{ matrix.goarch }}"
           mkdir -p "$STAGE/usr/bin" "$STAGE/usr/share/applications"
           cp desktop/dist/TPMSmartCard "$STAGE/usr/bin/"
-          cp desktop/wails/build/linux/tpmsmartcard.desktop "$STAGE/usr/share/applications/"
+          cp desktop/packaging/linux/tpmsmartcard.desktop "$STAGE/usr/share/applications/"
           cp legacy/Config/iconer/icon01.png "$STAGE/usr/share/applications/tpmsmartcard.png"
           tar -czf "$STAGE.tar.gz" -C dist "$(basename "$STAGE")"
 
@@ -147,12 +147,12 @@ jobs:
           rm -rf "$APP"
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           cp desktop/dist/TPMSmartCard "$APP/Contents/MacOS/"
-          cp desktop/wails/build/macos/Info.plist "$APP/Contents/"
-          cp desktop/wails/build/macos/entitlements.plist "$APP/Contents/Resources/"
+          cp desktop/packaging/macos/Info.plist "$APP/Contents/"
+          cp desktop/packaging/macos/entitlements.plist "$APP/Contents/Resources/"
 
           if [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then
             codesign --force --deep --options runtime \
-              --entitlements desktop/wails/build/macos/entitlements.plist \
+              --entitlements desktop/packaging/macos/entitlements.plist \
               --sign "$MACOS_SIGN_IDENTITY" "$APP"
             if [ -n "${MACOS_NOTARY_PROFILE:-}" ]; then
               ditto -c -k --keepParent "$APP" "dist/notarize.zip"

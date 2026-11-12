@@ -1,0 +1,23 @@
+﻿2026-11-12T11:28:34.0407046Z ##[group]Run actions/upload-artifact@v4
+2026-11-12T11:28:34.0407462Z with:
+2026-11-12T11:28:34.0407979Z   name: fido-go-windows
+2026-11-12T11:28:34.0408262Z   path: dist/fido-go.exe
+2026-11-12T11:28:34.0408535Z   if-no-files-found: error
+2026-11-12T11:28:34.0408836Z   compression-level: 6
+2026-11-12T11:28:34.0409094Z   overwrite: false
+2026-11-12T11:28:34.0409400Z   include-hidden-files: false
+2026-11-12T11:28:34.0409683Z ##[endgroup]
+2026-11-12T11:28:34.2041440Z (node:1736) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-12T11:28:34.2042149Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-12T11:28:34.2089708Z With the provided path, there will be 1 file uploaded
+2026-11-12T11:28:34.2094648Z Artifact name is valid!
+2026-11-12T11:28:34.2095766Z Root directory input is valid!
+2026-11-12T11:28:34.4654153Z Beginning upload of artifact content to blob storage
+2026-11-12T11:28:34.5892826Z (node:1736) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-12T11:28:35.0264102Z Uploaded bytes 1385562
+2026-11-12T11:28:35.0741100Z Finished uploading artifact content to blob storage!
+2026-11-12T11:28:35.0742508Z SHA256 digest of uploaded artifact zip is fce131c48c45f18f4ae6a5c4fb6805c86b5526cb94c01ffb893860802ff7030d
+2026-11-12T11:28:35.0744637Z Finalizing artifact upload
+2026-11-12T11:28:35.4373426Z Artifact fido-go-windows.zip successfully finalized. Artifact ID 13940897658
+2026-11-12T11:28:35.4374574Z Artifact fido-go-windows has been successfully uploaded! Final size is 1385562 bytes. Artifact ID is 13940897658
+2026-11-12T11:28:35.4385192Z Artifact download URL: https://github.com/PIKACHUIM/TPMSmartCard/actions/runs/43209386075/artifacts/13940897658

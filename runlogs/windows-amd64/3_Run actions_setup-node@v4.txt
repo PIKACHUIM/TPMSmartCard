@@ -1,0 +1,29 @@
+﻿2026-11-12T11:28:32.5461114Z ##[group]Run actions/setup-node@v4
+2026-11-12T11:28:32.5461481Z with:
+2026-11-12T11:28:32.5461677Z   node-version: 20
+2026-11-12T11:28:32.5461879Z   cache: npm
+2026-11-12T11:28:32.5462051Z   always-auth: false
+2026-11-12T11:28:32.5462533Z   check-latest: false
+2026-11-12T11:28:32.5465212Z   token: ***
+2026-11-12T11:28:32.5465419Z ##[endgroup]
+2026-11-12T11:28:32.7242254Z Attempting to download 20...
+2026-11-12T11:28:32.7426012Z (node:9728) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-12T11:28:32.7428408Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-12T11:28:33.4045198Z Acquiring 20.20.2 - x64 from https://github.com/actions/node-versions/releases/download/20.20.2-23521894959/node-20.20.2-win32-x64.7z
+2026-11-12T11:28:33.7846099Z Extracting ...
+2026-11-12T11:28:36.0610658Z Adding to the cache ...
+2026-11-12T11:28:39.3365385Z ##[group]Environment details
+2026-11-12T11:28:40.6060934Z node: v20.20.2
+2026-11-12T11:28:40.6061660Z npm: 10.8.2
+2026-11-12T11:28:40.6061834Z yarn: 1.22.22
+2026-11-12T11:28:40.6062283Z ##[endgroup]
+2026-11-12T11:28:40.6798952Z [command]C:\Windows\system32\cmd.exe /D /S /C "C:\hostedtoolcache\windows\node\20.20.2\x64\npm.cmd config get cache"
+2026-11-12T11:28:41.0063472Z C:\npm\cache
+2026-11-12T11:28:41.3896771Z Cache hit for: node-cache-Windows-x64-npm-95b48a12ee4a43960b37e4ce646228cb5f0bec67bbc2c3c8d0e0a515cde5670e
+2026-11-12T11:28:41.4012940Z (node:9728) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-12T11:28:42.6568507Z Received 37748736 of 78510569 (48.1%), 35.9 MBs/sec
+2026-11-12T11:28:42.9260050Z Received 78510569 of 78510569 (100.0%), 58.9 MBs/sec
+2026-11-12T11:28:42.9263061Z Cache Size: ~75 MB (78510569 B)
+2026-11-12T11:28:42.9296841Z [command]"C:\Program Files\Git\usr\bin\tar.exe" -xf D:/a/_temp/59613ab2-60c1-4004-9492-cb67fc6472d7/cache.tzst -P -C D:/a/TPMSmartCard/TPMSmartCard --force-local --use-compress-program "zstd -d"
+2026-11-12T11:28:46.9957359Z Cache restored successfully
+2026-11-12T11:28:47.0017796Z Cache restored from key: node-cache-Windows-x64-npm-95b48a12ee4a43960b37e4ce646228cb5f0bec67bbc2c3c8d0e0a515cde5670e

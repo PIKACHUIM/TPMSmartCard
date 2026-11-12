@@ -1,0 +1,27 @@
+﻿2026-11-12T11:29:30.4486332Z ##[group]Run actions/upload-artifact@v4
+2026-11-12T11:29:30.4486701Z with:
+2026-11-12T11:29:30.4486900Z   name: windows-arm64
+2026-11-12T11:29:30.4487133Z   path: dist/*.zip
+dist/*.tar.gz
+
+2026-11-12T11:29:30.4487387Z   if-no-files-found: error
+2026-11-12T11:29:30.4487617Z   compression-level: 6
+2026-11-12T11:29:30.4487820Z   overwrite: false
+2026-11-12T11:29:30.4488016Z   include-hidden-files: false
+2026-11-12T11:29:30.4488489Z ##[endgroup]
+2026-11-12T11:29:30.6377220Z (node:9272) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-12T11:29:30.6379095Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-12T11:29:30.6446517Z With the provided path, there will be 1 file uploaded
+2026-11-12T11:29:30.6452575Z Artifact name is valid!
+2026-11-12T11:29:30.6454287Z Root directory input is valid!
+2026-11-12T11:29:31.0215878Z Beginning upload of artifact content to blob storage
+2026-11-12T11:29:31.2976137Z (node:9272) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-12T11:29:32.4507889Z Uploaded bytes 8388608
+2026-11-12T11:29:32.7994432Z Uploaded bytes 16777216
+2026-11-12T11:29:33.0526007Z Uploaded bytes 25091546
+2026-11-12T11:29:33.1260528Z Finished uploading artifact content to blob storage!
+2026-11-12T11:29:33.1262835Z SHA256 digest of uploaded artifact zip is 2bc62856e15adef2ef6eb63e712b7f62bbe76eff5d196b0a628cf625874d1103
+2026-11-12T11:29:33.1265395Z Finalizing artifact upload
+2026-11-12T11:29:33.5952440Z Artifact windows-arm64.zip successfully finalized. Artifact ID 13938539777
+2026-11-12T11:29:33.5954192Z Artifact windows-arm64 has been successfully uploaded! Final size is 25091546 bytes. Artifact ID is 13938539777
+2026-11-12T11:29:33.5964188Z Artifact download URL: https://github.com/PIKACHUIM/TPMSmartCard/actions/runs/43209386075/artifacts/13938539777

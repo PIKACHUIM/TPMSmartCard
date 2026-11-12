@@ -1,0 +1,73 @@
+﻿2026-11-12T11:28:06.5566799Z ##[group]Run actions/checkout@v4
+2026-11-12T11:28:06.5568037Z with:
+2026-11-12T11:28:06.5568871Z   repository: PIKACHUIM/TPMSmartCard
+2026-11-12T11:28:06.5577751Z   token: ***
+2026-11-12T11:28:06.5578670Z   ssh-strict: true
+2026-11-12T11:28:06.5579499Z   ssh-user: git
+2026-11-12T11:28:06.5580247Z   persist-credentials: true
+2026-11-12T11:28:06.5581064Z   clean: true
+2026-11-12T11:28:06.5581810Z   sparse-checkout-cone-mode: true
+2026-11-12T11:28:06.5582687Z   fetch-depth: 1
+2026-11-12T11:28:06.5583412Z   fetch-tags: false
+2026-11-12T11:28:06.5584156Z   show-progress: true
+2026-11-12T11:28:06.5584914Z   lfs: false
+2026-11-12T11:28:06.5585638Z   submodules: false
+2026-11-12T11:28:06.5586504Z   set-safe-directory: true
+2026-11-12T11:28:06.5587363Z   allow-unsafe-pr-checkout: false
+2026-11-12T11:28:06.5588540Z ##[endgroup]
+2026-11-12T11:28:06.7162479Z Syncing repository: PIKACHUIM/TPMSmartCard
+2026-11-12T11:28:06.7165683Z ##[group]Getting Git version info
+2026-11-12T11:28:06.7167820Z Working directory is '/home/runner/work/TPMSmartCard/TPMSmartCard'
+2026-11-12T11:28:06.7170548Z [command]/usr/bin/git version
+2026-11-12T11:28:06.7195481Z git version 2.56.0
+2026-11-12T11:28:06.7211409Z ##[endgroup]
+2026-11-12T11:28:06.7223613Z Temporarily overriding HOME='/home/runner/work/_temp/f6e355f7-74bc-43dd-b64e-ff92f2ca9351' before making global git config changes
+2026-11-12T11:28:06.7227954Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-12T11:28:06.7230745Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/TPMSmartCard/TPMSmartCard
+2026-11-12T11:28:06.7261407Z Deleting the contents of '/home/runner/work/TPMSmartCard/TPMSmartCard'
+2026-11-12T11:28:06.7268644Z ##[group]Initializing the repository
+2026-11-12T11:28:06.7276015Z [command]/usr/bin/git init /home/runner/work/TPMSmartCard/TPMSmartCard
+2026-11-12T11:28:06.7340890Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-12T11:28:06.7343573Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-12T11:28:06.7347476Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-12T11:28:06.7349270Z hint: call:
+2026-11-12T11:28:06.7350528Z hint:
+2026-11-12T11:28:06.7351755Z hint: 	git config --global init.defaultBranch <name>
+2026-11-12T11:28:06.7353214Z hint:
+2026-11-12T11:28:06.7354585Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-12T11:28:06.7356940Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-12T11:28:06.7358741Z hint:
+2026-11-12T11:28:06.7359713Z hint: 	git branch -m <name>
+2026-11-12T11:28:06.7360832Z hint:
+2026-11-12T11:28:06.7362322Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-12T11:28:06.7364852Z Initialized empty Git repository in /home/runner/work/TPMSmartCard/TPMSmartCard/.git/
+2026-11-12T11:28:06.7369066Z [command]/usr/bin/git remote add origin https://github.com/PIKACHUIM/TPMSmartCard
+2026-11-12T11:28:06.7396910Z ##[endgroup]
+2026-11-12T11:28:06.7398773Z ##[group]Disabling automatic garbage collection
+2026-11-12T11:28:06.7400477Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-12T11:28:06.7420622Z ##[endgroup]
+2026-11-12T11:28:06.7422400Z ##[group]Setting up auth
+2026-11-12T11:28:06.7426867Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-12T11:28:06.7457816Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-12T11:28:06.7755590Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-12T11:28:06.7794446Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-12T11:28:06.8027927Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-12T11:28:06.8063814Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-12T11:28:06.8282809Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-12T11:28:06.8321342Z ##[endgroup]
+2026-11-12T11:28:06.8322551Z ##[group]Fetching the repository
+2026-11-12T11:28:06.8328992Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +40b2ab1c80dbff62df94dece05690836398d29bb:refs/remotes/origin/main
+2026-11-12T11:28:09.7848797Z From https://github.com/PIKACHUIM/TPMSmartCard
+2026-11-12T11:28:09.7849588Z  * [new ref]         40b2ab1c80dbff62df94dece05690836398d29bb -> origin/main
+2026-11-12T11:28:09.7858318Z ##[endgroup]
+2026-11-12T11:28:09.7858825Z ##[group]Determining the checkout info
+2026-11-12T11:28:09.7859333Z ##[endgroup]
+2026-11-12T11:28:09.7859765Z [command]/usr/bin/git sparse-checkout disable
+2026-11-12T11:28:09.7903650Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-12T11:28:09.7935407Z ##[group]Checking out the ref
+2026-11-12T11:28:09.8017319Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-11-12T11:28:10.2621078Z Switched to a new branch 'main'
+2026-11-12T11:28:10.2622043Z branch 'main' set up to track 'origin/main'.
+2026-11-12T11:28:10.2664912Z ##[endgroup]
+2026-11-12T11:28:10.2726520Z [command]/usr/bin/git log -1 --format=%H
+2026-11-12T11:28:10.2737415Z 40b2ab1c80dbff62df94dece05690836398d29bb

@@ -1,0 +1,35 @@
+﻿2026-11-12T11:29:13.7512246Z ##[group]Run npm ci
+2026-11-12T11:29:13.7512560Z [36;1mnpm ci[0m
+2026-11-12T11:29:13.7512798Z [36;1mnpm run build -w @tpmsc/web[0m
+2026-11-12T11:29:13.7513081Z [36;1mnode scripts/prepare-ui.mjs[0m
+2026-11-12T11:29:13.7973640Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-12T11:29:13.7974398Z ##[endgroup]
+2026-11-12T11:29:17.2837461Z npm warn deprecated rollup-plugin-inject@3.0.2: This package has been deprecated and is no longer maintained. Please use @rollup/plugin-inject.
+2026-11-12T11:29:17.6195741Z npm warn deprecated sourcemap-codec@1.4.8: Please use @jridgewell/sourcemap-codec instead
+2026-11-12T11:29:20.5799045Z npm warn deprecated recharts@2.15.4: 1.x and 2.x branches are no longer active. Bump to Recharts v3 to receive latest features and bugfixes. See https://github.com/recharts/recharts/wiki/3.0-migration-guide
+2026-11-12T11:29:23.4819535Z 
+2026-11-12T11:29:23.4820693Z added 283 packages, and audited 287 packages in 9s
+2026-11-12T11:29:23.4821178Z 
+2026-11-12T11:29:23.4821945Z 42 packages are looking for funding
+2026-11-12T11:29:23.4822476Z   run `npm fund` for details
+2026-11-12T11:29:23.6221310Z 
+2026-11-12T11:29:23.6222072Z 15 vulnerabilities (5 moderate, 8 high, 2 critical)
+2026-11-12T11:29:23.6222523Z 
+2026-11-12T11:29:23.6222817Z To address all issues (including breaking changes), run:
+2026-11-12T11:29:23.6223229Z   npm audit fix --force
+2026-11-12T11:29:23.6223403Z 
+2026-11-12T11:29:23.6223540Z Run `npm audit` for details.
+2026-11-12T11:29:24.0279427Z 
+2026-11-12T11:29:24.0280020Z > @tpmsc/web@2.0.0 build
+2026-11-12T11:29:24.0280356Z > tsc -b && vite build
+2026-11-12T11:29:24.0280518Z 
+2026-11-12T11:29:28.7737176Z [36mvite v5.4.21 [32mbuilding for production...[36m[39m
+2026-11-12T11:29:28.8525204Z transforming...
+2026-11-12T11:29:35.0743409Z [32m✓[39m 2239 modules transformed.
+2026-11-12T11:29:35.5025833Z rendering chunks...
+2026-11-12T11:29:35.5150105Z computing gzip size...
+2026-11-12T11:29:35.5365822Z [2mdist/[22m[32mindex.html                 [39m[1m[2m  0.57 kB[22m[1m[22m[2m │ gzip:   0.44 kB[22m
+2026-11-12T11:29:35.5366914Z [2mdist/[22m[35massets/index-B2Pb8duM.css  [39m[1m[2m 25.89 kB[22m[1m[22m[2m │ gzip:   5.99 kB[22m
+2026-11-12T11:29:35.5368552Z [2mdist/[22m[36massets/index-Bq0WC-gD.js   [39m[1m[2m737.63 kB[22m[1m[22m[2m │ gzip: 219.82 kB[22m
+2026-11-12T11:29:35.5372421Z [32m✓ built in 6.73s[39m
+2026-11-12T11:29:35.7529958Z 已同步前端产物到 core\ui\dist (ok)

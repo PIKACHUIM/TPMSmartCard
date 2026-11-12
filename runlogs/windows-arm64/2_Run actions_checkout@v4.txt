@@ -1,0 +1,60 @@
+﻿2026-11-12T11:28:10.0692304Z ##[group]Run actions/checkout@v4
+2026-11-12T11:28:10.0693623Z with:
+2026-11-12T11:28:10.0694397Z   repository: PIKACHUIM/TPMSmartCard
+2026-11-12T11:28:10.0698436Z   token: ***
+2026-11-12T11:28:10.0699183Z   ssh-strict: true
+2026-11-12T11:28:10.0699946Z   ssh-user: git
+2026-11-12T11:28:10.0700714Z   persist-credentials: true
+2026-11-12T11:28:10.0701515Z   clean: true
+2026-11-12T11:28:10.0702293Z   sparse-checkout-cone-mode: true
+2026-11-12T11:28:10.0703146Z   fetch-depth: 1
+2026-11-12T11:28:10.0703896Z   fetch-tags: false
+2026-11-12T11:28:10.0705046Z   show-progress: true
+2026-11-12T11:28:10.0705836Z   lfs: false
+2026-11-12T11:28:10.0706571Z   submodules: false
+2026-11-12T11:28:10.0707375Z   set-safe-directory: true
+2026-11-12T11:28:10.0708206Z   allow-unsafe-pr-checkout: false
+2026-11-12T11:28:10.0709313Z ##[endgroup]
+2026-11-12T11:28:10.2870019Z Syncing repository: PIKACHUIM/TPMSmartCard
+2026-11-12T11:28:10.2872172Z ##[group]Getting Git version info
+2026-11-12T11:28:10.2873080Z Working directory is 'D:\a\TPMSmartCard\TPMSmartCard'
+2026-11-12T11:28:10.3801391Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-11-12T11:28:10.6914100Z git version 2.56.0.windows.4
+2026-11-12T11:28:10.6967689Z ##[endgroup]
+2026-11-12T11:28:10.7024997Z Temporarily overriding HOME='D:\a\_temp\c0524a19-0756-4bfb-9c51-fa1f359cf99e' before making global git config changes
+2026-11-12T11:28:10.7026471Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-12T11:28:10.7027838Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\TPMSmartCard\TPMSmartCard
+2026-11-12T11:28:10.7678809Z Deleting the contents of 'D:\a\TPMSmartCard\TPMSmartCard'
+2026-11-12T11:28:10.7788645Z ##[group]Initializing the repository
+2026-11-12T11:28:10.7789225Z [command]"C:\Program Files\Git\bin\git.exe" init D:\a\TPMSmartCard\TPMSmartCard
+2026-11-12T11:28:10.8448255Z Initialized empty Git repository in D:/a/TPMSmartCard/TPMSmartCard/.git/
+2026-11-12T11:28:10.8496604Z [command]"C:\Program Files\Git\bin\git.exe" remote add origin https://github.com/PIKACHUIM/TPMSmartCard
+2026-11-12T11:28:10.9220439Z ##[endgroup]
+2026-11-12T11:28:10.9221024Z ##[group]Disabling automatic garbage collection
+2026-11-12T11:28:10.9230148Z [command]"C:\Program Files\Git\bin\git.exe" config --local gc.auto 0
+2026-11-12T11:28:10.9610752Z ##[endgroup]
+2026-11-12T11:28:10.9611676Z ##[group]Setting up auth
+2026-11-12T11:28:10.9625004Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-12T11:28:11.0039331Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-12T11:28:12.4183281Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-12T11:28:12.4615012Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-12T11:28:13.0405493Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-12T11:28:13.0784719Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-12T11:28:13.6527569Z [command]"C:\Program Files\Git\bin\git.exe" config --local http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+2026-11-12T11:28:13.6909984Z ##[endgroup]
+2026-11-12T11:28:13.6910453Z ##[group]Fetching the repository
+2026-11-12T11:28:13.6922329Z [command]"C:\Program Files\Git\bin\git.exe" -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +40b2ab1c80dbff62df94dece05690836398d29bb:refs/remotes/origin/main
+2026-11-12T11:28:17.9311952Z From https://github.com/PIKACHUIM/TPMSmartCard
+2026-11-12T11:28:17.9312856Z  * [new ref]         40b2ab1c80dbff62df94dece05690836398d29bb -> origin/main
+2026-11-12T11:28:17.9366823Z ##[endgroup]
+2026-11-12T11:28:17.9367447Z ##[group]Determining the checkout info
+2026-11-12T11:28:17.9369630Z ##[endgroup]
+2026-11-12T11:28:17.9385173Z [command]"C:\Program Files\Git\bin\git.exe" sparse-checkout disable
+2026-11-12T11:28:17.9970873Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all extensions.worktreeConfig
+2026-11-12T11:28:18.0336818Z ##[group]Checking out the ref
+2026-11-12T11:28:18.0345195Z [command]"C:\Program Files\Git\bin\git.exe" checkout --progress --force -B main refs/remotes/origin/main
+2026-11-12T11:28:19.0187813Z Switched to a new branch 'main'
+2026-11-12T11:28:19.0287604Z branch 'main' set up to track 'origin/main'.
+2026-11-12T11:28:19.0444168Z ##[endgroup]
+2026-11-12T11:28:19.0992034Z [command]"C:\Program Files\Git\bin\git.exe" log -1 --format=%H
+2026-11-12T11:28:19.1336063Z 40b2ab1c80dbff62df94dece05690836398d29bb

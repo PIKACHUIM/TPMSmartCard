@@ -1,0 +1,14 @@
+﻿2026-11-12T11:29:54.0431868Z ##[group]Run set -euo pipefail
+2026-11-12T11:29:54.0432163Z [36;1mset -euo pipefail[0m
+2026-11-12T11:29:54.0432365Z [36;1mVERSION="2.0.0"[0m
+2026-11-12T11:29:54.0432560Z [36;1mVERSION="${VERSION#v}"[0m
+2026-11-12T11:29:54.0432817Z [36;1mSTAGE="dist/TPMSmartCard-${VERSION}-linux-amd64"[0m
+2026-11-12T11:29:54.0433167Z [36;1mmkdir -p "$STAGE/usr/bin" "$STAGE/usr/share/applications"[0m
+2026-11-12T11:29:54.0433480Z [36;1mcp desktop/dist/TPMSmartCard "$STAGE/usr/bin/"[0m
+2026-11-12T11:29:54.0433866Z [36;1mcp desktop/wails/build/linux/tpmsmartcard.desktop "$STAGE/usr/share/applications/"[0m
+2026-11-12T11:29:54.0434346Z [36;1mcp legacy/Config/iconer/icon01.png "$STAGE/usr/share/applications/tpmsmartcard.png"[0m
+2026-11-12T11:29:54.0434753Z [36;1mtar -czf "$STAGE.tar.gz" -C dist "$(basename "$STAGE")"[0m
+2026-11-12T11:29:54.0489865Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-12T11:29:54.0490169Z ##[endgroup]
+2026-11-12T11:29:54.0681164Z cp: cannot stat 'desktop/wails/build/linux/tpmsmartcard.desktop': No such file or directory
+2026-11-12T11:29:54.0692753Z ##[error]Process completed with exit code 1.

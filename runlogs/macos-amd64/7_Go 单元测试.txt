@@ -1,0 +1,17 @@
+﻿2026-11-12T11:30:31.8937420Z ##[group]Run go test ./...
+2026-11-12T11:30:31.8938180Z [36;1mgo test ./...[0m
+2026-11-12T11:30:31.9042960Z shell: /bin/bash -e {0}
+2026-11-12T11:30:31.9043670Z ##[endgroup]
+2026-11-12T11:30:57.2641580Z ?   	github.com/PIKACHUIM/tpmsmartcard/cmd/tpmsc	[no test files]
+2026-11-12T11:30:58.1683740Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/autostart	[no test files]
+2026-11-12T11:30:58.1768770Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/api	0.040s
+2026-11-12T11:30:58.1797440Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/backup	0.026s
+2026-11-12T11:30:58.7595310Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/platform	[no test files]
+2026-11-12T11:30:58.7833350Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/platform/darwin	[no test files]
+2026-11-12T11:30:58.8837550Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/platform/factory	[no test files]
+2026-11-12T11:30:58.9149310Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/platform/p11	[no test files]
+2026-11-12T11:30:58.9217690Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/protocol	[no test files]
+2026-11-12T11:30:58.9264360Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/cloud	0.032s
+2026-11-12T11:30:58.9266050Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/crypto	0.021s
+2026-11-12T11:30:59.1398210Z ?   	github.com/PIKACHUIM/tpmsmartcard/ui	[no test files]
+2026-11-12T11:30:59.1517740Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/sshagent	0.018s

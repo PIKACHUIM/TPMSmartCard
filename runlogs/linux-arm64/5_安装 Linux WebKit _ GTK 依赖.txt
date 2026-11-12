@@ -1,0 +1,37 @@
+﻿2026-11-12T11:28:25.2370360Z ##[group]Run sudo apt-get update
+2026-11-12T11:28:25.2371009Z [36;1msudo apt-get update[0m
+2026-11-12T11:28:25.2371612Z [36;1msudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libayatana-appindicator3-dev pkg-config[0m
+2026-11-12T11:28:25.2539471Z shell: /usr/bin/bash -e {0}
+2026-11-12T11:28:25.2539863Z ##[endgroup]
+2026-11-12T11:28:25.4345252Z Get:1 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease [3600 B]
+2026-11-12T11:28:25.6022280Z Get:2 https://packages.microsoft.com/ubuntu/24.04/prod noble/main armhf Packages [12.6 kB]
+2026-11-12T11:28:25.6182941Z Get:3 https://packages.microsoft.com/ubuntu/24.04/prod noble/main arm64 Packages [694 kB]
+2026-11-12T11:28:25.6290619Z Get:4 https://packages.microsoft.com/ubuntu/24.04/prod noble/main amd64 Packages [764 kB]
+2026-11-12T11:28:25.9710563Z Hit:5 http://ports.ubuntu.com/ubuntu-ports noble InRelease
+2026-11-12T11:28:26.1198735Z Get:6 http://ports.ubuntu.com/ubuntu-ports noble-updates InRelease [126 kB]
+2026-11-12T11:28:26.7623478Z Get:7 http://ports.ubuntu.com/ubuntu-ports noble-backports InRelease [126 kB]
+2026-11-12T11:28:27.0178336Z Get:8 http://ports.ubuntu.com/ubuntu-ports noble-security InRelease [126 kB]
+2026-11-12T11:28:27.2989103Z Get:9 http://ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 Packages [1507 kB]
+2026-11-12T11:28:27.9615449Z Get:10 http://ports.ubuntu.com/ubuntu-ports noble-updates/main Translation-en [315 kB]
+2026-11-12T11:28:28.1321892Z Get:11 http://ports.ubuntu.com/ubuntu-ports noble-updates/universe arm64 Packages [1762 kB]
+2026-11-12T11:28:28.4054034Z Get:12 http://ports.ubuntu.com/ubuntu-ports noble-updates/universe Translation-en [344 kB]
+2026-11-12T11:28:28.5724864Z Get:13 http://ports.ubuntu.com/ubuntu-ports noble-updates/restricted arm64 Packages [2797 kB]
+2026-11-12T11:28:28.8893608Z Get:14 http://ports.ubuntu.com/ubuntu-ports noble-updates/restricted Translation-en [430 kB]
+2026-11-12T11:28:29.0400469Z Get:15 http://ports.ubuntu.com/ubuntu-ports noble-updates/multiverse Translation-en [14.3 kB]
+2026-11-12T11:28:29.1894999Z Get:16 http://ports.ubuntu.com/ubuntu-ports noble-security/main arm64 Packages [1260 kB]
+2026-11-12T11:28:29.3847733Z Get:17 http://ports.ubuntu.com/ubuntu-ports noble-security/main Translation-en [238 kB]
+2026-11-12T11:28:29.5418713Z Get:18 http://ports.ubuntu.com/ubuntu-ports noble-security/universe arm64 Packages [1313 kB]
+2026-11-12T11:28:29.8189279Z Get:19 http://ports.ubuntu.com/ubuntu-ports noble-security/universe Translation-en [248 kB]
+2026-11-12T11:28:30.1609467Z Get:20 http://ports.ubuntu.com/ubuntu-ports noble-security/restricted arm64 Packages [2693 kB]
+2026-11-12T11:28:30.4645492Z Get:21 http://ports.ubuntu.com/ubuntu-ports noble-security/restricted Translation-en [411 kB]
+2026-11-12T11:28:30.5322897Z Get:22 http://ports.ubuntu.com/ubuntu-ports noble-security/multiverse arm64 Packages [84.5 kB]
+2026-11-12T11:28:30.5951368Z Get:23 http://ports.ubuntu.com/ubuntu-ports noble-security/multiverse Translation-en [12.4 kB]
+2026-11-12T11:28:35.7218596Z Fetched 15.3 MB in 5s (2911 kB/s)
+2026-11-12T11:28:37.0814012Z Reading package lists...
+2026-11-12T11:28:37.1145774Z Reading package lists...
+2026-11-12T11:28:37.4196422Z Building dependency tree...
+2026-11-12T11:28:37.4203970Z Reading state information...
+2026-11-12T11:28:37.5899410Z E: Unable to locate package libwebkit2gtk-4.0-dev
+2026-11-12T11:28:37.5900353Z E: Couldn't find any package by glob 'libwebkit2gtk-4.0-dev'
+2026-11-12T11:28:37.5900917Z E: Couldn't find any package by regex 'libwebkit2gtk-4.0-dev'
+2026-11-12T11:28:37.5931247Z ##[error]Process completed with exit code 100.

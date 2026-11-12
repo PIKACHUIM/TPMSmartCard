@@ -37,12 +37,12 @@ case "$(uname -s)" in
     rm -rf "$APP"
     mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
     cp "$DIST/TPMSmartCard" "$APP/Contents/MacOS/TPMSmartCard"
-    cp build/macos/Info.plist "$APP/Contents/Info.plist"
-    cp build/macos/entitlements.plist "$APP/Contents/Resources/entitlements.plist"
+    cp ../packaging/macos/Info.plist "$APP/Contents/Info.plist"
+    cp ../packaging/macos/entitlements.plist "$APP/Contents/Resources/entitlements.plist"
     if [[ -n "${MACOS_SIGN_IDENTITY:-}" ]]; then
       echo "==> 签名（${MACOS_SIGN_IDENTITY}）"
       codesign --force --deep --options runtime \
-        --entitlements build/macos/entitlements.plist \
+        --entitlements ../packaging/macos/entitlements.plist \
         --sign "$MACOS_SIGN_IDENTITY" "$APP"
       if [[ -n "${MACOS_NOTARY_PROFILE:-}" ]]; then
         echo "==> 公证"
@@ -62,7 +62,7 @@ case "$(uname -s)" in
     rm -rf "$PKG"
     mkdir -p "$PKG/usr/bin" "$PKG/usr/share/applications"
     cp "$DIST/TPMSmartCard" "$PKG/usr/bin/TPMSmartCard"
-    cp build/linux/tpmsmartcard.desktop "$PKG/usr/share/applications/"
+    cp ../packaging/linux/tpmsmartcard.desktop "$PKG/usr/share/applications/"
     cp "$ROOT/legacy/Config/iconer/icon01.png" "$PKG/usr/share/applications/tpmsmartcard.png"
     tar -czf "${PKG}.tar.gz" -C "$DIST" "$(basename "$PKG")"
     ;;

@@ -1,0 +1,343 @@
+﻿2026-11-12T11:28:06.4761533Z Current runner version: '2.338.2'
+2026-11-12T11:28:06.5151821Z ##[group]Runner Image Provisioner
+2026-11-12T11:28:06.5152704Z Hosted Compute Agent
+2026-11-12T11:28:06.5153391Z Version: 20261103.629
+2026-11-12T11:28:06.5154161Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+2026-11-12T11:28:06.5154912Z Build Date: 2026-11-03T17:26:59Z
+2026-11-12T11:28:06.5155578Z Worker ID: {32eefe50-57e8-49bf-8e1a-36650aaceb00}
+2026-11-12T11:28:06.5156251Z Region: westus2
+2026-11-12T11:28:06.5156809Z Cloud: Azure
+2026-11-12T11:28:06.5157302Z ##[endgroup]
+2026-11-12T11:28:06.5158653Z ##[group]Operating System
+2026-11-12T11:28:06.5159394Z Microsoft Windows Server 2025
+2026-11-12T11:28:06.5160045Z 10.0.26100
+2026-11-12T11:28:06.5160551Z Datacenter
+2026-11-12T11:28:06.5161069Z ##[endgroup]
+2026-11-12T11:28:06.5161579Z ##[group]Runner Image
+2026-11-12T11:28:06.5162171Z Image: windows-2025-vs2026
+2026-11-12T11:28:06.5162731Z Version: 20261103.298.1
+2026-11-12T11:28:06.5164196Z Included Software: https://github.com/actions/runner-images/blob/win25-vs2026/20261103.298/images/windows/Windows2025-VS2026-Readme.md
+2026-11-12T11:28:06.5165911Z Image Release: https://github.com/actions/runner-images/releases/tag/win25-vs2026%2F20261103.298
+2026-11-12T11:28:06.5166860Z ##[endgroup]
+2026-11-12T11:28:06.5167944Z ##[group]GITHUB_TOKEN Permissions
+2026-11-12T11:28:06.5170400Z Contents: read
+2026-11-12T11:28:06.5171064Z Metadata: read
+2026-11-12T11:28:06.5171657Z ##[endgroup]
+2026-11-12T11:28:06.5173763Z Secret source: Actions
+2026-11-12T11:28:06.5174705Z Cache mode: write
+2026-11-12T11:28:06.5175371Z Prepare workflow directory
+2026-11-12T11:28:06.6521105Z Prepare all required actions
+2026-11-12T11:28:06.6572021Z Getting action download info
+2026-11-12T11:28:07.0366552Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-12T11:28:07.2335348Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-11-12T11:28:07.4889744Z Download action repository 'actions/setup-go@v5' (SHA:40f1582b2485089dde7abd97c1529aa768e1baff)
+2026-11-12T11:28:07.9241238Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-12T11:28:08.9021669Z Complete job name: windows-arm64
+2026-11-12T11:28:10.0692350Z ##[group]Run actions/checkout@v4
+2026-11-12T11:28:10.0693632Z with:
+2026-11-12T11:28:10.0694401Z   repository: PIKACHUIM/TPMSmartCard
+2026-11-12T11:28:10.0698440Z   token: ***
+2026-11-12T11:28:10.0699187Z   ssh-strict: true
+2026-11-12T11:28:10.0699949Z   ssh-user: git
+2026-11-12T11:28:10.0700718Z   persist-credentials: true
+2026-11-12T11:28:10.0701518Z   clean: true
+2026-11-12T11:28:10.0702310Z   sparse-checkout-cone-mode: true
+2026-11-12T11:28:10.0703151Z   fetch-depth: 1
+2026-11-12T11:28:10.0703899Z   fetch-tags: false
+2026-11-12T11:28:10.0705065Z   show-progress: true
+2026-11-12T11:28:10.0705840Z   lfs: false
+2026-11-12T11:28:10.0706576Z   submodules: false
+2026-11-12T11:28:10.0707379Z   set-safe-directory: true
+2026-11-12T11:28:10.0708210Z   allow-unsafe-pr-checkout: false
+2026-11-12T11:28:10.0709321Z ##[endgroup]
+2026-11-12T11:28:10.2870063Z Syncing repository: PIKACHUIM/TPMSmartCard
+2026-11-12T11:28:10.2872185Z ##[group]Getting Git version info
+2026-11-12T11:28:10.2873140Z Working directory is 'D:\a\TPMSmartCard\TPMSmartCard'
+2026-11-12T11:28:10.3801441Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-11-12T11:28:10.6914158Z git version 2.56.0.windows.4
+2026-11-12T11:28:10.6967732Z ##[endgroup]
+2026-11-12T11:28:10.7025028Z Temporarily overriding HOME='D:\a\_temp\c0524a19-0756-4bfb-9c51-fa1f359cf99e' before making global git config changes
+2026-11-12T11:28:10.7026478Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-12T11:28:10.7027858Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\TPMSmartCard\TPMSmartCard
+2026-11-12T11:28:10.7678876Z Deleting the contents of 'D:\a\TPMSmartCard\TPMSmartCard'
+2026-11-12T11:28:10.7788670Z ##[group]Initializing the repository
+2026-11-12T11:28:10.7789229Z [command]"C:\Program Files\Git\bin\git.exe" init D:\a\TPMSmartCard\TPMSmartCard
+2026-11-12T11:28:10.8448382Z Initialized empty Git repository in D:/a/TPMSmartCard/TPMSmartCard/.git/
+2026-11-12T11:28:10.8496641Z [command]"C:\Program Files\Git\bin\git.exe" remote add origin https://github.com/PIKACHUIM/TPMSmartCard
+2026-11-12T11:28:10.9220473Z ##[endgroup]
+2026-11-12T11:28:10.9221028Z ##[group]Disabling automatic garbage collection
+2026-11-12T11:28:10.9230178Z [command]"C:\Program Files\Git\bin\git.exe" config --local gc.auto 0
+2026-11-12T11:28:10.9610817Z ##[endgroup]
+2026-11-12T11:28:10.9611691Z ##[group]Setting up auth
+2026-11-12T11:28:10.9625049Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-12T11:28:11.0039381Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-12T11:28:12.4183334Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-12T11:28:12.4615087Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-12T11:28:13.0405546Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-12T11:28:13.0784753Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-12T11:28:13.6527624Z [command]"C:\Program Files\Git\bin\git.exe" config --local http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+2026-11-12T11:28:13.6910020Z ##[endgroup]
+2026-11-12T11:28:13.6910457Z ##[group]Fetching the repository
+2026-11-12T11:28:13.6924962Z [command]"C:\Program Files\Git\bin\git.exe" -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +40b2ab1c80dbff62df94dece05690836398d29bb:refs/remotes/origin/main
+2026-11-12T11:28:17.9312007Z From https://github.com/PIKACHUIM/TPMSmartCard
+2026-11-12T11:28:17.9312868Z  * [new ref]         40b2ab1c80dbff62df94dece05690836398d29bb -> origin/main
+2026-11-12T11:28:17.9366839Z ##[endgroup]
+2026-11-12T11:28:17.9367456Z ##[group]Determining the checkout info
+2026-11-12T11:28:17.9369644Z ##[endgroup]
+2026-11-12T11:28:17.9385195Z [command]"C:\Program Files\Git\bin\git.exe" sparse-checkout disable
+2026-11-12T11:28:17.9970943Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all extensions.worktreeConfig
+2026-11-12T11:28:18.0336837Z ##[group]Checking out the ref
+2026-11-12T11:28:18.0345213Z [command]"C:\Program Files\Git\bin\git.exe" checkout --progress --force -B main refs/remotes/origin/main
+2026-11-12T11:28:19.0187850Z Switched to a new branch 'main'
+2026-11-12T11:28:19.0287635Z branch 'main' set up to track 'origin/main'.
+2026-11-12T11:28:19.0444194Z ##[endgroup]
+2026-11-12T11:28:19.0992087Z [command]"C:\Program Files\Git\bin\git.exe" log -1 --format=%H
+2026-11-12T11:28:19.1336093Z 40b2ab1c80dbff62df94dece05690836398d29bb
+2026-11-12T11:28:19.1811974Z ##[group]Run actions/setup-node@v4
+2026-11-12T11:28:19.1812406Z with:
+2026-11-12T11:28:19.1812590Z   node-version: 20
+2026-11-12T11:28:19.1812791Z   cache: npm
+2026-11-12T11:28:19.1812963Z   always-auth: false
+2026-11-12T11:28:19.1813157Z   check-latest: false
+2026-11-12T11:28:19.1815537Z   token: ***
+2026-11-12T11:28:19.1815734Z ##[endgroup]
+2026-11-12T11:28:19.3605899Z Attempting to download 20...
+2026-11-12T11:28:19.3783361Z (node:6392) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-12T11:28:19.3784620Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-12T11:28:20.4487693Z Acquiring 20.20.2 - x64 from https://github.com/actions/node-versions/releases/download/20.20.2-23521894959/node-20.20.2-win32-x64.7z
+2026-11-12T11:28:20.8065542Z Extracting ...
+2026-11-12T11:28:23.0713154Z Adding to the cache ...
+2026-11-12T11:28:26.8387849Z ##[group]Environment details
+2026-11-12T11:28:28.0624223Z node: v20.20.2
+2026-11-12T11:28:28.0624503Z npm: 10.8.2
+2026-11-12T11:28:28.0624670Z yarn: 1.22.22
+2026-11-12T11:28:28.0625099Z ##[endgroup]
+2026-11-12T11:28:28.1360583Z [command]C:\Windows\system32\cmd.exe /D /S /C "C:\hostedtoolcache\windows\node\20.20.2\x64\npm.cmd config get cache"
+2026-11-12T11:28:28.4657747Z C:\npm\cache
+2026-11-12T11:28:28.8567202Z Cache hit for: node-cache-Windows-x64-npm-95b48a12ee4a43960b37e4ce646228cb5f0bec67bbc2c3c8d0e0a515cde5670e
+2026-11-12T11:28:28.8681479Z (node:6392) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-12T11:28:30.1412020Z Received 41943040 of 78510569 (53.4%), 40.0 MBs/sec
+2026-11-12T11:28:30.3793507Z Received 78510569 of 78510569 (100.0%), 60.3 MBs/sec
+2026-11-12T11:28:30.3796977Z Cache Size: ~75 MB (78510569 B)
+2026-11-12T11:28:30.3834928Z [command]"C:\Program Files\Git\usr\bin\tar.exe" -xf D:/a/_temp/e4ee0233-58a9-479f-9644-70aae4f006a1/cache.tzst -P -C D:/a/TPMSmartCard/TPMSmartCard --force-local --use-compress-program "zstd -d"
+2026-11-12T11:28:34.6626916Z Cache restored successfully
+2026-11-12T11:28:34.6692431Z Cache restored from key: node-cache-Windows-x64-npm-95b48a12ee4a43960b37e4ce646228cb5f0bec67bbc2c3c8d0e0a515cde5670e
+2026-11-12T11:28:34.7070424Z ##[group]Run actions/setup-go@v5
+2026-11-12T11:28:34.7070733Z with:
+2026-11-12T11:28:34.7070923Z   go-version: 1.23
+2026-11-12T11:28:34.7071291Z   cache-dependency-path: core/go.sum
+desktop/wails/go.sum
+Fido/src/fido-go/go.sum
+
+2026-11-12T11:28:34.7071739Z   check-latest: false
+2026-11-12T11:28:34.7074604Z   token: ***
+2026-11-12T11:28:34.7074860Z   cache: true
+2026-11-12T11:28:34.7075037Z ##[endgroup]
+2026-11-12T11:28:34.8673860Z Setup go version spec 1.23
+2026-11-12T11:28:34.8872850Z Attempting to download 1.23...
+2026-11-12T11:28:34.9049259Z (node:6660) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-12T11:28:34.9050629Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-12T11:28:35.7113926Z matching 1.23...
+2026-11-12T11:28:35.7163475Z Acquiring 1.23.12 from https://github.com/actions/go-versions/releases/download/1.23.12-16792118003/go-1.23.12-win32-x64.zip
+2026-11-12T11:28:36.4780766Z Extracting Go...
+2026-11-12T11:28:37.1728124Z [command]"C:\Program Files\PowerShell\7\pwsh.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Unrestricted -Command "$ErrorActionPreference = 'Stop' ; try { Add-Type -AssemblyName System.IO.Compression.ZipFile } catch { } ; try { [System.IO.Compression.ZipFile]::ExtractToDirectory('D:\a\_temp\go-1.23.12-win32-x64.zip', 'D:\a\_temp\d3bad6d6-a1cc-4529-a35e-8394703c4622', $true) } catch { if (($_.Exception.GetType().FullName -eq 'System.Management.Automation.MethodException') -or ($_.Exception.GetType().FullName -eq 'System.Management.Automation.RuntimeException') ){ Expand-Archive -LiteralPath 'D:\a\_temp\go-1.23.12-win32-x64.zip' -DestinationPath 'D:\a\_temp\d3bad6d6-a1cc-4529-a35e-8394703c4622' -Force } else { throw $_ } } ;"
+2026-11-12T11:28:42.4611731Z Successfully extracted go to D:\a\_temp\d3bad6d6-a1cc-4529-a35e-8394703c4622
+2026-11-12T11:28:42.4612819Z Adding to the cache ...
+2026-11-12T11:28:53.0214131Z Created link C:\hostedtoolcache\windows\go\1.23.12\x64 => D:\hostedtoolcache\windows\go\1.23.12\x64
+2026-11-12T11:28:53.0218654Z Created link C:\hostedtoolcache\windows\go\1.23.12\x64.complete => D:\hostedtoolcache\windows\go\1.23.12\x64.complete
+2026-11-12T11:28:53.0220320Z Successfully cached go to C:\hostedtoolcache\windows\go\1.23.12\x64
+2026-11-12T11:28:53.0226855Z Added go to the path
+2026-11-12T11:28:53.0230355Z Successfully set up Go version 1.23
+2026-11-12T11:28:53.5253733Z [command]C:\hostedtoolcache\windows\go\1.23.12\x64\bin\go.exe env GOCACHE
+2026-11-12T11:28:53.5311293Z [command]C:\hostedtoolcache\windows\go\1.23.12\x64\bin\go.exe env GOMODCACHE
+2026-11-12T11:28:53.5834303Z C:\Users\runneradmin\AppData\Local\go-build
+2026-11-12T11:28:53.5836117Z C:\Users\runneradmin\go\pkg\mod
+2026-11-12T11:28:53.9480559Z Cache hit for: setup-go-Windows-x64-go-1.23.12-b736bfab8542e89fab9c91d8cf7b573480fba2a6d154112a77597f8f47cce43c
+2026-11-12T11:28:53.9613990Z (node:6660) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-12T11:28:55.2633525Z Received 33554432 of 57174941 (58.7%), 31.5 MBs/sec
+2026-11-12T11:28:56.1440678Z Received 57174941 of 57174941 (100.0%), 28.7 MBs/sec
+2026-11-12T11:28:56.1443699Z Cache Size: ~55 MB (57174941 B)
+2026-11-12T11:28:56.1527121Z [command]"C:\Program Files\Git\usr\bin\tar.exe" -xf D:/a/_temp/8ccb0e80-f51c-4d61-a4ec-67e9cf733c8c/cache.tzst -P -C D:/a/TPMSmartCard/TPMSmartCard --force-local --use-compress-program "zstd -d"
+2026-11-12T11:29:02.8073521Z Cache restored successfully
+2026-11-12T11:29:02.8122338Z Cache restored from key: setup-go-Windows-x64-go-1.23.12-b736bfab8542e89fab9c91d8cf7b573480fba2a6d154112a77597f8f47cce43c
+2026-11-12T11:29:02.8128747Z go version go1.23.12 windows/amd64
+2026-11-12T11:29:02.8128952Z 
+2026-11-12T11:29:02.8129244Z ##[group]go env
+2026-11-12T11:29:03.1163773Z set GO111MODULE=
+2026-11-12T11:29:03.1166756Z set GOARCH=amd64
+2026-11-12T11:29:03.1167082Z set GOBIN=
+2026-11-12T11:29:03.1167442Z set GOCACHE=C:\Users\runneradmin\AppData\Local\go-build
+2026-11-12T11:29:03.1167902Z set GOENV=C:\Users\runneradmin\AppData\Roaming\go\env
+2026-11-12T11:29:03.1168307Z set GOEXE=.exe
+2026-11-12T11:29:03.1168522Z set GOEXPERIMENT=
+2026-11-12T11:29:03.1168729Z set GOFLAGS=
+2026-11-12T11:29:03.1168939Z set GOHOSTARCH=amd64
+2026-11-12T11:29:03.1169158Z set GOHOSTOS=windows
+2026-11-12T11:29:03.1169358Z set GOINSECURE=
+2026-11-12T11:29:03.1169645Z set GOMODCACHE=C:\Users\runneradmin\go\pkg\mod
+2026-11-12T11:29:03.1169948Z set GONOPROXY=
+2026-11-12T11:29:03.1170143Z set GONOSUMDB=
+2026-11-12T11:29:03.1170588Z set GOOS=windows
+2026-11-12T11:29:03.1170849Z set GOPATH=C:\Users\runneradmin\go
+2026-11-12T11:29:03.1171135Z set GOPRIVATE=
+2026-11-12T11:29:03.1171437Z set GOPROXY=https://proxy.golang.org,direct
+2026-11-12T11:29:03.1171852Z set GOROOT=C:\hostedtoolcache\windows\go\1.23.12\x64
+2026-11-12T11:29:03.1172196Z set GOSUMDB=sum.golang.org
+2026-11-12T11:29:03.1172430Z set GOTMPDIR=
+2026-11-12T11:29:03.1172639Z set GOTOOLCHAIN=auto
+2026-11-12T11:29:03.1173074Z set GOTOOLDIR=C:\hostedtoolcache\windows\go\1.23.12\x64\pkg\tool\windows_amd64
+2026-11-12T11:29:03.1173513Z set GOVCS=
+2026-11-12T11:29:03.1195595Z set GOVERSION=go1.23.12
+2026-11-12T11:29:03.1195980Z set GODEBUG=
+2026-11-12T11:29:03.1196305Z set GOTELEMETRY=local
+2026-11-12T11:29:03.1196926Z set GOTELEMETRYDIR=C:\Users\runneradmin\AppData\Roaming\go\telemetry
+2026-11-12T11:29:03.1197538Z set GCCGO=gccgo
+2026-11-12T11:29:03.1197842Z set GOAMD64=v1
+2026-11-12T11:29:03.1198127Z set AR=ar
+2026-11-12T11:29:03.1198399Z set CC=gcc
+2026-11-12T11:29:03.1198669Z set CXX=g++
+2026-11-12T11:29:03.1199030Z set CGO_ENABLED=1
+2026-11-12T11:29:03.1199370Z set GOMOD=NUL
+2026-11-12T11:29:03.1199669Z set GOWORK=
+2026-11-12T11:29:03.1200009Z set CGO_CFLAGS=-O2 -g
+2026-11-12T11:29:03.1200392Z set CGO_CPPFLAGS=
+2026-11-12T11:29:03.1200785Z set CGO_CXXFLAGS=-O2 -g
+2026-11-12T11:29:03.1201220Z set CGO_FFLAGS=-O2 -g
+2026-11-12T11:29:03.1201620Z set CGO_LDFLAGS=-O2 -g
+2026-11-12T11:29:03.1202020Z set PKG_CONFIG=pkg-config
+2026-11-12T11:29:03.1203680Z set GOGCCFLAGS=-m64 -mthreads -Wl,--no-gc-sections -fmessage-length=0 -ffile-prefix-map=C:\Users\RUNNER~1\AppData\Local\Temp\go-build541247454=/tmp/go-build -gno-record-gcc-switches
+2026-11-12T11:29:03.1205265Z 
+2026-11-12T11:29:03.1205729Z ##[endgroup]
+2026-11-12T11:29:03.2619753Z ##[group]Run npm ci
+2026-11-12T11:29:03.2620070Z [36;1mnpm ci[0m
+2026-11-12T11:29:03.2620296Z [36;1mnpm run build -w @tpmsc/web[0m
+2026-11-12T11:29:03.2620593Z [36;1mnode scripts/prepare-ui.mjs[0m
+2026-11-12T11:29:03.4218961Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-12T11:29:03.4219425Z ##[endgroup]
+2026-11-12T11:29:06.9378215Z npm warn deprecated rollup-plugin-inject@3.0.2: This package has been deprecated and is no longer maintained. Please use @rollup/plugin-inject.
+2026-11-12T11:29:07.2449708Z npm warn deprecated sourcemap-codec@1.4.8: Please use @jridgewell/sourcemap-codec instead
+2026-11-12T11:29:10.0756813Z npm warn deprecated recharts@2.15.4: 1.x and 2.x branches are no longer active. Bump to Recharts v3 to receive latest features and bugfixes. See https://github.com/recharts/recharts/wiki/3.0-migration-guide
+2026-11-12T11:29:12.9295592Z 
+2026-11-12T11:29:12.9296456Z added 283 packages, and audited 287 packages in 9s
+2026-11-12T11:29:12.9297430Z 
+2026-11-12T11:29:12.9297748Z 42 packages are looking for funding
+2026-11-12T11:29:12.9298306Z   run `npm fund` for details
+2026-11-12T11:29:13.0602872Z 
+2026-11-12T11:29:13.0603731Z 15 vulnerabilities (5 moderate, 8 high, 2 critical)
+2026-11-12T11:29:13.0604042Z 
+2026-11-12T11:29:13.0604293Z To address all issues (including breaking changes), run:
+2026-11-12T11:29:13.0604687Z   npm audit fix --force
+2026-11-12T11:29:13.0604844Z 
+2026-11-12T11:29:13.0604981Z Run `npm audit` for details.
+2026-11-12T11:29:13.4776084Z 
+2026-11-12T11:29:13.4776684Z > @tpmsc/web@2.0.0 build
+2026-11-12T11:29:13.4777112Z > tsc -b && vite build
+2026-11-12T11:29:13.4777317Z 
+2026-11-12T11:29:18.5131876Z [36mvite v5.4.21 [32mbuilding for production...[36m[39m
+2026-11-12T11:29:18.5933774Z transforming...
+2026-11-12T11:29:24.3284931Z [32m✓[39m 2239 modules transformed.
+2026-11-12T11:29:24.7574705Z rendering chunks...
+2026-11-12T11:29:24.7702535Z computing gzip size...
+2026-11-12T11:29:24.7919236Z [2mdist/[22m[32mindex.html                 [39m[1m[2m  0.57 kB[22m[1m[22m[2m │ gzip:   0.44 kB[22m
+2026-11-12T11:29:24.7921379Z [2mdist/[22m[35massets/index-B2Pb8duM.css  [39m[1m[2m 25.89 kB[22m[1m[22m[2m │ gzip:   5.99 kB[22m
+2026-11-12T11:29:24.7922555Z [2mdist/[22m[36massets/index-Bq0WC-gD.js   [39m[1m[2m737.63 kB[22m[1m[22m[2m │ gzip: 219.82 kB[22m
+2026-11-12T11:29:24.7926903Z [32m✓ built in 6.24s[39m
+2026-11-12T11:29:24.9228432Z 已同步前端产物到 core\ui\dist (ok)
+2026-11-12T11:29:25.0428072Z ##[group]Run go test ./...
+2026-11-12T11:29:25.0428415Z [36;1mgo test ./...[0m
+2026-11-12T11:29:25.0500264Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-12T11:29:25.0500632Z ##[endgroup]
+2026-11-12T11:29:26.4948706Z ?   	github.com/PIKACHUIM/tpmsmartcard/cmd/tpmsc	[no test files]
+2026-11-12T11:29:26.4951265Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/autostart	[no test files]
+2026-11-12T11:29:26.4955911Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/api	(cached)
+2026-11-12T11:29:26.4965162Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/backup	(cached)
+2026-11-12T11:29:26.5389250Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/platform	[no test files]
+2026-11-12T11:29:26.5390412Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/platform/p11	[no test files]
+2026-11-12T11:29:26.5391649Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/platform/win32	[no test files]
+2026-11-12T11:29:26.5393702Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/protocol	[no test files]
+2026-11-12T11:29:26.5395285Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/platform/factory	[no test files]
+2026-11-12T11:29:26.5396441Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/cloud	(cached)
+2026-11-12T11:29:26.5398566Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/crypto	(cached)
+2026-11-12T11:29:26.5877099Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/sshagent	(cached)
+2026-11-12T11:29:26.5878006Z ?   	github.com/PIKACHUIM/tpmsmartcard/ui	[no test files]
+2026-11-12T11:29:26.7930041Z ##[group]Run set -euo pipefail
+2026-11-12T11:29:26.7930422Z [36;1mset -euo pipefail[0m
+2026-11-12T11:29:26.7930659Z [36;1mEXT=""[0m
+2026-11-12T11:29:26.7930925Z [36;1mif [ "Windows" = "Windows" ]; then EXT=".exe"; fi[0m
+2026-11-12T11:29:26.7931246Z [36;1mmkdir -p ../dist[0m
+2026-11-12T11:29:26.7931501Z [36;1mgo build -tags desktop -trimpath \[0m
+2026-11-12T11:29:26.7931942Z [36;1m  -ldflags "-s -w -X main.Version=${VERSION#v} -X main.Commit=${GITHUB_SHA::8}" \[0m
+2026-11-12T11:29:26.7932376Z [36;1m  -o "../dist/TPMSmartCard${EXT}" .[0m
+2026-11-12T11:29:26.7951210Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-12T11:29:26.7951631Z env:
+2026-11-12T11:29:26.7951805Z   CGO_ENABLED: 0
+2026-11-12T11:29:26.7952024Z   GOARCH: arm64
+2026-11-12T11:29:26.7952204Z   VERSION: 2.0.0
+2026-11-12T11:29:26.7952388Z ##[endgroup]
+2026-11-12T11:29:28.3045542Z ##[group]Run $version = "2.0.0".TrimStart("v")
+2026-11-12T11:29:28.3045975Z [36;1m$version = "2.0.0".TrimStart("v")[0m
+2026-11-12T11:29:28.3046338Z [36;1m$stage = "dist/TPMSmartCard-$version-windows-arm64"[0m
+2026-11-12T11:29:28.3046779Z [36;1mNew-Item -ItemType Directory -Force -Path $stage | Out-Null[0m
+2026-11-12T11:29:28.3047200Z [36;1mCopy-Item "desktop/dist/TPMSmartCard.exe" $stage[0m
+2026-11-12T11:29:28.3047543Z [36;1mCopy-Item README.md, LICENSE $stage[0m
+2026-11-12T11:29:28.3047849Z [36;1mif (Test-Path "legacy/OpenSC") {[0m
+2026-11-12T11:29:28.3048235Z [36;1m  Copy-Item "legacy/OpenSC" (Join-Path $stage "OpenSC") -Recurse[0m
+2026-11-12T11:29:28.3048585Z [36;1m}[0m
+2026-11-12T11:29:28.3048902Z [36;1mCompress-Archive -Path "$stage/*" -DestinationPath "$stage.zip" -Force[0m
+2026-11-12T11:29:28.3119777Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-12T11:29:28.3120152Z ##[endgroup]
+2026-11-12T11:29:30.4486352Z ##[group]Run actions/upload-artifact@v4
+2026-11-12T11:29:30.4486705Z with:
+2026-11-12T11:29:30.4486903Z   name: windows-arm64
+2026-11-12T11:29:30.4487138Z   path: dist/*.zip
+dist/*.tar.gz
+
+2026-11-12T11:29:30.4487389Z   if-no-files-found: error
+2026-11-12T11:29:30.4487619Z   compression-level: 6
+2026-11-12T11:29:30.4487822Z   overwrite: false
+2026-11-12T11:29:30.4488018Z   include-hidden-files: false
+2026-11-12T11:29:30.4488494Z ##[endgroup]
+2026-11-12T11:29:30.6377261Z (node:9272) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-12T11:29:30.6379113Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-12T11:29:30.6446534Z With the provided path, there will be 1 file uploaded
+2026-11-12T11:29:30.6452590Z Artifact name is valid!
+2026-11-12T11:29:30.6454302Z Root directory input is valid!
+2026-11-12T11:29:31.0215901Z Beginning upload of artifact content to blob storage
+2026-11-12T11:29:31.2976238Z (node:9272) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-12T11:29:32.4507930Z Uploaded bytes 8388608
+2026-11-12T11:29:32.7994475Z Uploaded bytes 16777216
+2026-11-12T11:29:33.0526041Z Uploaded bytes 25091546
+2026-11-12T11:29:33.1260569Z Finished uploading artifact content to blob storage!
+2026-11-12T11:29:33.1262846Z SHA256 digest of uploaded artifact zip is 2bc62856e15adef2ef6eb63e712b7f62bbe76eff5d196b0a628cf625874d1103
+2026-11-12T11:29:33.1265405Z Finalizing artifact upload
+2026-11-12T11:29:33.5952487Z Artifact windows-arm64.zip successfully finalized. Artifact ID 13938539777
+2026-11-12T11:29:33.5954203Z Artifact windows-arm64 has been successfully uploaded! Final size is 25091546 bytes. Artifact ID is 13938539777
+2026-11-12T11:29:33.5964225Z Artifact download URL: https://github.com/PIKACHUIM/TPMSmartCard/actions/runs/43209386075/artifacts/13938539777
+2026-11-12T11:29:33.6348750Z Post job cleanup.
+2026-11-12T11:29:33.7870121Z (node:6508) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-12T11:29:33.7871321Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-12T11:29:33.8951396Z [command]C:\hostedtoolcache\windows\go\1.23.12\x64\bin\go.exe env GOMODCACHE
+2026-11-12T11:29:33.9026187Z [command]C:\hostedtoolcache\windows\go\1.23.12\x64\bin\go.exe env GOCACHE
+2026-11-12T11:29:33.9462615Z C:\Users\runneradmin\go\pkg\mod
+2026-11-12T11:29:33.9487911Z C:\Users\runneradmin\AppData\Local\go-build
+2026-11-12T11:29:33.9507616Z Cache hit occurred on the primary key setup-go-Windows-x64-go-1.23.12-b736bfab8542e89fab9c91d8cf7b573480fba2a6d154112a77597f8f47cce43c, not saving cache.
+2026-11-12T11:29:33.9783132Z Post job cleanup.
+2026-11-12T11:29:34.1263661Z (node:3956) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-12T11:29:34.1265101Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-12T11:29:34.1272492Z Cache hit occurred on the primary key node-cache-Windows-x64-npm-95b48a12ee4a43960b37e4ce646228cb5f0bec67bbc2c3c8d0e0a515cde5670e, not saving cache.
+2026-11-12T11:29:34.1558476Z Post job cleanup.
+2026-11-12T11:29:34.3624845Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-11-12T11:29:34.3983883Z git version 2.56.0.windows.4
+2026-11-12T11:29:34.4052571Z Temporarily overriding HOME='D:\a\_temp\cddc78e5-e0bf-4f40-b430-dcfb097b73a9' before making global git config changes
+2026-11-12T11:29:34.4054017Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-12T11:29:34.4063938Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\TPMSmartCard\TPMSmartCard
+2026-11-12T11:29:34.4438766Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-12T11:29:34.4808132Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-12T11:29:35.0404082Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-12T11:29:35.0732033Z http.https://github.com/.extraheader
+2026-11-12T11:29:35.0774230Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all http.https://github.com/.extraheader
+2026-11-12T11:29:35.1161863Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-12T11:29:35.7025604Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-12T11:29:35.7394045Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-12T11:29:36.2827326Z Cleaning up orphan processes
+2026-11-12T11:29:36.3503834Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-go@v5, actions/setup-node@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
