@@ -11,19 +11,12 @@ on:
         type: string
         default: ""
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "core/**"
-      - "desktop/**"
-      - "web/**"
-      - "packages/**"
-      - "scripts/**"
-      - "Fido/**"
-      - ".github/workflows/build-desktop.yml"
 
+# 注意：main 的日常构建由 beta-desktop.yml 负责。
+# 这里不再监听 push，否则与 beta 通过 workflow_call 复用同一 concurrency 组，
+# 两个 run 会互相取消（2026-11 实际踩过）。
 concurrency:
-  group: build-desktop-${{ github.ref }}
+  group: build-desktop-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:

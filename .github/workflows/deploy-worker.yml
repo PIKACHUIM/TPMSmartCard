@@ -5,14 +5,8 @@ name: deploy-worker
 # D1 迁移不在此自动执行（生产库需人工确认）：
 #   cd worker && npx wrangler d1 migrations apply tpmsc --remote
 on:
+  # 生产部署改为手动触发：缺少 Cloudflare Secrets 时不会在每次 push 上刷失败记录
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "worker/**"
-      - "packages/**"
-      - "web/**"
-      - ".github/workflows/deploy-worker.yml"
 
 concurrency:
   group: deploy-worker-${{ github.ref }}
