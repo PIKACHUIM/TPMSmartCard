@@ -40,13 +40,5 @@
       "webRoot": "${workspaceFolder}/web",
       "preLaunchTask": "web: dev"
     }
-  ],
-  "compounds": [
-    {
-      "name": "Worker + Web",
-      "configurations": ["Web (Chrome)"],
-      "preLaunchTask": "worker: dev",
-      "stopAll": true
-    }
   ]
 }
