@@ -1,0 +1,20 @@
+﻿2026-11-13T07:21:00.4734420Z ##[group]Run go test ./...
+2026-11-13T07:21:00.4735670Z [36;1mgo test ./...[0m
+2026-11-13T07:21:00.4870460Z shell: /bin/bash -e {0}
+2026-11-13T07:21:00.4870820Z env:
+2026-11-13T07:21:00.4871130Z   MACOS_CERT_P12: 
+2026-11-13T07:21:00.4871340Z   MACOS_CERT_PASSWORD: 
+2026-11-13T07:21:00.4871650Z ##[endgroup]
+2026-11-13T07:21:01.5359600Z ?   	github.com/PIKACHUIM/tpmsmartcard/cmd/tpmsc	[no test files]
+2026-11-13T07:21:01.5364300Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/autostart	[no test files]
+2026-11-13T07:21:01.5367940Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/api	(cached)
+2026-11-13T07:21:01.5616220Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/backup	(cached)
+2026-11-13T07:21:01.5660870Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/platform	[no test files]
+2026-11-13T07:21:01.5662860Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/platform/darwin	[no test files]
+2026-11-13T07:21:01.5664750Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/platform/factory	[no test files]
+2026-11-13T07:21:01.5666980Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/platform/p11	[no test files]
+2026-11-13T07:21:01.5668870Z ?   	github.com/PIKACHUIM/tpmsmartcard/internal/protocol	[no test files]
+2026-11-13T07:21:01.5670410Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/cloud	(cached)
+2026-11-13T07:21:01.5671810Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/crypto	(cached)
+2026-11-13T07:21:01.5876220Z ?   	github.com/PIKACHUIM/tpmsmartcard/ui	[no test files]
+2026-11-13T07:21:01.5877790Z ok  	github.com/PIKACHUIM/tpmsmartcard/internal/sshagent	(cached)

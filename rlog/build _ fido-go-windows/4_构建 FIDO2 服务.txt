@@ -1,0 +1,4 @@
+﻿2026-11-13T07:20:29.8258741Z ##[group]Run go build -trimpath -ldflags "-s -w -H windowsgui" -o ../../../dist/fido-go.exe .
+2026-11-13T07:20:29.8259335Z [36;1mgo build -trimpath -ldflags "-s -w -H windowsgui" -o ../../../dist/fido-go.exe .[0m
+2026-11-13T07:20:29.8607904Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-13T07:20:29.8608206Z ##[endgroup]

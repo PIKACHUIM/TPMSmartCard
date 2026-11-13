@@ -76,10 +76,13 @@ jobs:
             os: macos-15-intel
             goarch: amd64
             cgo: "1"
+            # Wails 的 production 构建会用到 UTType（UniformTypeIdentifiers）
+            cgo_ldflags: "-framework UniformTypeIdentifiers"
           - name: macos-arm64
             os: macos-15
             goarch: arm64
             cgo: "1"
+            cgo_ldflags: "-framework UniformTypeIdentifiers"
 
     steps:
       - uses: actions/checkout@v4
@@ -140,6 +143,7 @@ jobs:
         shell: bash
         env:
           CGO_ENABLED: ${{ matrix.cgo }}
+          CGO_LDFLAGS: ${{ matrix.cgo_ldflags || '' }}
           GOARCH: ${{ matrix.goarch }}
           TAGS: ${{ matrix.wails_tags || 'desktop,production' }}
           VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0') }}

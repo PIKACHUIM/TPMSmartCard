@@ -1,0 +1,16 @@
+﻿2026-11-13T07:21:28.0390671Z ##[group]Run $version = $env:VERSION.TrimStart("v")
+2026-11-13T07:21:28.0391177Z [36;1m$version = $env:VERSION.TrimStart("v")[0m
+2026-11-13T07:21:28.0391549Z [36;1m$stage = "dist/TPMSmartCard-$version-windows-arm64"[0m
+2026-11-13T07:21:28.0392009Z [36;1mNew-Item -ItemType Directory -Force -Path $stage | Out-Null[0m
+2026-11-13T07:21:28.0392442Z [36;1mCopy-Item "desktop/dist/TPMSmartCard.exe" $stage[0m
+2026-11-13T07:21:28.0392778Z [36;1mCopy-Item README.md, LICENSE $stage[0m
+2026-11-13T07:21:28.0393081Z [36;1mif (Test-Path "legacy/OpenSC") {[0m
+2026-11-13T07:21:28.0393457Z [36;1m  Copy-Item "legacy/OpenSC" (Join-Path $stage "OpenSC") -Recurse[0m
+2026-11-13T07:21:28.0393810Z [36;1m}[0m
+2026-11-13T07:21:28.0394135Z [36;1mCompress-Archive -Path "$stage/*" -DestinationPath "$stage.zip" -Force[0m
+2026-11-13T07:21:28.0465906Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-13T07:21:28.0466264Z env:
+2026-11-13T07:21:28.0466436Z   MACOS_CERT_P12: 
+2026-11-13T07:21:28.0466680Z   MACOS_CERT_PASSWORD: 
+2026-11-13T07:21:28.0467160Z   VERSION: beta
+2026-11-13T07:21:28.0467476Z ##[endgroup]

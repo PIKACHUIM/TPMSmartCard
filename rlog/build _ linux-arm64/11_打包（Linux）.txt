@@ -1,0 +1,15 @@
+﻿2026-11-13T07:21:54.6180508Z ##[group]Run set -euo pipefail
+2026-11-13T07:21:54.6180867Z [36;1mset -euo pipefail[0m
+2026-11-13T07:21:54.6181098Z [36;1mVERSION="${VERSION#v}"[0m
+2026-11-13T07:21:54.6181392Z [36;1mSTAGE="dist/TPMSmartCard-${VERSION}-linux-arm64"[0m
+2026-11-13T07:21:54.6181777Z [36;1mmkdir -p "$STAGE/usr/bin" "$STAGE/usr/share/applications"[0m
+2026-11-13T07:21:54.6182157Z [36;1mcp desktop/dist/TPMSmartCard "$STAGE/usr/bin/"[0m
+2026-11-13T07:21:54.6182617Z [36;1mcp desktop/packaging/linux/tpmsmartcard.desktop "$STAGE/usr/share/applications/"[0m
+2026-11-13T07:21:54.6183205Z [36;1mcp legacy/Config/iconer/icon01.png "$STAGE/usr/share/applications/tpmsmartcard.png"[0m
+2026-11-13T07:21:54.6183701Z [36;1mtar -czf "$STAGE.tar.gz" -C dist "$(basename "$STAGE")"[0m
+2026-11-13T07:21:54.6205187Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-13T07:21:54.6205513Z env:
+2026-11-13T07:21:54.6205704Z   MACOS_CERT_P12: 
+2026-11-13T07:21:54.6206145Z   MACOS_CERT_PASSWORD: 
+2026-11-13T07:21:54.6206347Z   VERSION: beta
+2026-11-13T07:21:54.6206559Z ##[endgroup]

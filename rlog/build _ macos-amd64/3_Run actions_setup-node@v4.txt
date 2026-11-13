@@ -1,0 +1,33 @@
+﻿2026-11-13T07:20:21.9005330Z ##[group]Run actions/setup-node@v4
+2026-11-13T07:20:21.9006060Z with:
+2026-11-13T07:20:21.9006420Z   node-version: 20
+2026-11-13T07:20:21.9007010Z   cache: npm
+2026-11-13T07:20:21.9007710Z   always-auth: false
+2026-11-13T07:20:21.9008450Z   check-latest: false
+2026-11-13T07:20:21.9013790Z   token: ***
+2026-11-13T07:20:21.9014180Z env:
+2026-11-13T07:20:21.9014490Z   MACOS_CERT_P12: 
+2026-11-13T07:20:21.9015300Z   MACOS_CERT_PASSWORD: 
+2026-11-13T07:20:21.9015870Z ##[endgroup]
+2026-11-13T07:20:22.2596620Z Attempting to download 20...
+2026-11-13T07:20:22.2785660Z (node:1263) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-13T07:20:22.3069810Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-13T07:20:23.8531170Z Acquiring 20.20.2 - x64 from https://github.com/actions/node-versions/releases/download/20.20.2-23521894959/node-20.20.2-darwin-x64.tar.gz
+2026-11-13T07:20:24.9028700Z Extracting ...
+2026-11-13T07:20:24.9346890Z [command]/usr/bin/tar xz --strip 1 -C /Users/runner/work/_temp/8a5e9dad-c156-48dc-9500-aa4e91f97877 -f /Users/runner/work/_temp/59edacbc-7c8b-475c-ba15-730d9e72bdd5
+2026-11-13T07:20:30.1868980Z Adding to the cache ...
+2026-11-13T07:20:39.6626550Z ##[group]Environment details
+2026-11-13T07:20:40.3366980Z node: v20.20.2
+2026-11-13T07:20:40.3367730Z npm: 10.8.2
+2026-11-13T07:20:40.3369000Z yarn: 1.22.22
+2026-11-13T07:20:40.3371340Z ##[endgroup]
+2026-11-13T07:20:40.3425280Z [command]/Users/runner/hostedtoolcache/node/20.20.2/x64/bin/npm config get cache
+2026-11-13T07:20:40.7150170Z /Users/runner/.npm
+2026-11-13T07:20:40.8204380Z Cache hit for: node-cache-macOS-x64-npm-f36c660192915a77f62c974a3bf9ebb5ebb44795edf6ace7f3217926b36fff37
+2026-11-13T07:20:40.8409360Z (node:1263) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-13T07:20:41.9155020Z Received 54525952 of 77976876 (69.9%), 51.7 MBs/sec
+2026-11-13T07:20:42.1192150Z Received 77976876 of 77976876 (100.0%), 61.1 MBs/sec
+2026-11-13T07:20:42.1238590Z Cache Size: ~74 MB (77976876 B)
+2026-11-13T07:20:42.1453690Z [command]/usr/local/bin/gtar -xf /Users/runner/work/_temp/829d4f2d-f5d5-464a-b759-81fab44e5e6e/cache.tzst -P -C /Users/runner/work/TPMSmartCard/TPMSmartCard --delay-directory-restore --use-compress-program unzstd
+2026-11-13T07:20:44.5843310Z Cache restored successfully
+2026-11-13T07:20:44.5908830Z Cache restored from key: node-cache-macOS-x64-npm-f36c660192915a77f62c974a3bf9ebb5ebb44795edf6ace7f3217926b36fff37

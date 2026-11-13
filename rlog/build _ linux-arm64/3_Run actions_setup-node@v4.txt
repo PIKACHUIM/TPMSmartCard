@@ -1,0 +1,32 @@
+﻿2026-11-13T07:20:13.0419224Z ##[group]Run actions/setup-node@v4
+2026-11-13T07:20:13.0419998Z with:
+2026-11-13T07:20:13.0420413Z   node-version: 20
+2026-11-13T07:20:13.0420742Z   cache: npm
+2026-11-13T07:20:13.0421137Z   always-auth: false
+2026-11-13T07:20:13.0421534Z   check-latest: false
+2026-11-13T07:20:13.0424785Z   token: ***
+2026-11-13T07:20:13.0425192Z env:
+2026-11-13T07:20:13.0425507Z   MACOS_CERT_P12: 
+2026-11-13T07:20:13.0425969Z   MACOS_CERT_PASSWORD: 
+2026-11-13T07:20:13.0426352Z ##[endgroup]
+2026-11-13T07:20:13.1692450Z Attempting to download 20...
+2026-11-13T07:20:13.1794549Z (node:2264) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-13T07:20:13.1795740Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-13T07:20:13.7469757Z Acquiring 20.20.2 - arm64 from https://github.com/actions/node-versions/releases/download/20.20.2-23521894959/node-20.20.2-linux-arm64.tar.gz
+2026-11-13T07:20:14.1628460Z Extracting ...
+2026-11-13T07:20:14.1735325Z [command]/usr/bin/tar xz --strip 1 --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/586afeaa-4be5-437c-b19f-2bb221c81eab -f /home/runner/work/_temp/53d67227-5567-40e2-a35f-1f2a23f02fb7
+2026-11-13T07:20:14.9302084Z Adding to the cache ...
+2026-11-13T07:20:16.4835243Z ##[group]Environment details
+2026-11-13T07:20:16.6818132Z node: v20.20.2
+2026-11-13T07:20:16.6818749Z npm: 10.8.2
+2026-11-13T07:20:16.6819212Z yarn: 1.22.22
+2026-11-13T07:20:16.6819921Z ##[endgroup]
+2026-11-13T07:20:16.6837432Z [command]/opt/hostedtoolcache/node/20.20.2/arm64/bin/npm config get cache
+2026-11-13T07:20:16.7826674Z /home/runner/.npm
+2026-11-13T07:20:16.8548989Z Cache hit for: node-cache-Linux-arm64-npm-f36c660192915a77f62c974a3bf9ebb5ebb44795edf6ace7f3217926b36fff37
+2026-11-13T07:20:16.8645616Z (node:2264) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-13T07:20:17.2861493Z Received 79505435 of 79505435 (100.0%), 191.5 MBs/sec
+2026-11-13T07:20:17.2862744Z Cache Size: ~76 MB (79505435 B)
+2026-11-13T07:20:17.2932516Z [command]/usr/bin/tar -xf /home/runner/work/_temp/1ec4ac1c-9080-4ded-a0ad-c2583f5edf72/cache.tzst -P -C /home/runner/work/TPMSmartCard/TPMSmartCard --use-compress-program unzstd
+2026-11-13T07:20:17.4113171Z Cache restored successfully
+2026-11-13T07:20:17.4149327Z Cache restored from key: node-cache-Linux-arm64-npm-f36c660192915a77f62c974a3bf9ebb5ebb44795edf6ace7f3217926b36fff37

@@ -1,0 +1,4 @@
+﻿2026-11-13T07:21:43.5801960Z Post job cleanup.
+2026-11-13T07:21:43.7101288Z (node:8008) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-13T07:21:43.7102629Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-13T07:21:43.7106912Z Cache hit occurred on the primary key node-cache-Windows-x64-npm-95b48a12ee4a43960b37e4ce646228cb5f0bec67bbc2c3c8d0e0a515cde5670e, not saving cache.

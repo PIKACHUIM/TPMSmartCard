@@ -1,0 +1,28 @@
+﻿2026-11-13T07:22:20.9480321Z ##[group]Run actions/upload-artifact@v4
+2026-11-13T07:22:20.9480661Z with:
+2026-11-13T07:22:20.9480860Z   name: linux-amd64
+2026-11-13T07:22:20.9481081Z   path: dist/*.zip
+dist/*.tar.gz
+
+2026-11-13T07:22:20.9481341Z   if-no-files-found: error
+2026-11-13T07:22:20.9481581Z   compression-level: 6
+2026-11-13T07:22:20.9481796Z   overwrite: false
+2026-11-13T07:22:20.9482012Z   include-hidden-files: false
+2026-11-13T07:22:20.9482242Z env:
+2026-11-13T07:22:20.9482419Z   MACOS_CERT_P12: 
+2026-11-13T07:22:20.9482629Z   MACOS_CERT_PASSWORD: 
+2026-11-13T07:22:20.9482843Z ##[endgroup]
+2026-11-13T07:22:21.1237949Z (node:5054) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-13T07:22:21.1238888Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-13T07:22:21.1342926Z With the provided path, there will be 1 file uploaded
+2026-11-13T07:22:21.1346521Z Artifact name is valid!
+2026-11-13T07:22:21.1347277Z Root directory input is valid!
+2026-11-13T07:22:21.4823863Z Beginning upload of artifact content to blob storage
+2026-11-13T07:22:21.6378937Z (node:5054) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-13T07:22:22.2570522Z Uploaded bytes 4469667
+2026-11-13T07:22:22.3151294Z Finished uploading artifact content to blob storage!
+2026-11-13T07:22:22.3152394Z SHA256 digest of uploaded artifact zip is a1544b04d9a8174b1cde656d3f5661557d6eff90903af8170699ecb73ce3f723
+2026-11-13T07:22:22.3154614Z Finalizing artifact upload
+2026-11-13T07:22:22.7071356Z Artifact linux-amd64.zip successfully finalized. Artifact ID 14019015045
+2026-11-13T07:22:22.7073236Z Artifact linux-amd64 has been successfully uploaded! Final size is 4469667 bytes. Artifact ID is 14019015045
+2026-11-13T07:22:22.7079950Z Artifact download URL: https://github.com/PIKACHUIM/TPMSmartCard/actions/runs/43384997571/artifacts/14019015045
