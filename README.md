@@ -112,7 +112,7 @@ node scripts/prepare-ui.mjs          # web/dist → core/ui/dist（go:embed）
 cd core && go test ./... && go run ./cmd/tpmsc doctor
 
 # 4. 桌面端（Windows 可 CGO_ENABLED=0）
-cd desktop/wails && go build -tags desktop -o ../dist/TPMSmartCard .
+cd desktop/wails && go build -tags desktop,production -o ../dist/TPMSmartCard .
 ```
 
 打包与发布：
@@ -124,7 +124,14 @@ powershell -File scripts\package-windows.ps1     # 绿色版 zip（+ 签名钩�
 
 CI：`.github/workflows/build-desktop.yml`（Windows / Linux / macOS × amd64 / arm64）、
 `beta-desktop.yml`（main 滚动更新 `beta` 预发布）、
-`release-desktop.yml`（打 `v2.*` 标签自动发布）、`deploy-worker.yml`（证书下发 Worker）。
+`release-desktop.yml`（打 `v2.<序号>` 标签自动发布）、`deploy-worker.yml`（证书下发 Worker）。
+
+发布通道约定：
+
+| 通道 | 标签 | 产物名 | 说明 |
+|---|---|---|---|
+| beta | `beta`（移动） | `TPMSmartCard-beta-<os>-<arch>` | 每次构建前清空旧资产，只保留最新 |
+| release | `v2.<序号>`（如 `v2.1`） | `TPMSmartCard-2.<序号>-<os>-<arch>` | 两段版本号，`v2.1.0` 会被 CI 拒绝 |
 
 * v2 架构（Go + Wails + Hono）：[架构说明](docs/architecture-v2.md)
 * 协议契约（X25519 / 取件码 / RBAC）：[协议说明](docs/protocol.md)

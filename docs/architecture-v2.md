@@ -89,14 +89,15 @@ node scripts/prepare-ui.mjs          # web/dist → core/ui/dist（go:embed）
 cd core && go test ./... && go build ./cmd/tpmsc
 
 # 桌面端（Windows 可 CGO_ENABLED=0）
-cd desktop/wails && go build -tags desktop -o ../dist/TPMSmartCard .
+cd desktop/wails && go build -tags desktop,production -o ../dist/TPMSmartCard .
 
 # Worker
 npm run test -w @tpmsc/worker
 cd worker && npx wrangler d1 migrations apply tpmsc --remote && npx wrangler deploy
 ```
 
-CI：`.github/workflows/build-desktop-v2.yml`（五条平台线）、`.github/workflows/deploy-worker.yml`。
+CI：`.github/workflows/build-desktop.yml`（三平台 × amd64/arm64）、`beta-desktop.yml`（滚动 beta）、
+`release-desktop.yml`（v2.x 正式版）、`deploy-worker.yml`（Worker）。
 旧的 Python 流水线保留到 P2 验收。
 
 ## 6. 扩展新平台
@@ -104,6 +105,6 @@ CI：`.github/workflows/build-desktop-v2.yml`（五条平台线）、`.github/wo
 1. 新建 `platform/<os>` 包，实现 `platform.Slot`；
 2. 在 `platform/factory/factory_<os>.go` 里注册；
 3. 在 `Capability` 里如实上报支持项；
-4. 补 `go build -tags desktop` 的交叉编译检查。
+4. 补 `go build -tags desktop,production` 的交叉编译检查。
 
 前端零改动：页面只读 `/api/desktop/*` 与 `Capability`。

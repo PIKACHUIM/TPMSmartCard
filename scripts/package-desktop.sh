@@ -32,7 +32,7 @@ LDFLAGS="-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT}"
 
 case "$(uname -s)" in
   Darwin)
-    CGO_ENABLED=1 go build -tags desktop -trimpath -ldflags "$LDFLAGS" -o "$DIST/TPMSmartCard" .
+    CGO_ENABLED=1 go build -tags desktop,production -trimpath -ldflags "$LDFLAGS" -o "$DIST/TPMSmartCard" .
     APP="$DIST/TPMSmartCard.app"
     rm -rf "$APP"
     mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -57,7 +57,7 @@ case "$(uname -s)" in
     (cd "$DIST" && zip -qry "TPMSmartCard-darwin-$(uname -m)-${VERSION}.zip" TPMSmartCard.app)
     ;;
   Linux)
-    CGO_ENABLED=1 go build -tags desktop -trimpath -ldflags "$LDFLAGS" -o "$DIST/TPMSmartCard" .
+    CGO_ENABLED=1 go build -tags desktop,production -trimpath -ldflags "$LDFLAGS" -o "$DIST/TPMSmartCard" .
     PKG="$DIST/tpmsmartcard-${VERSION}-linux-$(uname -m)"
     rm -rf "$PKG"
     mkdir -p "$PKG/usr/bin" "$PKG/usr/share/applications"

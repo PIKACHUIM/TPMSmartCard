@@ -53,7 +53,7 @@ Push-Location (Join-Path $root "desktop\wails")
 $env:CGO_ENABLED = "0"
 $env:GOARCH = $Arch
 $exe = Join-Path $dist "TPMSmartCard-windows-$Arch.exe"
-go build -tags desktop -trimpath `
+go build -tags desktop,production -trimpath `
   -ldflags "-s -w -H windowsgui -X main.Version=$Version -X main.Commit=$commit" `
   -o $exe .
 Assert-LastExit "go build"

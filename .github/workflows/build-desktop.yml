@@ -68,7 +68,9 @@ jobs:
             goarch: arm64
             cgo: "1"
             webkit: "4.1"
-            wails_tags: "desktop,webkit2_41"
+            # Wails 需要 production（或 dev）才能真正链接运行时；
+            # desktop 是我们自己的 embed 标签，两者缺一不可。
+            wails_tags: "desktop,production,webkit2_41"
           # macOS 13 runner 已进入退役流程，改用 macos-15-intel / macos-15
           - name: macos-amd64
             os: macos-15-intel
@@ -139,8 +141,8 @@ jobs:
         env:
           CGO_ENABLED: ${{ matrix.cgo }}
           GOARCH: ${{ matrix.goarch }}
-          TAGS: ${{ matrix.wails_tags || 'desktop' }}
-          VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0') }}
+          TAGS: ${{ matrix.wails_tags || 'desktop,production' }}
+          VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0') }}
         run: |
           set -euo pipefail
           EXT=""
@@ -154,7 +156,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0') }}
+          VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0') }}
         run: |
           $version = $env:VERSION.TrimStart("v")
           $stage = "dist/TPMSmartCard-$version-windows-${{ matrix.goarch }}"
@@ -170,7 +172,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         env:
-          VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0') }}
+          VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0') }}
         run: |
           set -euo pipefail
           VERSION="${VERSION#v}"
@@ -190,7 +192,7 @@ jobs:
           MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
           MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
           MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
-          VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0') }}
+          VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0') }}
         run: |
           set -euo pipefail
           VERSION="${VERSION#v}"

@@ -69,7 +69,7 @@
 | 前端构建 | ✅ `tsc -b && vite build` 通过 |
 | Go 单元测试 | ✅ crypto / cloud / backup 全部通过 |
 | 跨平台编译 | ✅ `GOOS=linux`、`GOOS=darwin` 均通过 |
-| Wails 桌面端 | ✅ `go build -tags desktop` 通过（含 Windows 托盘） |
+| Wails 桌面端 | ✅ `go build -tags desktop,production` 通过（含 Windows 托盘） |
 | 本地 API 契约 | ✅ 4 用例（CSRF 401 / 建卡 / 证书 / 统计） |
 | 实机启动（Windows） | ✅ `tpmsc serve`：`/` 返回 200，TPM 2.0 就绪，枚举到 `ROOT\SMARTCARDREADER\0000`，未提权时能力正确置灰 |
 | 随包 OpenSC | ✅ 自动从 `OpenSC/`（程序同级）发现 `pkcs15-tool`，读卡器名称自动匹配，Windows 只显示一个卡槽 |
