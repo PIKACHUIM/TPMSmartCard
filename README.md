@@ -119,8 +119,23 @@ cd desktop/wails && go build -tags desktop,production -o ../dist/TPMSmartCard .
 
 ```bash
 powershell -File scripts\package-windows.ps1     # 绿色版 zip（+ 签名钩子）
-./scripts/package-desktop.sh 2.0.0               # Linux tar.gz / macOS .app（+ 公证钩子）
+./scripts/package-desktop.sh 2.0                 # Linux tar.gz / macOS .app（+ 公证钩子）
 ```
+
+### VS Code 一键运行
+
+仓库内置 `.vscode/tasks.json` 与 `.vscode/launch.json`，安装推荐扩展（Golang、Tailwind CSS IntelliSense）后：
+
+| 操作 | 说明 |
+|---|---|
+| `F5` → **Desktop (Wails)** | 自动构建前端 → 同步 `go:embed` → dlv 以 `desktop,production` 启动桌面端 |
+| `F5` → **Core API (serve :1026)** | 调试本地 API，浏览器打开 `http://127.0.0.1:1026` |
+| 任务 **desktop: run** | 构建后直接启动 exe（不挂调试器） |
+| 任务 **web: dev** / **worker: dev** | 前端 5173 / Worker 8787（`/api`、`/card` 已代理） |
+| 任务 **package: windows** | 生成绿色版 zip |
+| 任务 **test: go** / **test: worker** | 跑单元测试 |
+
+> 桌面端必须带 `desktop,production` 两个标签，缺一个都会弹 Wails 的 “correct build tags” 提示框。
 
 CI：`.github/workflows/build-desktop.yml`（Windows / Linux / macOS × amd64 / arm64）、
 `beta-desktop.yml`（main 滚动更新 `beta` 预发布）、

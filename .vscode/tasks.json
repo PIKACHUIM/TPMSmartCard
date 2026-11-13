@@ -1,0 +1,169 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "ui: build",
+      "detail": "构建 React 前端（web/dist）",
+      "type": "shell",
+      "command": "npm run build -w @tpmsc/web",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "ui: sync",
+      "detail": "把 web/dist 同步到 core/ui/dist（go:embed）",
+      "type": "shell",
+      "command": "node scripts/prepare-ui.mjs",
+      "options": { "cwd": "${workspaceFolder}" },
+      "dependsOn": ["ui: build"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "desktop: prepare",
+      "detail": "只构建并同步前端产物（F5 调试由 dlv 负责编译 Go）",
+      "dependsOn": ["ui: sync"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "desktop: build",
+      "detail": "构建 Wails 桌面端（desktop,production 标签）",
+      "type": "shell",
+      "command": "go build -tags \"desktop,production\" -o \"${workspaceFolder}/desktop/dist/TPMSmartCard-dev.exe\" .",
+      "windows": {
+        "command": "go build -tags \"desktop,production\" -o \"${workspaceFolder}/desktop/dist/TPMSmartCard-dev.exe\" ."
+      },
+      "linux": {
+        "command": "go build -tags \"desktop,production\" -o \"${workspaceFolder}/desktop/dist/TPMSmartCard-dev\" ."
+      },
+      "osx": {
+        "command": "go build -tags \"desktop,production\" -o \"${workspaceFolder}/desktop/dist/TPMSmartCard-dev\" ."
+      },
+      "options": { "cwd": "${workspaceFolder}/desktop/wails" },
+      "dependsOn": ["ui: sync"],
+      "dependsOrder": "sequence",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "desktop: run",
+      "detail": "构建并启动桌面端（单实例：重复运行会直接退出）",
+      "type": "shell",
+      "command": "Start-Process \"${workspaceFolder}/desktop/dist/TPMSmartCard-dev.exe\"",
+      "windows": {
+        "command": "Start-Process \"${workspaceFolder}/desktop/dist/TPMSmartCard-dev.exe\""
+      },
+      "linux": { "command": "\"${workspaceFolder}/desktop/dist/TPMSmartCard-dev\"" },
+      "osx": { "command": "\"${workspaceFolder}/desktop/dist/TPMSmartCard-dev\"" },
+      "dependsOn": ["desktop: build"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "core: serve",
+      "detail": "启动本地 API（http://127.0.0.1:1026）",
+      "type": "shell",
+      "command": "go run ./cmd/tpmsc serve -addr 127.0.0.1:1026",
+      "options": { "cwd": "${workspaceFolder}/core" },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "tpmsc-serve",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "本地 API",
+          "endsPattern": "本地 API"
+        }
+      }
+    },
+    {
+      "label": "web: dev",
+      "detail": "Vite 开发服务器（5173，/api 代理到 Worker 8787）",
+      "type": "shell",
+      "command": "npm run dev -w @tpmsc/web",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE v",
+          "endsPattern": "ready in"
+        }
+      }
+    },
+    {
+      "label": "worker: dev",
+      "detail": "本地 Worker（8787，D1/KV 走本地模拟）",
+      "type": "shell",
+      "command": "npx wrangler dev --port 8787 --local",
+      "options": { "cwd": "${workspaceFolder}/worker" },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "wrangler",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "wrangler",
+          "endsPattern": "Ready on"
+        }
+      }
+    },
+    {
+      "label": "worker: migrate (local)",
+      "detail": "在本地 D1 上执行迁移",
+      "type": "shell",
+      "command": "npx wrangler d1 migrations apply tpmsc --local",
+      "options": { "cwd": "${workspaceFolder}/worker" },
+      "problemMatcher": []
+    },
+    {
+      "label": "test: go",
+      "detail": "运行 Go 全部单元测试",
+      "type": "shell",
+      "command": "go test ./...",
+      "options": { "cwd": "${workspaceFolder}/core" },
+      "group": "test",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "test: worker",
+      "detail": "运行 Worker 单元测试",
+      "type": "shell",
+      "command": "npm run test -w @tpmsc/worker",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "test: web typecheck",
+      "detail": "前端类型检查（tsc -b）",
+      "type": "shell",
+      "command": "npm run build -w @tpmsc/web",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "package: windows",
+      "detail": "生成 Windows 绿色版 zip（dist/）",
+      "type": "shell",
+      "command": "powershell -NoProfile -File scripts/package-windows.ps1 -Version 2.0",
+      "windows": {
+        "command": "powershell -NoProfile -File scripts/package-windows.ps1 -Version 2.0"
+      },
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "build: all",
+      "detail": "前端 + 桌面端 + Go 测试",
+      "dependsOn": ["desktop: build", "test: go", "test: worker"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}
