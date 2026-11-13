@@ -1,8 +1,0 @@
-﻿2026-11-13T07:21:55.9527326Z Post job cleanup.
-2026-11-13T07:21:56.0639489Z (node:5489) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
-2026-11-13T07:21:56.0640349Z (Use `node --trace-deprecation ...` to show where the warning was created)
-2026-11-13T07:21:56.0735792Z [command]/opt/hostedtoolcache/go/1.23.12/arm64/bin/go env GOMODCACHE
-2026-11-13T07:21:56.0765202Z [command]/opt/hostedtoolcache/go/1.23.12/arm64/bin/go env GOCACHE
-2026-11-13T07:21:56.0812867Z /home/runner/go/pkg/mod
-2026-11-13T07:21:56.0817696Z /home/runner/.cache/go-build
-2026-11-13T07:21:56.0837831Z Cache hit occurred on the primary key setup-go-Linux-arm64-ubuntu24-arm64-go-1.23.12-f7cc83d503f290b39402df3eef4e021541970e69e3f88d47979a90830df5a5dc, not saving cache.

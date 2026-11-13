@@ -1,8 +1,0 @@
-﻿2026-11-13T07:21:43.3334487Z Post job cleanup.
-2026-11-13T07:21:43.4566457Z (node:7496) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
-2026-11-13T07:21:43.4567144Z (Use `node --trace-deprecation ...` to show where the warning was created)
-2026-11-13T07:21:43.5130782Z [command]C:\hostedtoolcache\windows\go\1.23.12\x64\bin\go.exe env GOCACHE
-2026-11-13T07:21:43.5191913Z [command]C:\hostedtoolcache\windows\go\1.23.12\x64\bin\go.exe env GOMODCACHE
-2026-11-13T07:21:43.5491907Z C:\Users\runneradmin\AppData\Local\go-build
-2026-11-13T07:21:43.5545101Z C:\Users\runneradmin\go\pkg\mod
-2026-11-13T07:21:43.5565613Z Cache hit occurred on the primary key setup-go-Windows-x64-go-1.23.12-d67ce6c799a4bf45af4bf4f7d8492fc2a4c809360f61322a7095c7d9974cfea4, not saving cache.
