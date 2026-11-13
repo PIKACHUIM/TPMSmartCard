@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
+	"unicode/utf16"
 
 	"github.com/PIKACHUIM/tpmsmartcard/internal/platform"
 	"github.com/PIKACHUIM/tpmsmartcard/internal/platform/p11"
@@ -101,11 +103,36 @@ func (s *Slot) Create(ctx context.Context, opt platform.CreateOptions) (platform
 	if opt.Name == "" || opt.PIN == "" {
 		return platform.Card{}, fmt.Errorf("%w: 卡片名与 PIN 不能为空", platform.ErrPinRequired)
 	}
-	// tpmvscmgr 的 PIN 只能通过参数或交互输入；参数形式会在进程列表短暂可见，
-	// 因此文档要求建卡期间不要共享桌面。
-	args := []string{"create", "/name", opt.Name, "/pin", opt.PIN, "/adminkey", "random", "/generate"}
-	if _, err := run(ctx, tpmvscMgrPath(), args...); err != nil {
+	// tpmvscmgr 只接受 PROMPT|DEFAULT|RANDOM，不能把 PIN 写在命令行上；
+	// 用 ConPTY 回答它的交互提示（等价 v1 的 PtyCompat）。
+	args := []string{"create", "/name", opt.Name, "/adminkey", "RANDOM"}
+	answers := make([]string, 0, 4)
+	if len(opt.PUK) >= 8 {
+		args = append(args, "/puk", "PROMPT")
+		answers = append(answers, opt.PUK, opt.PUK)
+	}
+	args = append(args, "/pin", "PROMPT", "/generate")
+	answers = append(answers, opt.PIN, opt.PIN)
+
+	if _, err := runInteractive(ctx, tpmvscMgrPath(), args, answers, 5*time.Minute); err != nil {
 		return platform.Card{}, err
+	}
+
+	// 枚举一次，拿到真实的 PnP 实例 ID（删卡/改 PIN 都需要它）
+	if readers, err := listReaders(ctx); err == nil {
+		for _, reader := range readers {
+			if strings.EqualFold(reader.Name, opt.Name) {
+				return platform.Card{
+					ID:        reader.InstanceID,
+					Name:      reader.Name,
+					Kind:      platform.KindWindowsVSC,
+					Platform:  "windows",
+					Security:  platform.SecurityHigh,
+					Reader:    reader.Name,
+					CreatedAt: platform.Now(),
+				}, nil
+			}
+		}
 	}
 	return platform.Card{
 		ID:        opt.Name,
@@ -129,12 +156,24 @@ func (s *Slot) Delete(ctx context.Context, id string) error {
 }
 
 func (s *Slot) SetPIN(ctx context.Context, id, oldPIN, newPIN string) error {
-	if isRemoteSession() {
-		return platform.ErrRemoteSession
+	if s.p11 == nil {
+		return platform.Unsupported("改 PIN 需要 OpenSC 的 pkcs15-tool")
 	}
-	// 新版 tpmvscmgr 支持 changePin；旧版会返回用法错误，调用方据此提示改用控制面板
-	_, err := run(ctx, tpmvscMgrPath(), "changePin", "/instance", id, "/pin", newPIN)
-	return err
+	if oldPIN == "" || newPIN == "" {
+		return fmt.Errorf("%w: 需要当前 PIN 与新 PIN", platform.ErrPinRequired)
+	}
+	// tpmvscmgr 没有 changePin 子命令；v1 走 pkcs15-tool --change-pin
+	name := id
+	if readers, err := listReaders(ctx); err == nil {
+		for _, reader := range readers {
+			if reader.InstanceID == id || strings.EqualFold(reader.Name, id) {
+				name = reader.Name
+				break
+			}
+		}
+	}
+	s.p11.SetReader(s.p11.MatchReader(ctx, name))
+	return s.p11.ChangePIN(ctx, oldPIN, newPIN)
 }
 
 func (s *Slot) ListCertificates(ctx context.Context, cardID string) ([]platform.Certificate, error) {
@@ -245,7 +284,7 @@ func run(ctx context.Context, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}
 	out, err := cmd.CombinedOutput()
-	text := strings.TrimSpace(string(out))
+	text := decodeConsole(out)
 	if err != nil {
 		if text == "" {
 			text = err.Error()
@@ -253,4 +292,18 @@ func run(ctx context.Context, name string, args ...string) (string, error) {
 		return "", fmt.Errorf("%s 执行失败: %s", filepath.Base(name), text)
 	}
 	return text, nil
+}
+
+// decodeConsole 处理 Windows 控制台程序的两种常见编码：
+//   - tpmvscmgr 输出 UTF-16LE（字节间夹 0）
+//   - PowerShell 已被要求输出 UTF-8
+func decodeConsole(raw []byte) string {
+	if len(raw) >= 2 && raw[1] == 0 {
+		units := make([]uint16, 0, len(raw)/2)
+		for i := 0; i+1 < len(raw); i += 2 {
+			units = append(units, uint16(raw[i])|uint16(raw[i+1])<<8)
+		}
+		return strings.TrimSpace(string(utf16.Decode(units)))
+	}
+	return strings.TrimSpace(string(raw))
 }

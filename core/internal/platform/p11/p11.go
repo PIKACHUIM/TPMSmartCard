@@ -344,7 +344,23 @@ func (b *Backend) Delete(ctx context.Context, id string) error {
 	return platform.Unsupported("OpenSC 后端不负责删卡")
 }
 func (b *Backend) SetPIN(ctx context.Context, id, oldPIN, newPIN string) error {
-	return platform.Unsupported("OpenSC 后端暂不支持改 PIN")
+	return b.ChangePIN(ctx, oldPIN, newPIN)
+}
+
+// ChangePIN 用 pkcs15-tool 修改用户 PIN（命令行传参，不需要交互）。
+func (b *Backend) ChangePIN(ctx context.Context, oldPIN, newPIN string) error {
+	if b.pkcs15 == "" {
+		return platform.Unsupported("未找到 pkcs15-tool，无法修改 PIN")
+	}
+	if oldPIN == "" || newPIN == "" {
+		return platform.ErrPinRequired
+	}
+	args := []string{"--change-pin", "--pin", oldPIN, "--new-pin", newPIN}
+	if b.reader != "" {
+		args = append(args, "--reader", b.reader)
+	}
+	_, err := run(ctx, b.pkcs15, args...)
+	return err
 }
 func (b *Backend) GenerateKey(ctx context.Context, cardID string, opt platform.KeyOptions) (platform.PublicKey, error) {
 	return platform.PublicKey{}, platform.Unsupported("密钥在卡片内生成，CSR 需由 PKCS#11 引擎完成")
