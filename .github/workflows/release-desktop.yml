@@ -18,6 +18,7 @@ permissions:
 jobs:
   build:
     uses: ./.github/workflows/build-desktop.yml
+    secrets: inherit
 
   release:
     needs: build

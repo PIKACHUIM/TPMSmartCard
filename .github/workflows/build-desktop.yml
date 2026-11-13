@@ -10,6 +10,21 @@ on:
         required: false
         type: string
         default: ""
+    secrets:
+      MACOS_CERT_P12:
+        required: false
+      MACOS_CERT_PASSWORD:
+        required: false
+      MACOS_SIGN_IDENTITY:
+        required: false
+      MACOS_NOTARY_PROFILE:
+        required: false
+      MACOS_NOTARY_APPLE_ID:
+        required: false
+      MACOS_NOTARY_TEAM_ID:
+        required: false
+      MACOS_NOTARY_PASSWORD:
+        required: false
   workflow_dispatch:
 
 # 注意：main 的日常构建由 beta-desktop.yml 负责。
@@ -26,6 +41,10 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    # 供步骤里的 if 判断使用（GitHub 不允许直接在 if 中引用 secrets）
+    env:
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
     strategy:
       fail-fast: false
       matrix:
@@ -97,6 +116,23 @@ jobs:
         working-directory: core
         run: go test ./...
 
+      - name: 导入 macOS 签名证书（可选）
+        if: runner.os == 'macOS' && env.MACOS_CERT_P12 != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p actions build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import "$RUNNER_TEMP/cert.p12" -k build.keychain \
+            -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k actions build.keychain
+          security list-keychains -d user -s build.keychain \
+            $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+
       - name: 构建桌面端
         working-directory: desktop/wails
         shell: bash
@@ -151,6 +187,9 @@ jobs:
         env:
           MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
           MACOS_NOTARY_PROFILE: ${{ secrets.MACOS_NOTARY_PROFILE }}
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
           VERSION: ${{ inputs.version != '' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '2.0.0') }}
         run: |
           set -euo pipefail
@@ -171,6 +210,16 @@ jobs:
               xcrun notarytool submit "dist/notarize.zip" --keychain-profile "$MACOS_NOTARY_PROFILE" --wait
               xcrun stapler staple "$APP"
               rm -f "dist/notarize.zip"
+            elif [ -n "${MACOS_NOTARY_APPLE_ID:-}" ] && [ -n "${MACOS_NOTARY_PASSWORD:-}" ]; then
+              ditto -c -k --keepParent "$APP" "dist/notarize.zip"
+              xcrun notarytool submit "dist/notarize.zip" \
+                --apple-id "$MACOS_NOTARY_APPLE_ID" \
+                --team-id "$MACOS_NOTARY_TEAM_ID" \
+                --password "$MACOS_NOTARY_PASSWORD" --wait
+              xcrun stapler staple "$APP"
+              rm -f "dist/notarize.zip"
+            else
+              echo "::warning::未配置公证凭据：产物已签名但未公证"
             fi
           else
             echo "::warning::未配置 MACOS_SIGN_IDENTITY：Secure Enclave 将降级为软件密钥"
