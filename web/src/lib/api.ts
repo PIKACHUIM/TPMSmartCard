@@ -189,6 +189,20 @@ export const api = {
     });
   },
 
+  /** 现场诊断：能力矩阵、设备枚举与备份计数，不含 PIN/取件码/私钥。 */
+  diagnostics(): Promise<Record<string, unknown>> {
+    if (useAppStore.getState().demo) {
+      return Promise.resolve({
+        demo: true,
+        generated_at: new Date().toISOString(),
+        version: "2.0.0",
+        platform: "windows",
+        warnings: [],
+      });
+    }
+    return request("/api/v1/desktop/diagnostics");
+  },
+
   autostart(): Promise<{ enabled: boolean; detail: string; args: string }> {
     return withDemo("/api/v1/desktop/autostart", () => ({ enabled: true, detail: "", args: "--minimized" }));
   },

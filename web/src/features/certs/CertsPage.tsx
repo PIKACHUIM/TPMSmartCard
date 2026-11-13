@@ -7,6 +7,31 @@ import { Badge, Button, EmptyState, Panel, SectionTitle, Spinner } from "@/compo
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { CertImportModal } from "./CertImportModal";
 
+/**
+ * 用卡上现有证书拼出签发链：从终端实体沿 issuer → subject 向上找。
+ * 找不到上级时不伪造根 CA，明确提示「签发者不在卡上」。
+ */
+function buildChain(leaf: CertificateInfo, all: CertificateInfo[]) {
+  const nodes: CertificateInfo[] = [];
+  const seen = new Set<string>();
+  let cursor: CertificateInfo | undefined = leaf;
+  while (cursor && nodes.length < 6 && !seen.has(cursor.subject)) {
+    nodes.push(cursor);
+    seen.add(cursor.subject);
+    const issuerName: string = cursor.issuer;
+    cursor = all.find((item) => item.subject === issuerName && item.id !== cursor!.id);
+  }
+  return nodes
+    .map((node, index) => ({
+      id: node.id,
+      value: node.subject,
+      issuer: node.issuer,
+      label: index === 0 ? "终端实体" : node.subject === node.issuer ? "根 CA" : "中级 CA",
+      tone: (index === 0 ? "ok" : node.subject === node.issuer ? "muted" : "info") as "ok" | "muted" | "info",
+    }))
+    .reverse();
+}
+
 function downloadPEM(name: string, pem: string) {
   const blob = new Blob([pem], { type: "application/x-pem-file" });
   const url = URL.createObjectURL(blob);
@@ -79,6 +104,7 @@ export function CertsPage() {
   if (!certs) return <Spinner label="正在读取证书链与密钥用法…" />;
 
   const current = rows.find((cert) => cert.id === selected) ?? rows[0] ?? null;
+  const chain = current ? buildChain(current, certs ?? []) : [];
 
   const columns: Column<CertificateInfo>[] = [
     {
@@ -223,18 +249,27 @@ export function CertsPage() {
 
           <Panel>
             <SectionTitle title="证书链" hint="按签发关系自上而下" />
-            <ol className="grid gap-0">
-              {[
-                { label: "根 CA", value: "Example Root CA 2026", tone: "muted" as const },
-                { label: "中级 CA", value: "Example Issuing CA", tone: "info" as const },
-                { label: "终端实体", value: current.subject, tone: "ok" as const },
-              ].map((item) => (
-                <li key={item.label} className="flex items-start gap-3 border-b border-line/40 py-2.5 last:border-none">
-                  <Badge tone={item.tone}>{item.label}</Badge>
-                  <span className="min-w-0 flex-1 break-words font-mono text-[11.5px] text-ink-2">{item.value}</span>
-                </li>
-              ))}
-            </ol>
+            {chain.length > 1 ? (
+              <ol className="grid gap-0">
+                {chain.map((item) => (
+                  <li key={item.id} className="flex items-start gap-3 border-b border-line/40 py-2.5 last:border-none">
+                    <Badge tone={item.tone}>{item.label}</Badge>
+                    <span className="min-w-0 flex-1 break-words">
+                      <span className="block font-mono text-[11.5px] text-ink-2">{item.value}</span>
+                      <span className="block truncate text-[10.5px] text-ink-3">签发者：{item.issuer}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="rounded-control border border-line/70 bg-graphite-0/40 px-3 py-2.5">
+                <p className="text-[12px] text-ink-1">签发者不在卡片上</p>
+                <p className="mt-1 break-words font-mono text-[10.5px] text-ink-3">{current.issuer}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-ink-3">
+                  导入中级 CA 证书后会在这里显示完整链；不影响私钥使用。
+                </p>
+              </div>
+            )}
           </Panel>
         </div>
       ) : (

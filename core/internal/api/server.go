@@ -66,6 +66,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/desktop/backups", s.handleListBackups)
 	mux.HandleFunc("POST /api/v1/desktop/backups", s.handleCreateBackup)
 	mux.HandleFunc("POST /api/v1/desktop/backups/{file}/restore", s.handleRestoreBackup)
+	mux.HandleFunc("GET /api/v1/desktop/diagnostics", s.handleDiagnostics)
 	mux.HandleFunc("GET /api/v1/desktop/autostart", s.handleAutostart)
 	mux.HandleFunc("POST /api/v1/desktop/autostart", s.handleSetAutostart)
 	mux.HandleFunc("GET /api/v1/events", s.handleEvents)

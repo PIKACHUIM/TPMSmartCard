@@ -599,6 +599,47 @@ func safePart(value string) string {
 	return mapped
 }
 
+// handleDiagnostics 输出可直接附在 issue 里的现场信息。
+//
+// 明确不包含：PIN、取件码、证书私钥、备份内容。只含能力矩阵与设备枚举结果。
+func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	var slots []platform.SlotInfo
+	var warnings []string
+	for _, slot := range s.opts.SlotsFunc() {
+		info, err := slot.Info(ctx)
+		if err != nil {
+			warnings = append(warnings, slot.ID()+": "+err.Error())
+			continue
+		}
+		slots = append(slots, info)
+	}
+
+	cards, catalogWarnings := s.catalog(ctx)
+	warnings = append(warnings, catalogWarnings...)
+
+	backupCount := 0
+	if s.opts.BackupsDir != "" {
+		if files, err := filepath.Glob(filepath.Join(s.opts.BackupsDir, "*.tsb")); err == nil {
+			backupCount = len(files)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"generated_at": platform.Now(),
+		"version":      s.opts.Version,
+		"platform":     platformOf(s.opts.Platform),
+		"runtime":      runtime.Version(),
+		"slots":        slots,
+		"cards":        cards,
+		"backups":      backupCount,
+		"warnings":     warnings,
+		"backup_dir":   s.opts.BackupsDir,
+	})
+}
+
 func (s *Server) handleAutostart(w http.ResponseWriter, r *http.Request) {
 	enabled, detail, err := autostart.Status()
 	if err != nil && !errors.Is(err, autostart.ErrUnsupported) {

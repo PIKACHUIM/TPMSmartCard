@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Cloud, Info, MonitorCog, Moon, Sun, TerminalSquare } from "lucide-react";
+import { Cloud, FileDown, Info, MonitorCog, Moon, Sun, TerminalSquare } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
 import { LANGUAGES, setLanguage, type LanguageCode } from "@/lib/i18n";
@@ -28,6 +28,22 @@ export function SettingsPage() {
       .then((result) => setAutostart(result.enabled))
       .catch((err) => console.error("autostart read failed", err));
   }, []);
+
+  const exportDiagnostics = () => {
+    api
+      .diagnostics()
+      .then((data) => {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `tpmsc-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+        pushToast({ kind: "ok", title: "诊断信息已导出", detail: "不含 PIN、取件码或私钥" });
+      })
+      .catch((err: Error) => pushToast({ kind: "err", title: "导出诊断失败", detail: err.message }));
+  };
 
   const toggleAutostart = (enabled: boolean) => {
     setAutostart(enabled);
@@ -177,7 +193,16 @@ export function SettingsPage() {
             </div>
           ))}
         </dl>
-        <p className="mt-4 border-t border-line/60 pt-3 font-mono text-[10.5px] leading-relaxed text-ink-3">
+        <div className="mt-4 border-t border-line/60 pt-3">
+          <Button size="sm" icon={<FileDown className="h-3.5 w-3.5" />} onClick={exportDiagnostics}>
+            导出诊断信息
+          </Button>
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
+            生成 JSON：平台能力、设备枚举、备份计数与警告；可直接附在问题反馈里，不含密钥材料。
+          </p>
+        </div>
+
+        <p className="mt-3 font-mono text-[10.5px] leading-relaxed text-ink-3">
           Go 1.23 · Wails v2 · React 18 · Hono on Cloudflare Workers
           <br />
           协议：X25519 + AES-256-CBC（零 IV）· PBKDF2-SHA256 取件码

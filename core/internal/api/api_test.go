@@ -321,6 +321,32 @@ func TestImportAndExportCertificate(t *testing.T) {
 	}
 }
 
+func TestDiagnosticsContainsNoSecrets(t *testing.T) {
+	ts, slot := newTestServer(t)
+	if _, err := slot.Create(context.Background(), platform.CreateOptions{Name: "诊断卡", PIN: "123456"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var payload envelope[map[string]any]
+	if status := getJSON(t, ts.URL+"/api/v1/desktop/diagnostics", &payload); status != http.StatusOK {
+		t.Fatalf("status = %d", status)
+	}
+	if payload.Data["version"] != "test" {
+		t.Fatalf("version = %v", payload.Data["version"])
+	}
+	cards, _ := payload.Data["cards"].([]any)
+	if len(cards) != 1 {
+		t.Fatalf("cards = %v", payload.Data["cards"])
+	}
+	raw, _ := json.Marshal(payload.Data)
+	// 只检查真正的敏感内容；"set_pin" 这类能力字段名不算泄露
+	for _, forbidden := range []string{"123456", "vaults", "pfxkey", "private_key"} {
+		if strings.Contains(strings.ToLower(string(raw)), forbidden) {
+			t.Fatalf("diagnostics leaked %q: %s", forbidden, raw)
+		}
+	}
+}
+
 func TestBackupAndRestore(t *testing.T) {
 	ts, slot := newTestServer(t)
 	slot.exportPEM = selfSignedPEM(t)
