@@ -1,8 +1,4 @@
-# 架构说明（v1 / Python）
-
-> [!WARNING]
-> 本文描述的是 **v1（Python / Tkinter / Flask）** 的结构，代码已归档到 [`legacy/`](https://github.com/PIKACHUIM/TPMSmartCard/tree/main/legacy)。
-> v2 的架构（Go 核心 + Wails 外壳 + React 前端 + Hono Worker）见 [架构说明（v2）](architecture-v2.md)。
+# 架构说明
 
 > 定位：把「TPM 虚拟智能卡管理工具」的结构讲清楚 —— 有哪些进程、代码怎么分层、界面与配置怎么驱动、
 > 依赖哪些系统组件、数据落在哪里。设计细节见 [`design-backup-restore.md`](design-backup-restore.md)。

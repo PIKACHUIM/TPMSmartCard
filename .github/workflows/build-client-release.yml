@@ -1,0 +1,500 @@
+name: Build Client Release
+
+# 一个文件覆盖两条发布路径：
+#   1) 推送到 main            → 自动构建并覆盖发布到 beta（滚动预发布版）
+#   2) 手动 workflow_dispatch → 填写版本号，发布正式 Release（可选草稿）
+#
+# 构建内容（Windows x64）：
+#   - cx_Freeze 绿色版 zip
+#   - Inno Setup 安装包（VC++ 运行库与 OpenSC 默认安装；SSH 密钥代理可在安装时勾选）
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: '发布目标：beta = 滚动预发布版；release = 正式版'
+        type: choice
+        options: [ beta, release ]
+        default: beta
+      version:
+        description: '版本号（channel=release 时必填，例如 1.6.0 或 v1.6.2026.1012）'
+        required: false
+        type: string
+      draft:
+        description: 'channel=release 时以草稿方式创建（稍后手动公开）'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# Certum 云签名（Certum SimplySign）所需的凭据，全部走 Repository Secrets：
+#   CERTUM_USERNAME            SimplySign 登录账号
+#   CERTUM_OTP_URI             otpauth:// URI（含 TOTP 密钥），用于无人值守登录
+#   CERTUM_CERTIFICATE_SHA1    云证书指纹（= Tauri 的 certificateThumbprint）
+# 三个都配齐才会签名；缺任何一个都只构建不签名（并给出警告），不会让流水线失败。
+# 签名资源来自参考项目 OpenListTeam/OpenList-Desktop 的 Windows 签名方案：
+# 装 SimplySign Desktop → 注册表预配置 → TOTP 自动登录 → signtool 用证书指纹签名。
+env:
+  CERTUM_OTP_URI: ${{ secrets.CERTUM_OTP_URI }}
+  CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+  CERTUM_CERTIFICATE_SHA1: ${{ secrets.CERTUM_CERTIFICATE_SHA1 }}
+
+concurrency:
+  # 推送触发的 beta 构建只保留最新一次；手动发布单独分组，避免被取消
+  group: ${{ github.event_name == 'push' && 'client-beta-build' || 'client-release-build' }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  # 解析发布目标与版本号（release 时顺带校验版本唯一性）
+  prepare:
+    name: Resolve target
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.resolve.outputs.channel }}
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Resolve
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          channel="$INPUT_CHANNEL"
+          if [[ "$EVENT" == "push" ]]; then
+            channel="beta"
+          fi
+
+          if [[ "$channel" != "release" ]]; then
+            echo "channel=beta" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+            echo "target: beta"
+            exit 0
+          fi
+
+          version="${INPUT_VERSION#v}"
+          version="${version#V}"
+          if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error::版本号格式不正确：${INPUT_VERSION}（应形如 1.6.0 或 1.6.2026.1012）"
+            exit 1
+          fi
+          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release v$version 已存在，请更换版本号或先删除旧 Release"
+            exit 1
+          fi
+
+          echo "channel=release" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "target: release v$version"
+
+  # 构建：cx_Freeze 绿色版 + Inno Setup 安装包
+  build:
+    name: Build Windows x64
+    needs: prepare
+    runs-on: windows-latest
+    outputs:
+      artifact: ${{ steps.pack.outputs.artifact }}
+      package: ${{ steps.pack.outputs.package }}
+      setup: ${{ steps.iscc.outputs.setup }}
+    env:
+      # 与 install.iss 默认引用的 build/exe.win-amd64-* 保持一致，方便把 CI 产物继续用于本地打安装包。
+      # 3.13 是官方仍支持 Windows 8.1 的较新版本（官方要求 8.1+，Win7 需 3.8）；
+      # 3.14 上 cx_Freeze 的依赖 cx_Logging 还没有 cp314 轮子，所以这条线留在 3.13。
+      PYTHON_VERSION: '3.13'
+      # runner 控制台是 cp1252，显式 UTF-8 输出，避免签名/构建日志里的中文变乱码
+      PYTHONIOENCODING: utf-8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 三个 CERTUM_* Secrets 齐了才启用签名；同时把「必须签名成功」打开，
+      # 避免某次认证失败后静默发布未签名产物
+      - name: Detect Certum signing secrets
+        id: signing
+        shell: pwsh
+        run: |
+          if ($env:CERTUM_CERTIFICATE_SHA1 -and $env:CERTUM_OTP_URI -and $env:CERTUM_USERNAME) {
+            "TPMSMART_SIGN_ENABLED=1" >> $env:GITHUB_ENV
+            "TPMSMART_SIGN_REQUIRED=1" >> $env:GITHUB_ENV
+            Write-Host "Certum 云签名已启用（证书指纹 $env:CERTUM_CERTIFICATE_SHA1）"
+          } else {
+            "TPMSMART_SIGN_ENABLED=0" >> $env:GITHUB_ENV
+            Write-Host "::warning title=未启用代码签名::缺少 CERTUM_USERNAME / CERTUM_OTP_URI / CERTUM_CERTIFICATE_SHA1 Secrets，本次产物不带数字签名"
+          }
+
+      - name: Ensure OpenSC installer
+        shell: pwsh
+        env:
+          MSI_NAME: 'OpenSC-0.25.1_win64-Light.msi'
+          MSI_URL: 'https://github.com/OpenSC/OpenSC/releases/download/0.25.1/OpenSC-0.25.1_win64-Light.msi'
+          MSI_SHA256: '3FD9CABDF54AD1D757E49D5B33CC5834A2186D8E67B0F4DCBD5882E02D6A3EB0'
+        run: |
+          # 程序运行时会调用 OpenSC\<msi> 安装 OpenSC，安装包也把它作为依赖一起分发，
+          # 因此这个 MSI 必须存在于 OpenSC\ 目录（cx_Freeze 会把整个目录复制进产物，
+          # install.iss 也从这里取依赖包）。
+          # 仓库里可能没有它（例如被全局 gitignore 的 *.msi 规则挡住而没提交），
+          # 缺失时从 OpenSC 官方 Release 下载同一份文件并校验 SHA256。
+          $target = Join-Path 'OpenSC' $env:MSI_NAME
+          if (Test-Path $target) {
+            $hash = (Get-FileHash $target -Algorithm SHA256).Hash
+            if ($hash -eq $env:MSI_SHA256) {
+              Write-Host "found $target (sha256 ok)"
+            } else {
+              Write-Host "WARNING: $target sha256 = $hash (expected $env:MSI_SHA256)"
+            }
+            exit 0
+          }
+
+          New-Item -ItemType Directory -Force -Path 'OpenSC' | Out-Null
+          Write-Host "not found in repo, downloading $env:MSI_URL"
+          Invoke-WebRequest -Uri $env:MSI_URL -OutFile $target -UseBasicParsing -TimeoutSec 300
+
+          $hash = (Get-FileHash $target -Algorithm SHA256).Hash
+          if ($hash -ne $env:MSI_SHA256) {
+            Remove-Item $target -Force -ErrorAction SilentlyContinue
+            throw "OpenSC msi sha256 mismatch: expected $env:MSI_SHA256, got $hash"
+          }
+          Write-Host "downloaded $target ($([math]::Round((Get-Item $target).Length / 1MB, 2)) MB)"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x64
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # --only-binary：只装本架构有轮子的版本，避免 pip 挑到最新版后退化成源码构建
+          # （arm64 上 cryptography 50 就这样去编译 Rust + OpenSSL 了）；pyperclip 只有源码包
+          python -m pip install -r requirements.txt --only-binary=:all: --no-binary=pyperclip
+
+      # cx_Freeze 对缺失模块只告警，产物要到运行那一行才报 ModuleNotFoundError，
+      # 所以先确认 requirements.txt 覆盖了项目里 import 的所有第三方模块
+      - name: Check declared dependencies
+        env:
+          # runner 控制台编码是 cp1252，显式 UTF-8 输出，避免脚本打印中文时报错
+          PYTHONIOENCODING: utf-8
+        run: python Builds/check_imports.py
+
+      - name: Resolve package name
+        id: naming
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          $version = "$env:INPUT_VERSION".Trim() -replace '^[vV]', ''
+
+          # exe 版本资源必须是 4 段数字，缺位补 0
+          $version4 = '1.6.0.0'
+          if (-not [string]::IsNullOrWhiteSpace($version)) {
+            $parts = @($version -split '\.')
+            while ($parts.Count -lt 4) { $parts += '0' }
+            $version4 = ($parts[0..3] -join '.')
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "version4=$version4" >> $env:GITHUB_OUTPUT
+
+          # 产物基础名：TPMSmartCard-<打包方式>-<通道>-<系统>-<架构>
+          #   打包方式：cxfree（本流水线）| nuitka（build-client-nuitka.yml）
+          #   通道：beta（滚动预发布）| v<版本>（正式版）
+          #   系统：win10（本流水线，实际最低 Win8.1）| win78（32 位构建）
+          # 基础名之后由具体产物补后缀：绿色版 -green.zip、安装包 -setup.exe
+          # （安装包后缀由 install.iss 按 TPMSMART_PACKAGENAME 拼）
+          # 例：TPMSmartCard-cxfree-beta-win10-x64-green.zip / -setup.exe
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            "name=TPMSmartCard-cxfree-beta-win10-x64" >> $env:GITHUB_OUTPUT
+          } else {
+            "name=TPMSmartCard-cxfree-v$version-win10-x64" >> $env:GITHUB_OUTPUT
+          }
+
+      # ---- Certum 云签名环境（移植自参考项目 OpenListTeam/OpenList-Desktop）----
+      # 1) 装 SimplySign Desktop + 注册表预配置（登录框自动弹出、断开后不注销证书）
+      - name: Setup Certum SimplySign
+        if: env.TPMSMART_SIGN_ENABLED == '1'
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File Builds/Sign-SetupCertum.ps1 -Install -ConfigureRegistry
+
+      # 2) 用 TOTP 自动登录，直到云证书挂进证书库（弹窗式登录偶发失败，重试 3 次）
+      - name: Authenticate Certum
+        if: env.TPMSMART_SIGN_ENABLED == '1'
+        shell: pwsh
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            pwsh -NoProfile -ExecutionPolicy Bypass -File Builds/Sign-SetupCertum.ps1 -Connect -Verify
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "Certum 认证第 $attempt 次失败，10 秒后重试"
+            Start-Sleep -Seconds 10
+          }
+          throw 'Certum 云签名认证失败（3 次重试都没能把云证书挂到证书库）'
+
+      - name: Build with cx_Freeze
+        env:
+          TPMSMART_VERSION: ${{ steps.naming.outputs.version }}
+        run: python BuildPackage.py build
+
+      - name: Package (portable zip)
+        id: pack
+        shell: pwsh
+        env:
+          NAME: ${{ steps.naming.outputs.name }}
+        run: |
+          $name = $env:NAME
+          $stage = Join-Path 'staging' $name
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          $buildDir = Get-ChildItem -Path 'build' -Directory -ErrorAction SilentlyContinue |
+                      Where-Object { $_.Name -like 'exe.*' } | Select-Object -First 1
+          if (-not $buildDir) { throw 'cx_Freeze output directory (build/exe.*) not found; build failed' }
+
+          Copy-Item -Path (Join-Path $buildDir.FullName '*') -Destination $stage -Recurse -Force
+
+          # The app calls Import/TPMImport.exe with a relative path (Module/TPMSmartCard.py).
+          # Only top level runtime files are needed (Import/TPMImport is the C# sources).
+          if (Test-Path 'Import') {
+            $importStage = Join-Path $stage 'Import'
+            New-Item -ItemType Directory -Force -Path $importStage | Out-Null
+            Get-ChildItem -Path 'Import' -File | Copy-Item -Destination $importStage -Force
+
+            # 绿色版里的 Import 组件也要带签名。主程序 exe 在 cx_Freeze 构建阶段已经签好，
+            # 这里只补 Import 的副本（仓库里的 Import\ 保持原样，不就地签名）。
+            if ($env:TPMSMART_SIGN_ENABLED -eq '1') {
+              $importTargets = @(Get-ChildItem -Path $importStage -File |
+                  Where-Object { $_.Name -in @('TPMImport.exe', 'TPMImport.dll') } |
+                  ForEach-Object { $_.FullName })
+              if ($importTargets.Count) {
+                & (Join-Path $PWD 'Builds/Sign-Windows.ps1') -Path ($importTargets -join ';')
+                if ($LASTEXITCODE -ne 0) { throw "signing Import components failed ($LASTEXITCODE)" }
+              }
+            }
+          }
+
+          @(
+            "version=${{ needs.prepare.outputs.version }}",
+            "commit=$env:GITHUB_SHA",
+            "ref=$env:GITHUB_REF_NAME",
+            "run=$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID",
+            "built_at=$((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) UTC"
+          ) | Set-Content -Path (Join-Path $stage 'BUILD_INFO.txt') -Encoding UTF8
+
+          New-Item -ItemType Directory -Force -Path 'dist' | Out-Null
+          # absolute path: 7-Zip runs with the staging directory as working directory
+          $zip = Join-Path $PWD "dist/$name-green.zip"
+
+          $sevenZip = 'C:\Program Files\7-Zip\7z.exe'
+          if (Test-Path $sevenZip) {
+            Push-Location 'staging'
+            & $sevenZip a -tzip -mx=9 $zip $name
+            $code = $LASTEXITCODE
+            Pop-Location
+            if ($code -ne 0) { throw "7-Zip failed with exit code $code" }
+          } else {
+            Compress-Archive -Path $stage -DestinationPath $zip -CompressionLevel Optimal
+          }
+
+          $size = [math]::Round((Get-Item $zip).Length / 1MB, 1)
+          Write-Host "created $name-green.zip ($size MB)"
+
+          "artifact=$name" >> $env:GITHUB_OUTPUT
+          "package=$name-green.zip" >> $env:GITHUB_OUTPUT
+          "builddir=$($buildDir.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Build installer (Inno Setup)
+        id: iscc
+        shell: pwsh
+        env:
+          TPMSMART_VERSION: ${{ steps.naming.outputs.version }}
+          TPMSMART_VERSION4: ${{ steps.naming.outputs.version4 }}
+          TPMSMART_PACKAGENAME: ${{ steps.naming.outputs.name }}
+          TPMSMART_BUILDDIR: ${{ steps.pack.outputs.builddir }}
+        run: |
+          # ISCC is normally preinstalled on the Windows runner; install or upgrade it
+          # through Chocolatey when missing or too old. install.iss needs Inno Setup
+          # 6.5+ (UTF-8 script without BOM, x64compatible and the Chinese language
+          # file, all at the "6.5.0+" language file level).
+          function Find-Iscc {
+            $found = @()
+            $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+            if ($cmd) { $found += $cmd.Source }
+            foreach ($root in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, "$env:LOCALAPPDATA\Programs")) {
+              if ([string]::IsNullOrWhiteSpace($root) -or -not (Test-Path $root)) { continue }
+              Get-ChildItem -Path $root -Directory -Filter 'Inno Setup*' -ErrorAction SilentlyContinue |
+                ForEach-Object { $found += (Join-Path $_.FullName 'ISCC.exe') }
+            }
+            $found | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+
+          # The version marker in the compiler's own Default.isl is its language file level
+          function Get-InnoLevel($isccPath) {
+            $isl = Join-Path (Split-Path $isccPath) 'Default.isl'
+            if (-not (Test-Path $isl)) { return $null }
+            $match = Select-String -Path $isl -Pattern 'Inno Setup version ([0-9]+\.[0-9]+)' -List
+            if (-not $match) { return $null }
+            return [version]$match.Matches[0].Groups[1].Value
+          }
+
+          $required = [version]'6.5'
+          $iscc = Find-Iscc
+          $level = if ($iscc) { Get-InnoLevel $iscc } else { $null }
+          if ((-not $iscc) -or (-not $level) -or ($level -lt $required)) {
+            if ($iscc) {
+              Write-Host "found $iscc (language level $level < $required), upgrading via Chocolatey..."
+            } else {
+              Write-Host 'ISCC.exe not found, installing Inno Setup via Chocolatey...'
+            }
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -notin @(0, 1641, 3010)) { throw "choco install innosetup failed ($LASTEXITCODE)" }
+            $iscc = Find-Iscc
+            $level = if ($iscc) { Get-InnoLevel $iscc } else { $null }
+          }
+          if (-not $iscc) { throw 'ISCC.exe not found' }
+          Write-Host "using $iscc (language level $level)"
+
+          # 交给 Builds\Build-Installer.ps1 编译：解析 signtool 与 Certum 云证书、
+          # 给 Import 组件先行签名、再通过 ISCC /S 注入签名工具（安装包 + 卸载器签名）
+          & (Join-Path $PWD 'Builds/Build-Installer.ps1') -Iscc $iscc
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed ($LASTEXITCODE)" }
+
+          $setup = Get-ChildItem 'dist' -Filter '*-setup.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $setup) { throw 'installer executable was not produced' }
+          Write-Host ("created {0} ({1:N1} MB)" -f $setup.Name, ($setup.Length / 1MB))
+          "setup=$($setup.Name)" >> $env:GITHUB_OUTPUT
+
+      # 签名兜底校验：确认产物真的由那张 Certum 云证书签了名（并且带时间戳链是有效的），
+      # 避免「构建成功但产物没签上」被静默发布
+      - name: Verify signatures
+        if: env.TPMSMART_SIGN_ENABLED == '1'
+        shell: pwsh
+        env:
+          NAME: ${{ steps.naming.outputs.name }}
+        run: |
+          $expected = ($env:CERTUM_CERTIFICATE_SHA1 -replace '[^0-9a-fA-F]', '').ToUpperInvariant()
+          $targets = @(Get-ChildItem -Path (Join-Path 'staging' $env:NAME) -Filter '*.exe' -File -ErrorAction SilentlyContinue)
+          $targets += @(Get-ChildItem -Path 'dist' -Filter '*-setup.exe' -File -ErrorAction SilentlyContinue)
+          if (-not $targets.Count) { throw 'no signed artifacts found to verify' }
+
+          $bad = @()
+          foreach ($file in $targets) {
+            $sig = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            $thumb = if ($sig.SignerCertificate) { ($sig.SignerCertificate.Thumbprint -replace '[^0-9a-fA-F]', '').ToUpperInvariant() } else { '' }
+            $ok = ($thumb -eq $expected) -and ($sig.Status -eq 'Valid')
+            Write-Host ("{0,-40} {1,-12} {2}" -f $file.Name, $sig.Status, $thumb)
+            if (-not $ok) { $bad += $file.FullName }
+          }
+          if ($bad.Count) {
+            throw ("以下产物签名不正确（期望指纹 $expected）：`n" + ($bad -join "`n"))
+          }
+          Write-Host "全部 $($targets.Count) 个产物的签名校验通过"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.artifact }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  # 发布：本作业没有 checkout，工作目录不是 git 仓库，
+  # 因此所有 gh release 命令都必须显式带 --repo（否则 gh 会调用 git 而失败），
+  # 也不能用 --cleanup-tag（它需要删除本地标签）。
+  publish:
+    name: Publish
+    needs: [ prepare, build ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: dist
+
+      - name: Publish beta release
+        if: needs.prepare.outputs.channel == 'beta'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE: ${{ needs.build.outputs.package }}
+          SETUP: ${{ needs.build.outputs.setup }}
+        run: |
+          set -euo pipefail
+          REPO="$GITHUB_REPOSITORY"
+          TAG="beta"
+          TITLE="Beta Build #${{ github.run_number }}"
+
+          cat > notes.md <<EOF
+          自动构建的 Beta 测试版，每次推送到 \`main\` 分支都会覆盖更新。
+
+          - 安装包：\`$SETUP\`（默认勾选安装系统级 OpenSC，可取消 —— 读卡工具已随程序分发，装它仅供其它软件使用；SSH 密钥代理可在安装时勾选）
+          - 免安装绿色版：\`$PACKAGE\`
+          - 提交：\`$GITHUB_SHA\`
+          - 触发方式：${{ github.event_name }}
+          - 构建流水线：[#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          > 该版本为预览版本，可能不稳定，请勿用于生产环境。
+          EOF
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            # 已有 beta：把滚动标签移到本次提交并刷新说明，不删除 release，
+            # 这样即使后续步骤失败，旧的 beta 产物也仍然可用。
+            if gh api -X PATCH "repos/$REPO/git/refs/tags/$TAG" -f sha="$GITHUB_SHA" -F force=true >/dev/null 2>&1; then
+              gh release edit "$TAG" --repo "$REPO" --title "$TITLE" --notes-file notes.md --prerelease
+            else
+              # 标签无法移动时退回删除重建
+              gh release delete "$TAG" --repo "$REPO" --yes
+              gh api -X DELETE "repos/$REPO/git/refs/tags/$TAG" >/dev/null 2>&1 || true
+              gh release create "$TAG" --repo "$REPO" --prerelease --target "$GITHUB_SHA" \
+                --title "$TITLE" --notes-file notes.md
+            fi
+          else
+            gh release create "$TAG" --repo "$REPO" --prerelease --target "$GITHUB_SHA" \
+              --title "$TITLE" --notes-file notes.md
+          fi
+
+          # 资产名固定，--clobber 直接替换上一版
+          gh release upload "$TAG" dist/* --repo "$REPO" --clobber
+
+      - name: Publish release
+        if: needs.prepare.outputs.channel == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          DRAFT: ${{ inputs.draft }}
+          PACKAGE: ${{ needs.build.outputs.package }}
+          SETUP: ${{ needs.build.outputs.setup }}
+        run: |
+          set -euo pipefail
+
+          cat > notes.md <<EOF
+          ## TPM 虚拟智能卡管理工具 V${VERSION}
+
+          - 安装包：\`$SETUP\`（默认勾选安装系统级 OpenSC，可取消 —— 读卡工具已随程序分发，装它仅供其它软件使用；SSH 密钥代理可在安装时勾选，推荐）
+          - 免安装绿色版：\`$PACKAGE\`（解压后运行 \`SmartCardAPP.exe\`）
+          - 读卡所需的 OpenSC 工具已随程序分发；安装包默认安装的系统级 OpenSC 为可选项（供其它软件使用，PKCS#11 / 物理卡 minidriver）
+          - 构建提交：\`$GITHUB_SHA\`
+          - 构建流水线：[#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          EOF
+
+          draft_flag=""
+          if [[ "$DRAFT" == "true" ]]; then
+            draft_flag="--draft"
+          fi
+
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "V${VERSION} Release" \
+            --target "$GITHUB_SHA" \
+            --notes-file notes.md \
+            $draft_flag

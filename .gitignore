@@ -1,13 +1,13 @@
 build/
 build/*
-legacy/Caches/
-legacy/Caches/*
-# 打包中间产物与产物（工作流生成）
+Caches/
+Caches/*
+# 打包中间产物与产物（install.iss / 工作流生成）
 dist/
 staging/
 # 覆盖全局 gitignore 里的 *.msi（UGit 自动生成的规则）：
-# v1 的 OpenSC 安装包归档在 legacy/，需要随仓库分发
-!legacy/OpenSC/*.msi
+# OpenSC 安装包需要随仓库分发，否则 CI 里打包/安装都会缺文件
+!OpenSC/*.msi
 __pycache__
 .idea
 # FIDO2 设备端/服务端运行时日志（调试时产生）
@@ -20,39 +20,5 @@ docs/.vitepress/dist/
 docs/public/CNAME
 # 智能体工作区数据（不随代码分发）
 .workbuddy/
-# ===== 新版 monorepo（Go + Wails + Hono）=====
-# 前端与 Worker 构建产物
-web/dist/
-# Vite 在加载配置时生成的临时文件（构建被中断会残留）
-web/vite.config.ts.timestamp-*
-.wrangler/
-*.tsbuildinfo
-coverage/
-# Go 构建产物与嵌入的前端资源（构建时从 web/dist 同步）
-core/bin/
-core/ui/dist/
-desktop/build/
-desktop/dist/
-# Wails 生成的前端绑定（由 CLI 生成，不入库）
-desktop/wails/frontend/wailsjs/
-# 本地 Worker 数据（D1 模拟库）
-worker/.dev.vars
-worker/.wrangler/
-worker/.dryrun/
-# 工具链临时目录（YAML 校验、Release 资产搬运等）
+# 工具链临时目录（YAML 校验等）
 ._yamlcheck/
-tmp/
-# Release API 的临时响应文件
-beta.json
-release.json
-release-resp.json
-# CI 日志排查产物
-/logs/
-/runlogs/
-logs.zip
-runlogs.zip
-linux-log.zip
-plogs/
-plogs.zip
-/rlog/
-rlog.zip

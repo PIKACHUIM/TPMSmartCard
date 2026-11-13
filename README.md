@@ -25,15 +25,6 @@ _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 
 ---
 
-> [!NOTE]
-> **v2 重构进行中**：后端迁移到 **Go**（Windows / Linux / macOS），前端重写为 **React 18**，
-> 证书下发服务迁移到 **Hono + Cloudflare Workers**（RBAC + 审计）。
-> v1（Python）仍是可用的稳定版本，两条流水线并行。
->
-> 📐 [v2 架构](docs/architecture-v2.md) · 🔐 [协议契约](docs/protocol.md) · 🧭 [迁移与功能对等](docs/migration-v2.md)
-
----
-
 ## ✨ 功能
 
 ### 卡片与凭据
@@ -92,66 +83,32 @@ _一款在 Windows 上创建与管理 TPM 虚拟智能卡的图形化工具_
 | 语言 / 运行时 | Python **3.13**（x64 与 arm64 线）、**3.10**（x86/低版本系统线）、**3.14**（Nuitka 线） |
 | 界面 | Tkinter + ttkbootstrap（纯代码构建界面，布局由 `Config/*.json` 驱动） |
 | 卡片操作 | `tpmvscmgr`（建卡 / 删卡 / 改 PIN）+ OpenSC（读卡与证书）+ 自研 PnP / SetupAPI 层 |
-| 备份还原 | 自研 `.tsb`（zip）打包；`legacy/Module/DPAPI.py` 负责 DPAPI 加解密与令牌借用 |
+| 备份还原 | 自研 `.tsb`（zip）打包；`Module/DPAPI.py` 负责 DPAPI 加解密与令牌借用 |
 | 打包 | 两条流水线：**cx_Freeze**（正式包，Inno Setup 出安装器）与 **Nuitka**（standalone 目录） |
-| 多语言 | `legacy/Config/locales/*.json`（v1）· `web/src/locales/*.json`（v2），11 种语言 |
+| 多语言 | `Config/locales/*.json`，11 种语言 |
 
 ---
 
-## 🛠️ 开发构建（v2）
+## 🛠️ 开发构建
 
 ```bash
-# 1. 依赖（Node ≥ 20 · Go ≥ 1.23）
-npm ci
+# 1. 准备 Python 3.13 环境（推荐用仓库自带脚本重建 venv；x86 线用 -PythonVersion 3.10）
+powershell -File Builds\NewVenv-PY313.ps1
 
-# 2. 前端（桌面端与管理台共用同一份产物）
-npm run build -w @tpmsc/web
-node scripts/prepare-ui.mjs          # web/dist → core/ui/dist（go:embed）
+# 2. 安装依赖
+pip install -r requirements.txt
 
-# 3. 核心库与 CLI
-cd core && go test ./... && go run ./cmd/tpmsc doctor
+# 3. 直接从源码运行（需要管理员权限）
+python SmartCardAPP.py
 
-# 4. 桌面端（Windows 可 CGO_ENABLED=0）
-cd desktop/wails && go build -tags desktop,production -o ../dist/TPMSmartCard .
+# 4. 打包
+python BuildPackage.py build      # cx_Freeze：三个 exe + 随包资源
+python BuildNuitka.py             # Nuitka：build/nuitka/TPMSmartCard/
 ```
 
-打包与发布：
-
-```bash
-powershell -File scripts\package-windows.ps1     # 绿色版 zip（+ 签名钩子）
-./scripts/package-desktop.sh 2.0                 # Linux tar.gz / macOS .app（+ 公证钩子）
-```
-
-### VS Code 一键运行
-
-仓库内置 `.vscode/tasks.json` 与 `.vscode/launch.json`，安装推荐扩展（Golang、Tailwind CSS IntelliSense）后：
-
-| 操作 | 说明 |
-|---|---|
-| `F5` → **Desktop (Wails)** | 自动构建前端 → 同步 `go:embed` → dlv 以 `desktop,production` 启动桌面端 |
-| `F5` → **Core API (serve :1026)** | 调试本地 API，浏览器打开 `http://127.0.0.1:1026` |
-| 任务 **desktop: run** | 构建后直接启动 exe（不挂调试器） |
-| 任务 **web: dev** / **worker: dev** | 前端 5173 / Worker 8787（`/api`、`/card` 已代理） |
-| 任务 **package: windows** | 生成绿色版 zip |
-| 任务 **test: go** / **test: worker** | 跑单元测试 |
-
-> 桌面端必须带 `desktop,production` 两个标签，缺一个都会弹 Wails 的 “correct build tags” 提示框。
-
-CI：`.github/workflows/build-desktop.yml`（Windows / Linux / macOS × amd64 / arm64）、
-`beta-desktop.yml`（main 滚动更新 `beta` 预发布）、
-`release-desktop.yml`（打 `v2.<序号>` 标签自动发布）、`deploy-worker.yml`（证书下发 Worker）。
-
-发布通道约定：
-
-| 通道 | 标签 | 产物名 | 说明 |
-|---|---|---|---|
-| beta | `beta`（移动） | `TPMSmartCard-beta-<os>-<arch>` | 每次构建前清空旧资产，只保留最新 |
-| release | `v2.<序号>`（如 `v2.1`） | `TPMSmartCard-2.<序号>-<os>-<arch>` | 两段版本号，`v2.1.0` 会被 CI 拒绝 |
-
-* v2 架构（Go + Wails + Hono）：[架构说明](docs/architecture-v2.md)
-* 协议契约（X25519 / 取件码 / RBAC）：[协议说明](docs/protocol.md)
-* 迁移与功能对等清单：[迁移说明](docs/migration-v2.md)
-* v1（Python）已归档到 [`legacy/`](legacy/README.md)，仍可按其中的说明运行与打包。
+* 依赖自查：`python Builds/check_imports.py`
+* 完整开发说明（运行方式、打包、签名、CI、真机调试方法）：[开发与调试指南](docs/dev-guide.md)
+* 代码结构与模块职责：[架构说明](docs/architecture.md)
 
 ---
 
@@ -229,7 +186,7 @@ CI：`.github/workflows/build-desktop.yml`（Windows / Linux / macOS × amd64 / 
 
 1. [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC) —— 开源智能卡工具与中间件
 2. [Microsoft Docs: Virtual Smart Cards](https://github.com/MicrosoftDocs/windows-itpro-docs/tree/public/windows/security/identity-protection/virtual-smart-cards)
-3. [buptczq/WinCryptSSHAgent](https://github.com/buptczq/WinCryptSSHAgent) —— 内置 SSH 代理（v1 `legacy/Module/SSHAgent.py`、v2 `core/internal/sshagent`）的实现参考
+3. [buptczq/WinCryptSSHAgent](https://github.com/buptczq/WinCryptSSHAgent) —— 内置 SSH 代理（`Module/SSHAgent.py`）的实现参考
 
 
 
